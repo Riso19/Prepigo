@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Bold, Italic, Subscript, Superscript } from 'lucide-react';
+import { Bold, Italic, Subscript, Superscript, Baseline } from 'lucide-react';
 
 interface HtmlEditorProps {
   value: string;
@@ -40,6 +40,21 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
     }
     
     document.execCommand(command, false);
+
+    if (editorRef.current) {
+      onChange(editorRef.current.innerHTML);
+      editorRef.current.focus();
+      updateToolbar();
+    }
+  };
+
+  const handleNormalFormat = () => {
+    if (document.queryCommandState('subscript')) {
+      document.execCommand('subscript', false);
+    }
+    if (document.queryCommandState('superscript')) {
+      document.execCommand('superscript', false);
+    }
 
     if (editorRef.current) {
       onChange(editorRef.current.innerHTML);
@@ -92,6 +107,14 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
           title="Superscript"
         >
           <Superscript className="h-4 w-4" />
+        </Button>
+        <Button
+          variant={'ghost'}
+          size="icon"
+          onMouseDown={(e) => { e.preventDefault(); handleNormalFormat(); }}
+          title="Normal text"
+        >
+          <Baseline className="h-4 w-4" />
         </Button>
       </div>
       <div
