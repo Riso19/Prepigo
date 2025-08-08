@@ -1,10 +1,10 @@
-import { useState, useRef, MouseEvent } from 'react';
+import { useState, useRef, MouseEvent, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Occlusion } from '@/data/decks';
-import { showError } from '@/utils/toast';
-import { X, Upload, Link as LinkIcon } from 'lucide-react';
+import { showError, showLoading, showSuccess, dismissToast } from '@/utils/toast';
+import { X, Upload, Link as LinkIcon, Loader2 } from 'lucide-react';
 
 interface ImageOcclusionEditorProps {
   onSave: (imageUrl: string, occlusions: Occlusion[]) => void;
@@ -16,6 +16,7 @@ const ImageOcclusionEditor = ({ onSave }: ImageOcclusionEditorProps) => {
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(null);
   const [imageUrlInput, setImageUrlInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -31,33 +32,49 @@ const ImageOcclusionEditor = ({ onSave }: ImageOcclusionEditorProps) => {
     }
   };
 
-  const handleUrlLoad = async () => {
-    if (!imageUrlInput || !imageUrlInput.startsWith('http')) {
-      showError('Please enter a valid image URL.');
-      return;
-    }
-    try {
-      // We use a proxy to get around CORS issues. This is a public proxy.
-      const proxyUrl = 'https://api.allorigins.win/raw?url=';
-      const response = await fetch(proxyUrl + encodeURIComponent(imageUrlInput));
-      if (!response.ok) {
-        throw new Error(`Failed to fetch image. Status: ${response.status}`);
+  useEffect(() => {
+    const loadImageFromUrl = async (url: string) => {
+      if (!url || !(url.startsWith('http://') || url.startsWith('https://'))) {
+        return;
       }
-      const blob = await response.blob();
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImage(reader.result as string);
-        setOcclusions([]);
-      };
-      reader.onerror = () => {
-        throw new Error('Failed to read image data.');
-      };
-      reader.readAsDataURL(blob);
-    } catch (error) {
-      console.error("Error fetching image from URL:", error);
-      showError("Could not load image. The URL may be invalid or the source may be blocking requests.");
-    }
-  };
+      setIsLoading(true);
+      const loadingToast = showLoading("Loading image...");
+      try {
+        // We use a proxy to get around CORS issues. This is a public proxy.
+        const proxyUrl = 'https://api.allorigins.win/raw?url=';
+        const response = await fetch(proxyUrl + encodeURIComponent(url));
+        if (!response.ok) {
+          throw new Error(`Failed to fetch image. Status: ${response.status}`);
+        }
+        const blob = await response.blob();
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setImage(reader.result as string);
+          setOcclusions([]);
+          dismissToast(loadingToast);
+          showSuccess("Image loaded!");
+        };
+        reader.onerror = () => {
+          throw new Error('Failed to read image data.');
+        };
+        reader.readAsDataURL(blob);
+      } catch (error) {
+        console.error("Error fetching image from URL:", error);
+        dismissToast(loadingToast);
+        showError("Could not load image. Check URL or CORS policy.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    const handler = setTimeout(() => {
+      loadImageFromUrl(imageUrlInput);
+    }, 800); // 800ms debounce
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [imageUrlInput]);
 
   const getSVGPoint = (e: MouseEvent) => {
     if (!svgRef.current) return { x: 0, y: 0 };
@@ -135,41 +152,47 @@ const ImageOcclusionEditor = ({ onSave }: ImageOcclusionEditorProps) => {
             </div>
             <div className="flex items-center gap-2">
                 <LinkIcon className="h-5 w-5 text-muted-foreground" />
-                <Label>Load from URL</Label>
+                <Label htmlFor="imageUrl">Load from URL</Label>
             </div>
-            <div className="flex gap-2">
+            <div className="relative">
                 <Input 
+                    id="imageUrl"
                     type="text" 
-                    placeholder="https://example.com/image.png" 
+                    placeholder="Paste an image URL here..." 
                     value={imageUrlInput}
                     onChange={(e) => setImageUrlInput(e.target.value)}
+                    disabled={isLoading}
                 />
-                <Button onClick={handleUrlLoad}>Load</Button>
+                {isLoading && (
+                    <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+                )}
             </div>
         </div>
       )}
       {image && (
         <>
-          <div className="relative w-full select-none" onMouseUp={handleMouseUp}>
-            <img src={image} alt="Occlusion base" className="max-w-full max-h-[70vh] block" />
-            <svg
-              ref={svgRef}
-              className="absolute top-0 left-0 w-full h-full cursor-crosshair"
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-            >
-              {occlusions.map((occ) => (
-                <g key={occ.id}>
-                  <rect
-                    x={occ.x}
-                    y={occ.y}
-                    width={occ.width}
-                    height={occ.height}
-                    className="fill-primary stroke-primary-foreground stroke-2"
-                  />
-                </g>
-              ))}
-            </svg>
+          <div className="w-full flex justify-center">
+            <div className="relative inline-block max-w-full select-none" onMouseUp={handleMouseUp}>
+              <img src={image} alt="Occlusion base" className="block max-w-full max-h-[70vh] rounded-md" />
+              <svg
+                ref={svgRef}
+                className="absolute top-0 left-0 w-full h-full cursor-crosshair"
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+              >
+                {occlusions.map((occ) => (
+                  <g key={occ.id}>
+                    <rect
+                      x={occ.x}
+                      y={occ.y}
+                      width={occ.width}
+                      height={occ.height}
+                      className="fill-primary stroke-primary-foreground stroke-2"
+                    />
+                  </g>
+                ))}
+              </svg>
+            </div>
           </div>
           <div className="flex justify-end">
             <Button onClick={handleSaveClick} disabled={occlusions.length === 0}>
