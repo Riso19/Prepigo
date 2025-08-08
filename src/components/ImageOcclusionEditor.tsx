@@ -42,56 +42,40 @@ const ImageOcclusionEditor = ({ onSave }: ImageOcclusionEditorProps) => {
   }, [image]);
 
   useEffect(() => {
-    const loadImageFromUrl = (url: string) => {
+    const loadImageFromUrl = async (url: string) => {
       if (!url || !(url.startsWith('http://') || url.startsWith('https://'))) {
         return;
       }
-      
       setIsLoading(true);
       const loadingToast = showLoading("Loading image...");
-
-      const img = new Image();
-      img.crossOrigin = "Anonymous";
-
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        const ctx = canvas.getContext('2d');
-        
-        if (!ctx) {
-          dismissToast(loadingToast);
-          showError("Could not process image.");
-          setIsLoading(false);
-          return;
+      try {
+        // Use a reliable CORS proxy to fetch the image as a blob
+        const proxyUrl = 'https://corsproxy.io/?';
+        const response = await fetch(proxyUrl + encodeURIComponent(url));
+        if (!response.ok) {
+          throw new Error(`Failed to fetch image. Status: ${response.status}`);
         }
-
-        ctx.drawImage(img, 0, 0);
+        const blob = await response.blob();
         
-        try {
-          const dataUrl = canvas.toDataURL('image/png');
-          setImage(dataUrl);
+        // Use FileReader to convert the blob to a base64 data URL
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setImage(reader.result as string);
           setOcclusions([]);
           dismissToast(loadingToast);
           showSuccess("Image loaded!");
-        } catch (e) {
-          console.error("Canvas toDataURL error (likely CORS):", e);
-          dismissToast(loadingToast);
-          showError("CORS error. Please download the image and upload it manually.");
-        } finally {
-          setIsLoading(false);
-        }
-      };
-
-      img.onerror = () => {
+        };
+        reader.onerror = () => {
+          throw new Error('Failed to read image data from blob.');
+        };
+        reader.readAsDataURL(blob);
+      } catch (error) {
+        console.error("Error fetching image from URL:", error);
         dismissToast(loadingToast);
-        showError("Failed to load image. Please check the URL or try another.");
+        showError("Could not load image. Check URL or try uploading from computer.");
+      } finally {
         setIsLoading(false);
-      };
-      
-      // Use a CORS proxy as a fallback to improve success rate
-      const proxyUrl = 'https://api.allorigins.win/raw?url=';
-      img.src = proxyUrl + encodeURIComponent(url);
+      }
     };
 
     const handler = setTimeout(() => {
@@ -100,7 +84,9 @@ const ImageOcclusionEditor = ({ onSave }: ImageOcclusionEditorProps) => {
       }
     }, 800);
 
-    return () => clearTimeout(handler);
+    return () => {
+      clearTimeout(handler);
+    };
   }, [imageUrlInput]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

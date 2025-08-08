@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Bold, Italic, Subscript, Superscript } from 'lucide-react';
 
@@ -15,23 +15,20 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
   const [isSubscript, setIsSubscript] = useState(false);
   const [isSuperscript, setIsSuperscript] = useState(false);
 
-  // This effect syncs the editor's content with the `value` prop from outside.
-  // This is important for cases like clearing the form after saving.
   useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== value) {
       editorRef.current.innerHTML = value;
     }
   }, [value]);
 
-  // This function checks the current selection and updates the toolbar buttons' state.
-  const updateToolbar = () => {
+  const updateToolbar = useCallback(() => {
     setTimeout(() => {
       setIsBold(document.queryCommandState('bold'));
       setIsItalic(document.queryCommandState('italic'));
       setIsSubscript(document.queryCommandState('subscript'));
       setIsSuperscript(document.queryCommandState('superscript'));
     }, 0);
-  };
+  }, []);
 
   const handleFormat = (command: string) => {
     document.execCommand(command, false);
@@ -56,6 +53,7 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
           size="icon"
           onMouseDown={(e) => { e.preventDefault(); handleFormat('bold'); }}
           aria-pressed={isBold}
+          title="Bold"
         >
           <Bold className="h-4 w-4" />
         </Button>
@@ -64,6 +62,7 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
           size="icon"
           onMouseDown={(e) => { e.preventDefault(); handleFormat('italic'); }}
           aria-pressed={isItalic}
+          title="Italic"
         >
           <Italic className="h-4 w-4" />
         </Button>
@@ -72,6 +71,7 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
           size="icon"
           onMouseDown={(e) => { e.preventDefault(); handleFormat('subscript'); }}
           aria-pressed={isSubscript}
+          title="Subscript"
         >
           <Subscript className="h-4 w-4" />
         </Button>
@@ -80,6 +80,7 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
           size="icon"
           onMouseDown={(e) => { e.preventDefault(); handleFormat('superscript'); }}
           aria-pressed={isSuperscript}
+          title="Superscript"
         >
           <Superscript className="h-4 w-4" />
         </Button>
