@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback, KeyboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Bold, Italic, Subscript, Superscript } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -58,6 +58,18 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
     }
   };
 
+  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    // When space is pressed, exit sub/super mode
+    if (e.key === ' ') {
+      if (document.queryCommandState('subscript')) {
+        document.execCommand('subscript', false);
+      }
+      if (document.queryCommandState('superscript')) {
+        document.execCommand('superscript', false);
+      }
+    }
+  };
+
   const activeClass = "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100";
 
   return (
@@ -108,6 +120,7 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
         ref={editorRef}
         contentEditable
         onInput={handleInput}
+        onKeyDown={handleKeyDown}
         className="min-h-[100px] p-2 focus:outline-none prose dark:prose-invert max-w-none"
         data-placeholder={placeholder}
         onMouseUp={updateToolbar}
