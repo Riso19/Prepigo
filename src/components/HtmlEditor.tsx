@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Bold, Italic, Subscript, Superscript, Baseline } from 'lucide-react';
+import { Bold, Italic, Subscript, Superscript } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface HtmlEditorProps {
   value: string;
@@ -22,6 +23,7 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
   }, [value]);
 
   const updateToolbar = useCallback(() => {
+    // Use setTimeout to allow the DOM selection to update before we query its state
     setTimeout(() => {
       setIsBold(document.queryCommandState('bold'));
       setIsItalic(document.queryCommandState('italic'));
@@ -31,30 +33,17 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
   }, []);
 
   const handleFormat = (command: 'bold' | 'italic' | 'subscript' | 'superscript') => {
-    // Make subscript and superscript mutually exclusive
+    // For subscript and superscript, ensure they are mutually exclusive.
     if (command === 'subscript' || command === 'superscript') {
       const otherCommand = command === 'subscript' ? 'superscript' : 'subscript';
+      // If the other command is active, turn it off first.
       if (document.queryCommandState(otherCommand)) {
         document.execCommand(otherCommand, false);
       }
     }
     
+    // Toggle the command the user clicked.
     document.execCommand(command, false);
-
-    if (editorRef.current) {
-      onChange(editorRef.current.innerHTML);
-      editorRef.current.focus();
-      updateToolbar();
-    }
-  };
-
-  const handleNormalFormat = () => {
-    if (document.queryCommandState('subscript')) {
-      document.execCommand('subscript', false);
-    }
-    if (document.queryCommandState('superscript')) {
-      document.execCommand('superscript', false);
-    }
 
     if (editorRef.current) {
       onChange(editorRef.current.innerHTML);
@@ -69,12 +58,15 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
     }
   };
 
+  const activeClass = "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100";
+
   return (
     <div className="border rounded-md bg-background">
       <div className="flex items-center gap-1 p-1 border-b">
         <Button
-          variant={isBold ? 'secondary' : 'ghost'}
+          variant="ghost"
           size="icon"
+          className={cn(isBold && activeClass)}
           onMouseDown={(e) => { e.preventDefault(); handleFormat('bold'); }}
           aria-pressed={isBold}
           title="Bold"
@@ -82,8 +74,9 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
           <Bold className="h-4 w-4" />
         </Button>
         <Button
-          variant={isItalic ? 'secondary' : 'ghost'}
+          variant="ghost"
           size="icon"
+          className={cn(isItalic && activeClass)}
           onMouseDown={(e) => { e.preventDefault(); handleFormat('italic'); }}
           aria-pressed={isItalic}
           title="Italic"
@@ -91,8 +84,9 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
           <Italic className="h-4 w-4" />
         </Button>
         <Button
-          variant={isSubscript ? 'secondary' : 'ghost'}
+          variant="ghost"
           size="icon"
+          className={cn(isSubscript && activeClass)}
           onMouseDown={(e) => { e.preventDefault(); handleFormat('subscript'); }}
           aria-pressed={isSubscript}
           title="Subscript"
@@ -100,21 +94,14 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
           <Subscript className="h-4 w-4" />
         </Button>
         <Button
-          variant={isSuperscript ? 'secondary' : 'ghost'}
+          variant="ghost"
           size="icon"
+          className={cn(isSuperscript && activeClass)}
           onMouseDown={(e) => { e.preventDefault(); handleFormat('superscript'); }}
           aria-pressed={isSuperscript}
           title="Superscript"
         >
           <Superscript className="h-4 w-4" />
-        </Button>
-        <Button
-          variant={'ghost'}
-          size="icon"
-          onMouseDown={(e) => { e.preventDefault(); handleNormalFormat(); }}
-          title="Normal text"
-        >
-          <Baseline className="h-4 w-4" />
         </Button>
       </div>
       <div
