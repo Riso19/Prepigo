@@ -12,6 +12,23 @@ export const findDeckById = (decks: DeckData[], id: string): DeckData | null => 
   return null;
 };
 
+// Recursively find the path of a deck by its ID
+export const findDeckPathById = (decks: DeckData[], deckId: string, currentPath: string[] = []): string[] | null => {
+  for (const deck of decks) {
+    const newPath = [...currentPath, deck.name];
+    if (deck.id === deckId) {
+      return newPath;
+    }
+    if (deck.subDecks) {
+      const foundPath = findDeckPathById(deck.subDecks, deckId, newPath);
+      if (foundPath) {
+        return foundPath;
+      }
+    }
+  }
+  return null;
+};
+
 // Recursively get all flashcards from a deck and its sub-decks
 export const getAllFlashcardsFromDeck = (deck: DeckData): FlashcardData[] => {
   let flashcards = [...deck.flashcards];

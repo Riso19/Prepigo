@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useDecks } from '@/contexts/DecksContext';
-import { findDeckById, getAllFlashcardsFromDeck, deleteFlashcard } from '@/lib/deck-utils';
+import { findDeckById, getAllFlashcardsFromDeck, deleteFlashcard, findDeckPathById } from '@/lib/deck-utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -27,6 +27,7 @@ const DeckViewPage = () => {
   const [cardToDelete, setCardToDelete] = useState<FlashcardData | null>(null);
 
   const deck = useMemo(() => (deckId ? findDeckById(decks, deckId) : null), [decks, deckId]);
+  const deckPath = useMemo(() => (deckId ? findDeckPathById(decks, deckId)?.join(' / ') : null), [decks, deckId]);
   const flashcards = useMemo(() => (deck ? getAllFlashcardsFromDeck(deck) : []), [deck]);
 
   const handleDeleteConfirm = () => {
@@ -34,19 +35,6 @@ const DeckViewPage = () => {
       setDecks(prevDecks => deleteFlashcard(prevDecks, cardToDelete.id));
       showSuccess("Flashcard deleted successfully.");
       setCardToDelete(null);
-    }
-  };
-
-  const getCardSummary = (card: FlashcardData) => {
-    switch (card.type) {
-      case 'basic':
-        return card.question;
-      case 'cloze':
-        return card.text;
-      case 'imageOcclusion':
-        return 'Image Occlusion Card';
-      default:
-        return 'Unknown card type';
     }
   };
 
@@ -71,8 +59,12 @@ const DeckViewPage = () => {
           <CardHeader>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <CardTitle className="text-2xl">Manage Deck: {deck.name}</CardTitle>
-                    <CardDescription>{flashcards.length} card(s) in this deck and its sub-decks.</CardDescription>
+                    <CardTitle className="text-2xl">Manage: {deck.name}</CardTitle>
+                    <CardDescription>
+                        Path: {deckPath || deck.name}
+                        <br />
+                        {flashcards.length} card(s) in this deck and its sub-decks.
+                    </CardDescription>
                 </div>
                 <Button asChild>
                     <Link to={`/deck/${deck.id}/add`}>
@@ -86,9 +78,10 @@ const DeckViewPage = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Content Preview</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead className="w-[100px]">Type</TableHead>
+                    <TableHead>Front / Question</TableHead>
+                    <TableHead>Back / Answer</TableHead>
+                    <TableHead className="text-right w-[100px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -96,7 +89,18 @@ const DeckViewPage = () => {
                     <TableRow key={card.id}>
                       <TableCell className="capitalize font-medium">{card.type === 'imageOcclusion' ? 'Image' : card.type}</TableCell>
                       <TableCell>
-                        <p className="truncate max-w-md" dangerouslySetInnerHTML={{ __html: getCardSummary(card) }} />
+                        {card.type === 'imageOcclusion' ? (
+                          <img src={card.imageUrl} alt="Occlusion preview" className="h-16 w-auto rounded-md object-contain bg-muted" />
+                        ) : (
+                          <div className="truncate max-w-md" dangerouslySetInnerHTML={{ __html: card.type === 'basic' ? card.question : card.text }} />
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {card.type === 'basic' ? (
+                          <div className="truncate max-w-md" dangerouslySetInnerHTML={{ __html: card.answer }} />
+                        ) : (
+                          <div className="truncate max-w-md" dangerouslySetInnerHTML={{ __html: card.description || '' }} />
+                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>

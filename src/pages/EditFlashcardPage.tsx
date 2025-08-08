@@ -82,33 +82,6 @@ const EditFlashcardPage = () => {
     return <div>Loading flashcard...</div>;
   }
 
-  if (cardType === 'imageOcclusion') {
-    return (
-      <div className="min-h-screen w-full bg-secondary/50 flex flex-col items-center p-4 sm:p-6 md:p-8">
-        <div className="w-full max-w-4xl">
-          <Button variant="ghost" onClick={() => navigate(`/deck/${deckId}/view`)} className="mb-4">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Deck View
-          </Button>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-2xl">Edit Image Occlusion Card</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 pt-4">
-              <p className="text-muted-foreground">Editing the image and occlusions is not supported yet. You can edit the extra info below.</p>
-              <div className="space-y-2">
-                <Label>Extra Info (Optional)</Label>
-                <HtmlEditor value={description} onChange={setDescription} placeholder="Add a hint or extra context..."/>
-              </div>
-              <div className="flex justify-end mt-6">
-                <Button onClick={handleSave}>Save Changes</Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen w-full bg-secondary/50 flex flex-col items-center p-4 sm:p-6 md:p-8">
       <div className="w-full max-w-4xl">
@@ -139,6 +112,19 @@ const EditFlashcardPage = () => {
                   <Label>Text</Label>
                   <HtmlEditor value={clozeText} onChange={setClozeText} placeholder="Text with {{c1::cloze}} deletion." />
                 </div>
+                <div className="space-y-2">
+                  <Label>Extra Info (Optional)</Label>
+                  <HtmlEditor value={description} onChange={setDescription} placeholder="Add a hint or extra context..."/>
+                </div>
+              </div>
+            )}
+            {cardType === 'imageOcclusion' && originalCard.type === 'imageOcclusion' && (
+              <div className="space-y-4 pt-4">
+                <Label>Image Preview</Label>
+                <div className="w-full flex justify-center p-4 bg-muted rounded-md">
+                    <img src={originalCard.imageUrl} alt="Occlusion card" className="max-w-full max-h-80 rounded-md" />
+                </div>
+                <p className="text-sm text-muted-foreground">Editing the image or the occlusions themselves is not supported. You can edit the extra info below.</p>
                 <div className="space-y-2">
                   <Label>Extra Info (Optional)</Label>
                   <HtmlEditor value={description} onChange={setDescription} placeholder="Add a hint or extra context..."/>
