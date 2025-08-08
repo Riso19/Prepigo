@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useDecks } from "@/contexts/DecksContext";
 import { findDeckById, addFlashcardToDeck } from "@/lib/deck-utils";
@@ -10,7 +10,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { BasicFlashcard, ClozeFlashcard, FlashcardType, ImageOcclusionFlashcard, Occlusion } from "@/data/decks";
 import { ArrowLeft } from "lucide-react";
-import ClozeEditor from "@/components/ClozeEditor";
 import ImageOcclusionEditor from "@/components/ImageOcclusionEditor";
 
 const CreateFlashcardPage = () => {
@@ -24,8 +23,36 @@ const CreateFlashcardPage = () => {
   const [answer, setAnswer] = useState("");
   const [createReverse, setCreateReverse] = useState(false);
   const [clozeText, setClozeText] = useState("");
+  const clozeTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   const deck = deckId ? findDeckById(decks, deckId) : null;
+
+  const handleClozeClick = () => {
+    const textarea = clozeTextareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = textarea.value.substring(start, end);
+
+    if (selectedText) {
+      const clozeRegex = /{{c(\d+)::/g;
+      let maxId = 0;
+      let match;
+      while ((match = clozeRegex.exec(clozeText)) !== null) {
+        maxId = Math.max(maxId, parseInt(match[1], 10));
+      }
+      const newId = maxId + 1;
+
+      const newCloze = `{{c${newId}::${selectedText}}}`;
+      const newText = 
+          textarea.value.substring(0, start) + 
+          newCloze + 
+          textarea.value.substring(end);
+      
+      setClozeText(newText);
+    }
+  };
 
   const handleSaveBasic = () => {
     if (!deckId) return;
@@ -101,7 +128,25 @@ const CreateFlashcardPage = () => {
                 </div>
               </TabsContent>
               <TabsContent value="cloze" className="space-y-4 pt-4">
-                <ClozeEditor value={clozeText} onChange={setClozeText} />
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <Label htmlFor="cloze-text">Text</Label>
+                    <Button variant="outline" size="sm" onClick={handleClozeClick}>
+                      Make Cloze [...]
+                    </Button>
+                  </div>
+                  <Textarea
+                    ref={clozeTextareaRef}
+                    id="cloze-text"
+                    value={clozeText}
+                    onChange={(e) => setClozeText(e.target.value)}
+                    rows={6}
+                    placeholder="Highlight text and click 'Make Cloze'..."
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Or manually wrap text like this: {`{{c1::your text}}`}
+                  </p>
+                </div>
                 <div className="flex justify-end mt-6">
                   <Button onClick={handleSaveCloze}>Save Flashcard</Button>
                 </div>
