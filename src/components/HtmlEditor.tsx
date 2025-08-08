@@ -30,8 +30,17 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
     }, 0);
   }, []);
 
-  const handleFormat = (command: string) => {
+  const handleFormat = (command: 'bold' | 'italic' | 'subscript' | 'superscript') => {
+    // Make subscript and superscript mutually exclusive
+    if (command === 'subscript' || command === 'superscript') {
+      const otherCommand = command === 'subscript' ? 'superscript' : 'subscript';
+      if (document.queryCommandState(otherCommand)) {
+        document.execCommand(otherCommand, false);
+      }
+    }
+    
     document.execCommand(command, false);
+
     if (editorRef.current) {
       onChange(editorRef.current.innerHTML);
       editorRef.current.focus();

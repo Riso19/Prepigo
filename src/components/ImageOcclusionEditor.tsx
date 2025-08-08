@@ -49,8 +49,8 @@ const ImageOcclusionEditor = ({ onSave }: ImageOcclusionEditorProps) => {
       setIsLoading(true);
       const loadingToast = showLoading("Loading image...");
       try {
-        // Use a reliable CORS proxy to fetch the image as a blob
-        const proxyUrl = 'https://corsproxy.io/?';
+        // Use a reliable, image-focused CORS proxy to fetch the image as a blob
+        const proxyUrl = 'https://images.weserv.nl/?url=';
         const response = await fetch(proxyUrl + encodeURIComponent(url));
         if (!response.ok) {
           throw new Error(`Failed to fetch image. Status: ${response.status}`);
