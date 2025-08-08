@@ -3,9 +3,9 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { useDecks } from "@/contexts/DecksContext";
 import { findDeckById, getAllFlashcardsFromDeck } from "@/lib/deck-utils";
 import Flashcard from "@/components/Flashcard";
+import ClozePlayer from "@/components/ClozePlayer";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ArrowRight, Check, Home, X } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ArrowLeft, Check, Home, X } from "lucide-react";
 
 const StudyPage = () => {
   const { deckId } = useParams<{ deckId: string }>();
@@ -58,12 +58,24 @@ const StudyPage = () => {
       </Button>
       <div className="w-full max-w-2xl mx-auto flex flex-col items-center gap-6">
         <h1 className="text-3xl font-bold text-center">Studying: {deck.name}</h1>
-        <Flashcard
-          question={currentCard.question}
-          answer={currentCard.answer}
-          isFlipped={isFlipped}
-          onClick={() => setIsFlipped(!isFlipped)}
-        />
+        
+        {currentCard.type === 'basic' && (
+          <Flashcard
+            question={currentCard.question}
+            answer={currentCard.answer}
+            isFlipped={isFlipped}
+            onClick={() => setIsFlipped(!isFlipped)}
+          />
+        )}
+
+        {currentCard.type === 'cloze' && (
+          <ClozePlayer
+            text={currentCard.text}
+            isFlipped={isFlipped}
+            onClick={() => setIsFlipped(!isFlipped)}
+          />
+        )}
+
         <div className="text-sm text-muted-foreground">
           Card {currentIndex + 1} of {flashcards.length}
         </div>

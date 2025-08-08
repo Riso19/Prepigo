@@ -8,13 +8,11 @@ import { Card, CardContent } from "./ui/card";
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AddSubDeckDialog } from "./AddSubDeckDialog";
-import { AddFlashcardDialog } from "./AddFlashcardDialog";
 import { getAllFlashcardsFromDeck } from "@/lib/deck-utils";
 
 const DeckItem = ({ deck }: { deck: DeckData }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isAddSubDeckOpen, setIsAddSubDeckOpen] = useState(false);
-  const [isAddFlashcardOpen, setIsAddFlashcardOpen] = useState(false);
 
   const hasSubDecks = deck.subDecks && deck.subDecks.length > 0;
   const hasFlashcards = deck.flashcards && deck.flashcards.length > 0;
@@ -41,9 +39,11 @@ const DeckItem = ({ deck }: { deck: DeckData }) => {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setIsAddFlashcardOpen(true)}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Flashcard
+                <DropdownMenuItem asChild>
+                  <Link to={`/deck/${deck.id}/add`}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Flashcard
+                  </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setIsAddSubDeckOpen(true)}>
                   <Folder className="mr-2 h-4 w-4" />
@@ -68,7 +68,9 @@ const DeckItem = ({ deck }: { deck: DeckData }) => {
                 <Card key={flashcard.id} className="bg-card/50">
                   <CardContent className="p-3 flex items-center gap-3">
                     <FileText className="h-5 w-5 text-secondary-foreground/80 flex-shrink-0" />
-                    <p className="text-sm text-muted-foreground truncate" title={flashcard.question}>{flashcard.question}</p>
+                    <p className="text-sm text-muted-foreground truncate" title={flashcard.type === 'basic' ? flashcard.question : flashcard.text}>
+                      {flashcard.type === 'basic' ? flashcard.question : flashcard.text}
+                    </p>
                   </CardContent>
                 </Card>
               ))}
@@ -92,7 +94,6 @@ const DeckItem = ({ deck }: { deck: DeckData }) => {
         </CollapsibleContent>
       </Collapsible>
       <AddSubDeckDialog isOpen={isAddSubDeckOpen} onOpenChange={setIsAddSubDeckOpen} parentDeckId={deck.id} />
-      <AddFlashcardDialog isOpen={isAddFlashcardOpen} onOpenChange={setIsAddFlashcardOpen} parentDeckId={deck.id} />
     </>
   );
 };
