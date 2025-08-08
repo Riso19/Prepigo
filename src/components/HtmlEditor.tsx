@@ -16,7 +16,7 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
   const [isSuperscript, setIsSuperscript] = useState(false);
 
   // This effect syncs the editor's content with the `value` prop from outside.
-  // This is important for cases like clearing the form.
+  // This is important for cases like clearing the form after saving.
   useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== value) {
       editorRef.current.innerHTML = value;
@@ -25,8 +25,6 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
 
   // This function checks the current selection and updates the toolbar buttons' state.
   const updateToolbar = () => {
-    // We use a small timeout to allow the browser's selection to update
-    // before we query its state.
     setTimeout(() => {
       setIsBold(document.queryCommandState('bold'));
       setIsItalic(document.queryCommandState('italic'));
@@ -40,7 +38,7 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
     if (editorRef.current) {
       onChange(editorRef.current.innerHTML);
       editorRef.current.focus();
-      updateToolbar(); // Update toolbar immediately after a format change.
+      updateToolbar();
     }
   };
 
@@ -90,7 +88,6 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
         ref={editorRef}
         contentEditable
         onInput={handleInput}
-        dangerouslySetInnerHTML={{ __html: value }}
         className="min-h-[100px] p-2 focus:outline-none prose dark:prose-invert max-w-none"
         data-placeholder={placeholder}
         onMouseUp={updateToolbar}
