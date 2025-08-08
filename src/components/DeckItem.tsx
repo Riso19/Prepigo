@@ -1,68 +1,99 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { DeckData } from "@/data/decks";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "./ui/button";
-import { ChevronRight, FileText, Folder, Plus } from "lucide-react";
+import { ChevronRight, FileText, Folder, MoreVertical, Plus, BookOpen } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
 import { cn } from "@/lib/utils";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
+import { AddSubDeckDialog } from "./AddSubDeckDialog";
+import { AddFlashcardDialog } from "./AddFlashcardDialog";
+import { getAllFlashcardsFromDeck } from "@/lib/deck-utils";
 
 const DeckItem = ({ deck }: { deck: DeckData }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [isAddSubDeckOpen, setIsAddSubDeckOpen] = useState(false);
+  const [isAddFlashcardOpen, setIsAddFlashcardOpen] = useState(false);
 
   const hasSubDecks = deck.subDecks && deck.subDecks.length > 0;
   const hasFlashcards = deck.flashcards && deck.flashcards.length > 0;
+  const totalFlashcards = getAllFlashcardsFromDeck(deck).length;
 
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="space-y-2">
-      <div className="flex items-center justify-between space-x-4 pl-2 pr-1 py-1 rounded-lg hover:bg-accent">
-        <CollapsibleTrigger asChild>
-          <button className="flex items-center gap-3 flex-grow text-left">
-            <ChevronRight className={cn("h-5 w-5 transition-transform duration-200", isOpen && "rotate-90")} />
-            <Folder className="h-5 w-5 text-primary" />
-            <span className="font-semibold">{deck.name}</span>
-          </button>
-        </CollapsibleTrigger>
-        <Button variant="ghost" size="icon">
-          <Plus className="h-4 w-4" />
-          <span className="sr-only">Add to deck</span>
-        </Button>
-      </div>
-      <CollapsibleContent className="space-y-4 pl-8 border-l-2 border-dashed ml-4">
-        {/* Render sub-decks recursively */}
-        {hasSubDecks && (
-          <div className="space-y-2 pt-2">
-            {deck.subDecks!.map((subDeck) => (
-              <DeckItem key={subDeck.id} deck={subDeck} />
-            ))}
+    <>
+      <Collapsible open={isOpen} onOpenChange={setIsOpen} className="space-y-2">
+        <div className="flex items-center justify-between space-x-4 pl-2 pr-1 py-1 rounded-lg hover:bg-accent group">
+          <CollapsibleTrigger asChild>
+            <button className="flex items-center gap-3 flex-grow text-left">
+              <ChevronRight className={cn("h-5 w-5 transition-transform duration-200", isOpen && "rotate-90")} />
+              <Folder className="h-5 w-5 text-primary" />
+              <span className="font-semibold">{deck.name}</span>
+            </button>
+          </CollapsibleTrigger>
+          <div className="flex items-center gap-1">
+            <span className="text-sm text-muted-foreground">{totalFlashcards} cards</span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <MoreVertical className="h-4 w-4" />
+                  <span className="sr-only">Deck options</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setIsAddFlashcardOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Flashcard
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setIsAddSubDeckOpen(true)}>
+                  <Folder className="mr-2 h-4 w-4" />
+                  Add Sub-deck
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-        )}
-
-        {/* Render flashcards */}
-        {hasFlashcards && (
-          <div className="space-y-2 pt-2">
-            {deck.flashcards!.map((flashcard) => (
-              <Card key={flashcard.id} className="bg-card/50">
-                <CardContent className="p-3 flex items-center gap-3">
-                  <FileText className="h-5 w-5 text-secondary-foreground/80 flex-shrink-0" />
-                  <p className="text-sm text-muted-foreground">{flashcard.question}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-
-        {(!hasSubDecks && !hasFlashcards) && (
-            <p className="text-sm text-muted-foreground py-4 text-center">This deck is empty.</p>
-        )}
-
-        {/* Actions */}
-        {hasFlashcards && (
-            <div className="pt-2">
-                <Button size="sm" variant="outline">Study this deck</Button>
+        </div>
+        <CollapsibleContent className="space-y-4 pl-8 border-l-2 border-dashed ml-4">
+          {hasSubDecks && (
+            <div className="space-y-2 pt-2">
+              {deck.subDecks!.map((subDeck) => (
+                <DeckItem key={subDeck.id} deck={subDeck} />
+              ))}
             </div>
-        )}
-      </CollapsibleContent>
-    </Collapsible>
+          )}
+
+          {hasFlashcards && (
+            <div className="space-y-2 pt-2">
+              {deck.flashcards!.map((flashcard) => (
+                <Card key={flashcard.id} className="bg-card/50">
+                  <CardContent className="p-3 flex items-center gap-3">
+                    <FileText className="h-5 w-5 text-secondary-foreground/80 flex-shrink-0" />
+                    <p className="text-sm text-muted-foreground truncate" title={flashcard.question}>{flashcard.question}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          {(!hasSubDecks && !hasFlashcards) && (
+              <p className="text-sm text-muted-foreground py-4 text-center">This deck is empty.</p>
+          )}
+
+          {totalFlashcards > 0 && (
+              <div className="pt-2">
+                  <Button size="sm" variant="outline" asChild>
+                    <Link to={`/study/${deck.id}`}>
+                      <BookOpen className="mr-2 h-4 w-4" />
+                      Study this deck
+                    </Link>
+                  </Button>
+              </div>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
+      <AddSubDeckDialog isOpen={isAddSubDeckOpen} onOpenChange={setIsAddSubDeckOpen} parentDeckId={deck.id} />
+      <AddFlashcardDialog isOpen={isAddFlashcardOpen} onOpenChange={setIsAddFlashcardOpen} parentDeckId={deck.id} />
+    </>
   );
 };
 

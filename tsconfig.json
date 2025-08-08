@@ -18,9 +18,10 @@
     "baseUrl": ".",
     "paths": {
       "@/components/*": ["./src/components/*"],
+      "@/contexts/*": ["./src/contexts/*"],
       "@/data/*": ["./src/data/*"],
-      "@/lib/*": ["./src/lib/*"],
       "@/hooks/*": ["./src/hooks/*"],
+      "@/lib/*": ["./src/lib/*"],
       "@/pages/*": ["./src/pages/*"],
       "@/utils/*": ["./src/utils/*"]
     }
