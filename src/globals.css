@@ -99,3 +99,10 @@
     @apply bg-background text-foreground;
   }
 }
+
+[contentEditable=true][data-placeholder]:empty:before {
+  content: attr(data-placeholder);
+  color: hsl(var(--muted-foreground));
+  pointer-events: none;
+  display: block;
+}

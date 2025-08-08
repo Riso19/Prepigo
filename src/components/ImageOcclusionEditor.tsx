@@ -1,8 +1,10 @@
 import { useState, useRef, MouseEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Occlusion } from '@/data/decks';
-import { X } from 'lucide-react';
+import { showError } from '@/utils/toast';
+import { X, Upload, Link as LinkIcon } from 'lucide-react';
 
 interface ImageOcclusionEditorProps {
   onSave: (imageUrl: string, occlusions: Occlusion[]) => void;
@@ -13,6 +15,7 @@ const ImageOcclusionEditor = ({ onSave }: ImageOcclusionEditorProps) => {
   const [occlusions, setOcclusions] = useState<Occlusion[]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(null);
+  const [imageUrlInput, setImageUrlInput] = useState('');
   
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -25,6 +28,34 @@ const ImageOcclusionEditor = ({ onSave }: ImageOcclusionEditorProps) => {
         setOcclusions([]);
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  const handleUrlLoad = async () => {
+    if (!imageUrlInput || !imageUrlInput.startsWith('http')) {
+      showError('Please enter a valid image URL.');
+      return;
+    }
+    try {
+      // We use a proxy to get around CORS issues. This is a public proxy.
+      const proxyUrl = 'https://api.allorigins.win/raw?url=';
+      const response = await fetch(proxyUrl + encodeURIComponent(imageUrlInput));
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image. Status: ${response.status}`);
+      }
+      const blob = await response.blob();
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImage(reader.result as string);
+        setOcclusions([]);
+      };
+      reader.onerror = () => {
+        throw new Error('Failed to read image data.');
+      };
+      reader.readAsDataURL(blob);
+    } catch (error) {
+      console.error("Error fetching image from URL:", error);
+      showError("Could not load image. The URL may be invalid or the source may be blocking requests.");
     }
   };
 
@@ -55,7 +86,6 @@ const ImageOcclusionEditor = ({ onSave }: ImageOcclusionEditorProps) => {
       width: Math.abs(startPos.x - currentPos.x),
       height: Math.abs(startPos.y - currentPos.y),
     };
-    // Live preview of the rectangle being drawn
     const tempOcclusions = occlusions.filter(o => o.id !== -1);
     setOcclusions([...tempOcclusions, newRect]);
   };
@@ -88,7 +118,36 @@ const ImageOcclusionEditor = ({ onSave }: ImageOcclusionEditorProps) => {
 
   return (
     <div className="space-y-4">
-      {!image && <Input type="file" accept="image/*" onChange={handleFileChange} />}
+      {!image && (
+        <div className="space-y-4">
+            <div className="flex items-center gap-2">
+                <Upload className="h-5 w-5 text-muted-foreground" />
+                <Label>Upload from computer</Label>
+            </div>
+            <Input type="file" accept="image/*" onChange={handleFileChange} />
+            <div className="relative flex items-center justify-center my-4">
+                <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">OR</span>
+                </div>
+            </div>
+            <div className="flex items-center gap-2">
+                <LinkIcon className="h-5 w-5 text-muted-foreground" />
+                <Label>Load from URL</Label>
+            </div>
+            <div className="flex gap-2">
+                <Input 
+                    type="text" 
+                    placeholder="https://example.com/image.png" 
+                    value={imageUrlInput}
+                    onChange={(e) => setImageUrlInput(e.target.value)}
+                />
+                <Button onClick={handleUrlLoad}>Load</Button>
+            </div>
+        </div>
+      )}
       {image && (
         <>
           <div className="relative w-full select-none" onMouseUp={handleMouseUp}>
@@ -106,7 +165,7 @@ const ImageOcclusionEditor = ({ onSave }: ImageOcclusionEditorProps) => {
                     y={occ.y}
                     width={occ.width}
                     height={occ.height}
-                    className="fill-primary/70 stroke-primary-foreground stroke-2"
+                    className="fill-primary stroke-primary-foreground stroke-2"
                   />
                 </g>
               ))}

@@ -22,7 +22,7 @@ const Flashcard = ({ question, answer, isFlipped, onClick }: FlashcardProps) => 
           <Card className="w-full h-full flex flex-col items-center justify-center">
             <CardContent className="p-6 text-center">
               <p className="text-lg font-semibold text-muted-foreground">Question:</p>
-              <p className="mt-2 text-2xl font-bold">{question}</p>
+              <div className="mt-2 text-2xl font-bold prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: question }} />
             </CardContent>
           </Card>
         </div>
@@ -31,7 +31,7 @@ const Flashcard = ({ question, answer, isFlipped, onClick }: FlashcardProps) => 
           <Card className="w-full h-full flex flex-col items-center justify-center bg-secondary">
             <CardContent className="p-6 text-center">
               <p className="text-lg font-semibold text-muted-foreground">Answer:</p>
-              <p className="mt-2 text-2xl font-bold">{answer}</p>
+              <div className="mt-2 text-2xl font-bold prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: answer }} />
             </CardContent>
           </Card>
         </div>

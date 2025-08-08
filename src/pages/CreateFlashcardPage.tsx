@@ -6,18 +6,19 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { BasicFlashcard, ClozeFlashcard, FlashcardType, ImageOcclusionFlashcard, Occlusion } from "@/data/decks";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChevronDown, FileText, Type, Image as ImageIcon } from "lucide-react";
 import ImageOcclusionEditor from "@/components/ImageOcclusionEditor";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import HtmlEditor from "@/components/HtmlEditor";
 
 const CreateFlashcardPage = () => {
   const { deckId } = useParams<{ deckId: string }>();
   const { decks, setDecks } = useDecks();
   const navigate = useNavigate();
 
-  const [cardType, setCardType] = useState<FlashcardType | 'imageOcclusion'>("basic");
+  const [cardType, setCardType] = useState<FlashcardType>("basic");
   
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
@@ -26,6 +27,12 @@ const CreateFlashcardPage = () => {
   const clozeTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   const deck = deckId ? findDeckById(decks, deckId) : null;
+
+  const cardTypeOptions = {
+    basic: { label: 'Basic', icon: <FileText className="mr-2 h-4 w-4" /> },
+    cloze: { label: 'Cloze', icon: <Type className="mr-2 h-4 w-4" /> },
+    imageOcclusion: { label: 'Image Occlusion', icon: <ImageIcon className="mr-2 h-4 w-4" /> },
+  };
 
   const handleClozeClick = () => {
     const textarea = clozeTextareaRef.current;
@@ -55,7 +62,7 @@ const CreateFlashcardPage = () => {
   };
 
   const handleSaveBasic = () => {
-    if (!deckId) return;
+    if (!deckId || !question || !answer) return;
     const newCard: BasicFlashcard = { id: `f${Date.now()}`, type: "basic", question, answer };
     setDecks(decks => addFlashcardToDeck(decks, deckId, newCard));
     if (createReverse) {
@@ -66,7 +73,7 @@ const CreateFlashcardPage = () => {
   };
 
   const handleSaveCloze = () => {
-    if (!deckId) return;
+    if (!deckId || !clozeText) return;
     const newCard: ClozeFlashcard = { id: `f${Date.now()}`, type: "cloze", text: clozeText };
     setDecks(decks => addFlashcardToDeck(decks, deckId, newCard));
     navigate("/");
@@ -102,22 +109,45 @@ const CreateFlashcardPage = () => {
         <Card>
           <CardHeader>
             <CardTitle className="text-2xl">Add Flashcard to "{deck.name}"</CardTitle>
+            <div className="pt-2">
+              <Label>Card Type</Label>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="w-full justify-between sm:w-64">
+                    <div className="flex items-center">
+                      {cardTypeOptions[cardType].icon}
+                      {cardTypeOptions[cardType].label}
+                    </div>
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                  <DropdownMenuItem onSelect={() => setCardType('basic')}>
+                    {cardTypeOptions.basic.icon}
+                    {cardTypeOptions.basic.label}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setCardType('cloze')}>
+                    {cardTypeOptions.cloze.icon}
+                    {cardTypeOptions.cloze.label}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setCardType('imageOcclusion')}>
+                    {cardTypeOptions.imageOcclusion.icon}
+                    {cardTypeOptions.imageOcclusion.label}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </CardHeader>
           <CardContent>
-            <Tabs value={cardType} onValueChange={(value) => setCardType(value as FlashcardType)} className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="basic">Basic</TabsTrigger>
-                <TabsTrigger value="cloze">Cloze</TabsTrigger>
-                <TabsTrigger value="imageOcclusion">Image Occlusion</TabsTrigger>
-              </TabsList>
-              <TabsContent value="basic" className="space-y-4 pt-4">
+            {cardType === 'basic' && (
+              <div className="space-y-4 pt-4">
                 <div className="space-y-2">
-                  <Label htmlFor="question">Front (Question)</Label>
-                  <Textarea id="question" value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="Who was the first person on the moon?" />
+                  <Label>Front (Question)</Label>
+                  <HtmlEditor value={question} onChange={setQuestion} placeholder="Who was the first person on the moon?" />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="answer">Back (Answer)</Label>
-                  <Textarea id="answer" value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder="Neil Armstrong" />
+                  <Label>Back (Answer)</Label>
+                  <HtmlEditor value={answer} onChange={setAnswer} placeholder="Neil Armstrong" />
                 </div>
                 <div className="flex items-center space-x-2">
                   <Checkbox id="reverse" checked={createReverse} onCheckedChange={(checked) => setCreateReverse(!!checked)} />
@@ -126,10 +156,12 @@ const CreateFlashcardPage = () => {
                 <div className="flex justify-end mt-6">
                   <Button onClick={handleSaveBasic}>Save Flashcard</Button>
                 </div>
-              </TabsContent>
-              <TabsContent value="cloze" className="space-y-4 pt-4">
+              </div>
+            )}
+            {cardType === 'cloze' && (
+              <div className="space-y-4 pt-4">
                 <div className="space-y-2">
-                  <div className="flex justify-between items-center">
+                  <div className="flex justify-between items-center mb-2">
                     <Label htmlFor="cloze-text">Text</Label>
                     <Button variant="outline" size="sm" onClick={handleClozeClick}>
                       Make Cloze [...]
@@ -150,11 +182,13 @@ const CreateFlashcardPage = () => {
                 <div className="flex justify-end mt-6">
                   <Button onClick={handleSaveCloze}>Save Flashcard</Button>
                 </div>
-              </TabsContent>
-              <TabsContent value="imageOcclusion" className="pt-4">
+              </div>
+            )}
+            {cardType === 'imageOcclusion' && (
+              <div className="pt-4">
                 <ImageOcclusionEditor onSave={handleSaveImageOcclusion} />
-              </TabsContent>
-            </Tabs>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
