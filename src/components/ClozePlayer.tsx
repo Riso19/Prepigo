@@ -1,12 +1,14 @@
 import { Card, CardContent } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 
 interface ClozePlayerProps {
   text: string;
+  description?: string;
   isFlipped: boolean;
   onClick: () => void;
 }
 
-const ClozePlayer = ({ text, isFlipped, onClick }: ClozePlayerProps) => {
+const ClozePlayer = ({ text, description, isFlipped, onClick }: ClozePlayerProps) => {
   const renderClozeText = (isRevealed: boolean) => {
     const clozeRegex = /{{c(\d+)::(.+?)}}/g;
     let processedText = text;
@@ -25,12 +27,18 @@ const ClozePlayer = ({ text, isFlipped, onClick }: ClozePlayerProps) => {
   };
 
   return (
-    <div className="w-full h-80 [perspective:1000px] cursor-pointer" onClick={onClick}>
-      <Card className="w-full h-full flex items-center justify-center">
-        <CardContent className="p-6 text-center">
+    <div className="w-full min-h-[20rem] cursor-pointer" onClick={onClick}>
+      <Card className="w-full h-full flex flex-col items-center justify-center">
+        <CardContent className="p-6 text-center w-full">
           <div className="text-2xl font-semibold">
             {renderClozeText(isFlipped)}
           </div>
+          {isFlipped && description && (
+            <>
+              <Separator className="my-4" />
+              <div className="text-sm text-muted-foreground prose dark:prose-invert max-w-none text-left" dangerouslySetInnerHTML={{ __html: description }} />
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

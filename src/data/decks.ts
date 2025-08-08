@@ -11,6 +11,7 @@ export interface ClozeFlashcard {
   id: string;
   type: "cloze";
   text: string;
+  description?: string;
 }
 
 export interface Occlusion {
@@ -27,6 +28,7 @@ export interface ImageOcclusionFlashcard {
   imageUrl: string; // base64
   occlusions: Occlusion[];
   questionOcclusionId: number; // The id of the occlusion to be guessed
+  description?: string;
 }
 
 export type FlashcardData = BasicFlashcard | ClozeFlashcard | ImageOcclusionFlashcard;

@@ -1,10 +1,9 @@
-import { useState, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useDecks } from "@/contexts/DecksContext";
 import { findDeckById, addFlashcardToDeck } from "@/lib/deck-utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { BasicFlashcard, ClozeFlashcard, FlashcardType, ImageOcclusionFlashcard, Occlusion } from "@/data/decks";
@@ -12,6 +11,7 @@ import { ArrowLeft, ChevronDown, FileText, Type, Image as ImageIcon } from "luci
 import ImageOcclusionEditor from "@/components/ImageOcclusionEditor";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import HtmlEditor from "@/components/HtmlEditor";
+import { showError } from "@/utils/toast";
 
 const CreateFlashcardPage = () => {
   const { deckId } = useParams<{ deckId: string }>();
@@ -24,9 +24,17 @@ const CreateFlashcardPage = () => {
   const [answer, setAnswer] = useState("");
   const [createReverse, setCreateReverse] = useState(false);
   const [clozeText, setClozeText] = useState("");
-  const clozeTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const [description, setDescription] = useState("");
 
   const deck = deckId ? findDeckById(decks, deckId) : null;
+
+  useEffect(() => {
+    setQuestion("");
+    setAnswer("");
+    setCreateReverse(false);
+    setClozeText("");
+    setDescription("");
+  }, [cardType]);
 
   const cardTypeOptions = {
     basic: { label: 'Basic', icon: <FileText className="mr-2 h-4 w-4" /> },
@@ -35,30 +43,24 @@ const CreateFlashcardPage = () => {
   };
 
   const handleClozeClick = () => {
-    const textarea = clozeTextareaRef.current;
-    if (!textarea) return;
-
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selectedText = textarea.value.substring(start, end);
-
-    if (selectedText) {
-      const clozeRegex = /{{c(\d+)::/g;
-      let maxId = 0;
-      let match;
-      while ((match = clozeRegex.exec(clozeText)) !== null) {
-        maxId = Math.max(maxId, parseInt(match[1], 10));
-      }
-      const newId = maxId + 1;
-
-      const newCloze = `{{c${newId}::${selectedText}}}`;
-      const newText = 
-          textarea.value.substring(0, start) + 
-          newCloze + 
-          textarea.value.substring(end);
-      
-      setClozeText(newText);
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+      showError("Please select some text in the editor to make a cloze.");
+      return;
     }
+
+    const clozeRegex = /{{c(\d+)::/g;
+    let maxId = 0;
+    let match;
+    while ((match = clozeRegex.exec(clozeText)) !== null) {
+      maxId = Math.max(maxId, parseInt(match[1], 10));
+    }
+    const newId = maxId + 1;
+
+    const selectedText = selection.toString();
+    const newCloze = `{{c${newId}::${selectedText}}}`;
+
+    document.execCommand('insertText', false, newCloze);
   };
 
   const handleSaveBasic = () => {
@@ -74,7 +76,7 @@ const CreateFlashcardPage = () => {
 
   const handleSaveCloze = () => {
     if (!deckId || !clozeText) return;
-    const newCard: ClozeFlashcard = { id: `f${Date.now()}`, type: "cloze", text: clozeText };
+    const newCard: ClozeFlashcard = { id: `f${Date.now()}`, type: "cloze", text: clozeText, description };
     setDecks(decks => addFlashcardToDeck(decks, deckId, newCard));
     navigate("/");
   };
@@ -89,6 +91,7 @@ const CreateFlashcardPage = () => {
         imageUrl,
         occlusions,
         questionOcclusionId: occ.id,
+        description,
       };
       currentDecks = addFlashcardToDeck(currentDecks, deckId, newCard);
     });
@@ -162,22 +165,19 @@ const CreateFlashcardPage = () => {
               <div className="space-y-4 pt-4">
                 <div className="space-y-2">
                   <div className="flex justify-between items-center mb-2">
-                    <Label htmlFor="cloze-text">Text</Label>
-                    <Button variant="outline" size="sm" onClick={handleClozeClick}>
+                    <Label>Text</Label>
+                    <Button variant="outline" size="sm" onMouseDown={(e) => { e.preventDefault(); handleClozeClick(); }}>
                       Make Cloze [...]
                     </Button>
                   </div>
-                  <Textarea
-                    ref={clozeTextareaRef}
-                    id="cloze-text"
-                    value={clozeText}
-                    onChange={(e) => setClozeText(e.target.value)}
-                    rows={6}
-                    placeholder="Highlight text and click 'Make Cloze'..."
-                  />
+                  <HtmlEditor value={clozeText} onChange={setClozeText} placeholder="Highlight text and click 'Make Cloze'..." />
                   <p className="text-sm text-muted-foreground">
                     Or manually wrap text like this: {`{{c1::your text}}`}
                   </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Extra Info (Optional)</Label>
+                  <HtmlEditor value={description} onChange={setDescription} placeholder="Add a hint or extra context..."/>
                 </div>
                 <div className="flex justify-end mt-6">
                   <Button onClick={handleSaveCloze}>Save Flashcard</Button>
@@ -185,8 +185,12 @@ const CreateFlashcardPage = () => {
               </div>
             )}
             {cardType === 'imageOcclusion' && (
-              <div className="pt-4">
+              <div className="pt-4 space-y-4">
                 <ImageOcclusionEditor onSave={handleSaveImageOcclusion} />
+                <div className="space-y-2">
+                  <Label>Extra Info (Optional)</Label>
+                  <HtmlEditor value={description} onChange={setDescription} placeholder="Add a hint or extra context..."/>
+                </div>
               </div>
             )}
           </CardContent>

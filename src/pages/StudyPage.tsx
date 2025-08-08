@@ -57,9 +57,9 @@ const StudyPage = () => {
       case 'basic':
         return <Flashcard question={currentCard.question} answer={currentCard.answer} isFlipped={isFlipped} onClick={() => setIsFlipped(!isFlipped)} />;
       case 'cloze':
-        return <ClozePlayer text={currentCard.text} isFlipped={isFlipped} onClick={() => setIsFlipped(!isFlipped)} />;
+        return <ClozePlayer text={currentCard.text} description={currentCard.description} isFlipped={isFlipped} onClick={() => setIsFlipped(!isFlipped)} />;
       case 'imageOcclusion':
-        return <ImageOcclusionPlayer imageUrl={currentCard.imageUrl} occlusions={currentCard.occlusions} questionOcclusionId={currentCard.questionOcclusionId} isFlipped={isFlipped} onClick={() => setIsFlipped(!isFlipped)} />;
+        return <ImageOcclusionPlayer imageUrl={currentCard.imageUrl} occlusions={currentCard.occlusions} questionOcclusionId={currentCard.questionOcclusionId} description={currentCard.description} isFlipped={isFlipped} onClick={() => setIsFlipped(!isFlipped)} />;
       default:
         return null;
     }
