@@ -4,6 +4,7 @@ import { useDecks } from "@/contexts/DecksContext";
 import { findDeckById, getAllFlashcardsFromDeck } from "@/lib/deck-utils";
 import Flashcard from "@/components/Flashcard";
 import ClozePlayer from "@/components/ClozePlayer";
+import ImageOcclusionPlayer from "@/components/ImageOcclusionPlayer";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Check, Home, X } from "lucide-react";
 
@@ -51,6 +52,19 @@ const StudyPage = () => {
 
   const currentCard = flashcards[currentIndex];
 
+  const renderCard = () => {
+    switch (currentCard.type) {
+      case 'basic':
+        return <Flashcard question={currentCard.question} answer={currentCard.answer} isFlipped={isFlipped} onClick={() => setIsFlipped(!isFlipped)} />;
+      case 'cloze':
+        return <ClozePlayer text={currentCard.text} isFlipped={isFlipped} onClick={() => setIsFlipped(!isFlipped)} />;
+      case 'imageOcclusion':
+        return <ImageOcclusionPlayer imageUrl={currentCard.imageUrl} occlusions={currentCard.occlusions} questionOcclusionId={currentCard.questionOcclusionId} isFlipped={isFlipped} onClick={() => setIsFlipped(!isFlipped)} />;
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="min-h-screen w-full bg-secondary/50 flex flex-col items-center justify-center p-4 sm:p-6 md:p-8">
        <Button variant="ghost" onClick={() => navigate("/")} className="absolute top-4 left-4">
@@ -59,22 +73,7 @@ const StudyPage = () => {
       <div className="w-full max-w-2xl mx-auto flex flex-col items-center gap-6">
         <h1 className="text-3xl font-bold text-center">Studying: {deck.name}</h1>
         
-        {currentCard.type === 'basic' && (
-          <Flashcard
-            question={currentCard.question}
-            answer={currentCard.answer}
-            isFlipped={isFlipped}
-            onClick={() => setIsFlipped(!isFlipped)}
-          />
-        )}
-
-        {currentCard.type === 'cloze' && (
-          <ClozePlayer
-            text={currentCard.text}
-            isFlipped={isFlipped}
-            onClick={() => setIsFlipped(!isFlipped)}
-          />
-        )}
+        {renderCard()}
 
         <div className="text-sm text-muted-foreground">
           Card {currentIndex + 1} of {flashcards.length}

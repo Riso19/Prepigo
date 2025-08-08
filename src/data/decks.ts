@@ -1,4 +1,4 @@
-export type FlashcardType = "basic" | "cloze";
+export type FlashcardType = "basic" | "cloze" | "imageOcclusion";
 
 export interface BasicFlashcard {
   id: string;
@@ -13,7 +13,23 @@ export interface ClozeFlashcard {
   text: string;
 }
 
-export type FlashcardData = BasicFlashcard | ClozeFlashcard;
+export interface Occlusion {
+  id: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface ImageOcclusionFlashcard {
+  id: string;
+  type: "imageOcclusion";
+  imageUrl: string; // base64
+  occlusions: Occlusion[];
+  questionOcclusionId: number; // The id of the occlusion to be guessed
+}
+
+export type FlashcardData = BasicFlashcard | ClozeFlashcard | ImageOcclusionFlashcard;
 
 export interface DeckData {
   id: string;

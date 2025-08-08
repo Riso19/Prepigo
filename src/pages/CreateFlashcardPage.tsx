@@ -4,46 +4,61 @@ import { useDecks } from "@/contexts/DecksContext";
 import { findDeckById, addFlashcardToDeck } from "@/lib/deck-utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
-import { BasicFlashcard, ClozeFlashcard, FlashcardType } from "@/data/decks";
+import { BasicFlashcard, ClozeFlashcard, FlashcardType, ImageOcclusionFlashcard, Occlusion } from "@/data/decks";
 import { ArrowLeft } from "lucide-react";
+import ClozeEditor from "@/components/ClozeEditor";
+import ImageOcclusionEditor from "@/components/ImageOcclusionEditor";
 
 const CreateFlashcardPage = () => {
   const { deckId } = useParams<{ deckId: string }>();
   const { decks, setDecks } = useDecks();
   const navigate = useNavigate();
 
-  const [cardType, setCardType] = useState<FlashcardType>("basic");
+  const [cardType, setCardType] = useState<FlashcardType | 'imageOcclusion'>("basic");
   
-  // State for Basic card
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [createReverse, setCreateReverse] = useState(false);
-
-  // State for Cloze card
   const [clozeText, setClozeText] = useState("");
 
   const deck = deckId ? findDeckById(decks, deckId) : null;
 
-  const handleSave = () => {
+  const handleSaveBasic = () => {
     if (!deckId) return;
-
-    if (cardType === "basic") {
-      const newCard: BasicFlashcard = { id: `f${Date.now()}`, type: "basic", question, answer };
-      setDecks(decks => addFlashcardToDeck(decks, deckId, newCard));
-      if (createReverse) {
-        const reverseCard: BasicFlashcard = { id: `f${Date.now() + 1}`, type: "basic", question: answer, answer: question };
-        setDecks(decks => addFlashcardToDeck(decks, deckId, reverseCard));
-      }
-    } else if (cardType === "cloze") {
-      const newCard: ClozeFlashcard = { id: `f${Date.now()}`, type: "cloze", text: clozeText };
-      setDecks(decks => addFlashcardToDeck(decks, deckId, newCard));
+    const newCard: BasicFlashcard = { id: `f${Date.now()}`, type: "basic", question, answer };
+    setDecks(decks => addFlashcardToDeck(decks, deckId, newCard));
+    if (createReverse) {
+      const reverseCard: BasicFlashcard = { id: `f${Date.now() + 1}`, type: "basic", question: answer, answer: question };
+      setDecks(decks => addFlashcardToDeck(decks, deckId, reverseCard));
     }
+    navigate("/");
+  };
 
+  const handleSaveCloze = () => {
+    if (!deckId) return;
+    const newCard: ClozeFlashcard = { id: `f${Date.now()}`, type: "cloze", text: clozeText };
+    setDecks(decks => addFlashcardToDeck(decks, deckId, newCard));
+    navigate("/");
+  };
+
+  const handleSaveImageOcclusion = (imageUrl: string, occlusions: Occlusion[]) => {
+    if (!deckId) return;
+    let currentDecks = decks;
+    occlusions.forEach(occ => {
+      const newCard: ImageOcclusionFlashcard = {
+        id: `f${Date.now()}-${occ.id}`,
+        type: "imageOcclusion",
+        imageUrl,
+        occlusions,
+        questionOcclusionId: occ.id,
+      };
+      currentDecks = addFlashcardToDeck(currentDecks, deckId, newCard);
+    });
+    setDecks(currentDecks);
     navigate("/");
   };
 
@@ -63,9 +78,10 @@ const CreateFlashcardPage = () => {
           </CardHeader>
           <CardContent>
             <Tabs value={cardType} onValueChange={(value) => setCardType(value as FlashcardType)} className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="basic">Basic (and reverse)</TabsTrigger>
-                <TabsTrigger value="cloze">Cloze Deletion</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="basic">Basic</TabsTrigger>
+                <TabsTrigger value="cloze">Cloze</TabsTrigger>
+                <TabsTrigger value="imageOcclusion">Image Occlusion</TabsTrigger>
               </TabsList>
               <TabsContent value="basic" className="space-y-4 pt-4">
                 <div className="space-y-2">
@@ -80,20 +96,20 @@ const CreateFlashcardPage = () => {
                   <Checkbox id="reverse" checked={createReverse} onCheckedChange={(checked) => setCreateReverse(!!checked)} />
                   <Label htmlFor="reverse">Create reverse card</Label>
                 </div>
-              </TabsContent>
-              <TabsContent value="cloze" className="space-y-4 pt-4">
-                <div className="space-y-2">
-                  <Label htmlFor="cloze-text">Text</Label>
-                  <Textarea id="cloze-text" value={clozeText} onChange={(e) => setClozeText(e.target.value)} rows={6} placeholder="The capital of France is {{c1::Paris}}." />
-                   <p className="text-sm text-muted-foreground">
-                    Wrap the text you want to hide in curly braces, e.g., {`\`{{c1::your text}}\``}.
-                  </p>
+                <div className="flex justify-end mt-6">
+                  <Button onClick={handleSaveBasic}>Save Flashcard</Button>
                 </div>
               </TabsContent>
+              <TabsContent value="cloze" className="space-y-4 pt-4">
+                <ClozeEditor value={clozeText} onChange={setClozeText} />
+                <div className="flex justify-end mt-6">
+                  <Button onClick={handleSaveCloze}>Save Flashcard</Button>
+                </div>
+              </TabsContent>
+              <TabsContent value="imageOcclusion" className="pt-4">
+                <ImageOcclusionEditor onSave={handleSaveImageOcclusion} />
+              </TabsContent>
             </Tabs>
-            <div className="flex justify-end mt-6">
-              <Button onClick={handleSave}>Save Flashcard</Button>
-            </div>
           </CardContent>
         </Card>
       </div>

@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { DeckData } from "@/data/decks";
+import { DeckData, FlashcardData } from "@/data/decks";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "./ui/button";
-import { ChevronRight, FileText, Folder, MoreVertical, Plus, BookOpen } from "lucide-react";
+import { ChevronRight, FileText, Folder, MoreVertical, Plus, BookOpen, Image as ImageIcon } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
@@ -17,6 +17,19 @@ const DeckItem = ({ deck }: { deck: DeckData }) => {
   const hasSubDecks = deck.subDecks && deck.subDecks.length > 0;
   const hasFlashcards = deck.flashcards && deck.flashcards.length > 0;
   const totalFlashcards = getAllFlashcardsFromDeck(deck).length;
+
+  const getCardPreview = (flashcard: FlashcardData) => {
+    switch (flashcard.type) {
+      case 'basic':
+        return { icon: <FileText className="h-5 w-5 text-secondary-foreground/80 flex-shrink-0" />, text: flashcard.question };
+      case 'cloze':
+        return { icon: <FileText className="h-5 w-5 text-secondary-foreground/80 flex-shrink-0" />, text: flashcard.text };
+      case 'imageOcclusion':
+        return { icon: <ImageIcon className="h-5 w-5 text-secondary-foreground/80 flex-shrink-0" />, text: 'Image Occlusion Card' };
+      default:
+        return { icon: <FileText className="h-5 w-5 text-secondary-foreground/80 flex-shrink-0" />, text: 'Unknown card type' };
+    }
+  };
 
   return (
     <>
@@ -64,16 +77,19 @@ const DeckItem = ({ deck }: { deck: DeckData }) => {
 
           {hasFlashcards && (
             <div className="space-y-2 pt-2">
-              {deck.flashcards!.map((flashcard) => (
-                <Card key={flashcard.id} className="bg-card/50">
-                  <CardContent className="p-3 flex items-center gap-3">
-                    <FileText className="h-5 w-5 text-secondary-foreground/80 flex-shrink-0" />
-                    <p className="text-sm text-muted-foreground truncate" title={flashcard.type === 'basic' ? flashcard.question : flashcard.text}>
-                      {flashcard.type === 'basic' ? flashcard.question : flashcard.text}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))}
+              {deck.flashcards!.map((flashcard) => {
+                const { icon, text } = getCardPreview(flashcard);
+                return (
+                  <Card key={flashcard.id} className="bg-card/50">
+                    <CardContent className="p-3 flex items-center gap-3">
+                      {icon}
+                      <p className="text-sm text-muted-foreground truncate" title={text}>
+                        {text}
+                      </p>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
 
