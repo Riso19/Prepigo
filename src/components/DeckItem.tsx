@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { DeckData, FlashcardData } from "@/data/decks";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "./ui/button";
-import { ChevronRight, FileText, Folder, MoreVertical, Plus, BookOpen, Image as ImageIcon } from "lucide-react";
+import { ChevronRight, FileText, Folder, MoreVertical, Plus, BookOpen, Image as ImageIcon, Settings } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
@@ -52,6 +52,12 @@ const DeckItem = ({ deck }: { deck: DeckData }) => {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                <DropdownMenuItem asChild>
+                  <Link to={`/deck/${deck.id}/view`}>
+                    <Settings className="mr-2 h-4 w-4" />
+                    Manage Cards
+                  </Link>
+                </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link to={`/deck/${deck.id}/add`}>
                     <Plus className="mr-2 h-4 w-4" />

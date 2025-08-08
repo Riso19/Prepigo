@@ -8,6 +8,8 @@ import NotFound from "./pages/NotFound";
 import { DecksProvider } from "@/contexts/DecksContext";
 import StudyPage from "./pages/StudyPage";
 import CreateFlashcardPage from "./pages/CreateFlashcardPage";
+import DeckViewPage from "./pages/DeckViewPage";
+import EditFlashcardPage from "./pages/EditFlashcardPage";
 
 const queryClient = new QueryClient();
 
@@ -22,6 +24,8 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/study/:deckId" element={<StudyPage />} />
             <Route path="/deck/:deckId/add" element={<CreateFlashcardPage />} />
+            <Route path="/deck/:deckId/view" element={<DeckViewPage />} />
+            <Route path="/deck/:deckId/edit/:flashcardId" element={<EditFlashcardPage />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

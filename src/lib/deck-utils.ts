@@ -48,3 +48,55 @@ export const addFlashcardToDeck = (decks: DeckData[], parentId:string, newFlashc
         return deck;
     });
 }
+
+// Find a flashcard by its ID across all decks
+export const findFlashcardById = (decks: DeckData[], flashcardId: string): { flashcard: FlashcardData, deckId: string } | null => {
+  for (const deck of decks) {
+    const flashcard = deck.flashcards.find(fc => fc.id === flashcardId);
+    if (flashcard) {
+      return { flashcard, deckId: deck.id };
+    }
+    if (deck.subDecks) {
+      const found = findFlashcardById(deck.subDecks, flashcardId);
+      if (found) return found;
+    }
+  }
+  return null;
+};
+
+// Immutably delete a flashcard from any deck/sub-deck
+export const deleteFlashcard = (decks: DeckData[], flashcardId: string): DeckData[] => {
+  return decks.map(deck => {
+    const newFlashcards = deck.flashcards.filter(fc => fc.id !== flashcardId);
+    
+    let newSubDecks = deck.subDecks;
+    if (deck.subDecks) {
+      newSubDecks = deleteFlashcard(deck.subDecks, flashcardId);
+    }
+
+    return { ...deck, flashcards: newFlashcards, subDecks: newSubDecks };
+  });
+};
+
+// Immutably update a flashcard in any deck/sub-deck
+export const updateFlashcard = (decks: DeckData[], updatedFlashcard: FlashcardData): DeckData[] => {
+  return decks.map(deck => {
+    const flashcardIndex = deck.flashcards.findIndex(fc => fc.id === updatedFlashcard.id);
+    
+    let newFlashcards = deck.flashcards;
+    if (flashcardIndex > -1) {
+      newFlashcards = [
+        ...deck.flashcards.slice(0, flashcardIndex),
+        updatedFlashcard,
+        ...deck.flashcards.slice(flashcardIndex + 1),
+      ];
+    }
+
+    let newSubDecks = deck.subDecks;
+    if (deck.subDecks) {
+      newSubDecks = updateFlashcard(deck.subDecks, updatedFlashcard);
+    }
+
+    return { ...deck, flashcards: newFlashcards, subDecks: newSubDecks };
+  });
+};
