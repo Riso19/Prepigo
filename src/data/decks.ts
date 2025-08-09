@@ -1,24 +1,19 @@
 import * as z from 'zod';
+import { State } from 'ts-fsrs';
 
 export type FlashcardType = "basic" | "cloze" | "imageOcclusion";
 
-// --- Base SRS fields for all card types ---
+// --- Base SRS fields for all card types, aligned with ts-fsrs Card type ---
 const srsSchema = z.object({
-  // SM-2 fields
-  repetitions: z.number().optional(),
-  easeFactor: z.number().optional(),
-  interval: z.number().optional(),
-  lapses: z.number().optional(),
-  lastInterval: z.number().optional(),
-  
-  // FSRS fields
+  due: z.string().optional(),
   stability: z.number().optional(),
   difficulty: z.number().optional(),
-
-  // Common fields
-  nextReviewDate: z.string().optional(),
-  lastReviewDate: z.string().optional(), // Added for FSRS accuracy
-  isSuspended: z.boolean().optional(),
+  elapsed_days: z.number().optional(),
+  scheduled_days: z.number().optional(),
+  reps: z.number().optional(),
+  lapses: z.number().optional(),
+  state: z.nativeEnum(State).optional(),
+  last_review: z.string().optional(),
 });
 
 // --- Flashcard Schemas ---
@@ -74,21 +69,18 @@ export const deckDataSchema: z.ZodType<DeckData> = baseDeckSchema.extend({
   subDecks: z.lazy(() => z.array(deckDataSchema)).optional(),
 });
 
-// --- Review Log Schema for FSRS ---
+// --- Review Log Schema for FSRS, aligned with ts-fsrs ReviewLog type ---
 export const reviewLogSchema = z.object({
   cardId: z.string(),
-  reviewTime: z.string(), // ISO string
-  rating: z.number(), // 1 (Again), 2 (Hard), 3 (Good), 4 (Easy)
-  
-  // State of the card *before* this review
-  previousStability: z.number().optional(),
-  previousDifficulty: z.number().optional(),
-  elapsedDays: z.number(),
-  
-  // State of the card *after* this review
-  newStability: z.number(),
-  newDifficulty: z.number(),
-  scheduledDays: z.number(),
+  rating: z.number(),
+  state: z.nativeEnum(State),
+  due: z.string(),
+  stability: z.number(),
+  difficulty: z.number(),
+  elapsed_days: z.number(),
+  last_elapsed_days: z.number(),
+  scheduled_days: z.number(),
+  review: z.string(),
 });
 
 // --- Final Schemas for Types and Validation ---

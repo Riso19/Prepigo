@@ -1,5 +1,4 @@
 import { DeckData, FlashcardData } from "@/data/decks";
-import { FSRSParameters } from "./fsrs";
 
 // Recursively find a deck by its ID
 export const findDeckById = (decks: DeckData[], id: string): DeckData | null => {
@@ -117,39 +116,4 @@ export const updateFlashcard = (decks: DeckData[], updatedFlashcard: FlashcardDa
 
     return { ...deck, flashcards: newFlashcards, subDecks: newSubDecks };
   });
-};
-
-// --- FSRS Rescheduling ---
-const ivl_fn = (s: number, r: number): number => Math.round(s * (1 / r - 1));
-const constrain = (v: number, min: number, max: number) => Math.max(min, Math.min(v, max));
-
-export const rescheduleCards = (decks: DeckData[], fsrsParameters: FSRSParameters): DeckData[] => {
-  const rescheduleCard = (card: FlashcardData): FlashcardData => {
-    if (card.stability && card.lastReviewDate) {
-      let newInterval = ivl_fn(card.stability, fsrsParameters.request_retention);
-      newInterval = constrain(newInterval, 1, fsrsParameters.maximum_interval);
-      
-      const lastReview = new Date(card.lastReviewDate);
-      // Use a new date object for manipulation to avoid mutating the original
-      const nextReview = new Date(lastReview.valueOf());
-      nextReview.setDate(nextReview.getDate() + newInterval);
-
-      return {
-        ...card,
-        interval: newInterval,
-        nextReviewDate: nextReview.toISOString(),
-      };
-    }
-    return card;
-  };
-
-  const recurse = (d: DeckData[]): DeckData[] => {
-    return d.map(deck => {
-      const rescheduledFlashcards = deck.flashcards.map(rescheduleCard);
-      const rescheduledSubDecks = deck.subDecks ? recurse(deck.subDecks) : [];
-      return { ...deck, flashcards: rescheduledFlashcards, subDecks: rescheduledSubDecks };
-    });
-  };
-
-  return recurse(decks);
 };

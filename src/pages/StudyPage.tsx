@@ -3,16 +3,15 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { useDecks } from "@/contexts/DecksContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { findDeckById, getAllFlashcardsFromDeck, updateFlashcard } from "@/lib/deck-utils";
-import { sm2 } from "@/lib/srs";
-import { fsrs, Rating, ReviewRating, FsrsSchedulerResult } from "@/lib/fsrs";
 import { addReviewLog } from "@/lib/idb";
-import { FlashcardData } from "@/data/decks";
+import { FlashcardData, ReviewLog } from "@/data/decks";
 import { showSuccess } from "@/utils/toast";
 import Flashcard from "@/components/Flashcard";
 import ClozePlayer from "@/components/ClozePlayer";
 import ImageOcclusionPlayer from "@/components/ImageOcclusionPlayer";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Home } from "lucide-react";
+import { fsrs, FSRS, Card, State, Rating, RecordLog, generatorParameters, createEmptyCard } from "ts-fsrs";
 
 const StudyPage = () => {
   const { deckId } = useParams<{ deckId: string }>();
@@ -24,8 +23,12 @@ const StudyPage = () => {
   
   const [completedCardIds, setCompletedCardIds] = useState<Set<string>>(new Set());
   const [isFlipped, setIsFlipped] = useState(false);
-  const [fsrsScheduledOutcomes, setFsrsScheduledOutcomes] = useState<FsrsSchedulerResult | null>(null);
-  const [sm2ScheduledIntervals, setSm2ScheduledIntervals] = useState<{ [key in ReviewRating]: number } | null>(null);
+  const [scheduledOutcomes, setScheduledOutcomes] = useState<RecordLog | null>(null);
+
+  const fsrsInstance = useMemo(() => {
+    const params = generatorParameters(settings.fsrsParameters);
+    return fsrs(params);
+  }, [settings.fsrsParameters]);
 
   const sessionQueue = useMemo(() => {
     if (!deck) return [];
@@ -35,80 +38,19 @@ const StudyPage = () => {
     
     const dueCards = allCards
       .filter(card => !card.isSuspended)
-      .filter(card => !card.nextReviewDate || new Date(card.nextReviewDate) <= now);
+      .filter(card => !card.due || new Date(card.due) <= now);
 
-    // 1. Classify Cards
-    const newCards = dueCards.filter(c => !c.interval || c.interval === 0);
-    const reviewCards = dueCards.filter(c => c.interval && c.interval > 0);
+    // This is a simplified queueing logic. A full implementation would handle new/review/relearning states separately.
+    const newCards = dueCards.filter(c => c.state === State.New).slice(0, settings.newCardsPerDay);
+    const reviewCards = dueCards.filter(c => c.state !== State.New).slice(0, settings.maxReviewsPerDay);
 
-    // 2. Gather New Cards
-    let gatheredNew: FlashcardData[] = [];
-    switch (settings.newCardGatherOrder) {
-      case 'ascending':
-        gatheredNew = newCards.sort((a, b) => a.id.localeCompare(b.id));
-        break;
-      case 'descending':
-        gatheredNew = newCards.sort((a, b) => b.id.localeCompare(a.id));
-        break;
-      case 'randomCards':
-        gatheredNew = newCards.sort(() => Math.random() - 0.5);
-        break;
-      case 'deck':
-      default:
-        // Simplified 'deck' order: ascending by ID, which is close to creation order.
-        gatheredNew = newCards.sort((a, b) => a.id.localeCompare(b.id));
-        break;
-    }
-    
-    // 3. Sort and Limit New Cards
-    let newQueue = gatheredNew.slice(0, settings.newCardsPerDay);
-    switch (settings.newCardSortOrder) {
-        case 'random':
-            newQueue.sort(() => Math.random() - 0.5);
-            break;
-        // Other sort orders are more complex and will behave as 'gathered' for now.
-        case 'gathered':
-        case 'typeThenGathered':
-        default:
-            // No change needed, already in gathered order.
-            break;
-    }
-
-    // 4. Sort and Limit Review Cards
-    let reviewQueue = reviewCards;
-    switch (settings.reviewSortOrder) {
-        case 'dueDateRandom':
-        default:
-            reviewQueue.sort((a, b) => {
-                const dateA = new Date(a.nextReviewDate || 0).getTime();
-                const dateB = new Date(b.nextReviewDate || 0).getTime();
-                return dateA - dateB || (Math.random() - 0.5);
-            });
-            break;
-    }
-    reviewQueue = reviewQueue.slice(0, settings.maxReviewsPerDay);
-
-    // 5. Combine Queues
-    let finalQueue: FlashcardData[] = [];
-    switch (settings.newReviewOrder) {
-        case 'after':
-            finalQueue = [...reviewQueue, ...newQueue];
-            break;
-        case 'before':
-            finalQueue = [...newQueue, ...reviewQueue];
-            break;
-        case 'mix':
-        default:
-            finalQueue = [...reviewQueue, ...newQueue].sort(() => Math.random() - 0.5);
-            break;
-    }
-
-    return finalQueue;
-  }, [deck, settings]);
+    return [...reviewCards, ...newCards].sort(() => Math.random() - 0.5);
+  }, [deck, settings.newCardsPerDay, settings.maxReviewsPerDay]);
 
   useEffect(() => {
     setCompletedCardIds(new Set());
     setIsFlipped(false);
+    setScheduledOutcomes(null);
   }, [deckId]);
 
   const remainingCards = useMemo(() => {
@@ -119,42 +61,20 @@ const StudyPage = () => {
   const initialDueCount = sessionQueue.length;
 
   useEffect(() => {
-    if (!currentCard) {
-      setFsrsScheduledOutcomes(null);
-      setSm2ScheduledIntervals(null);
-      return;
-    }
+    if (isFlipped && currentCard && !scheduledOutcomes) {
+      const cardToReview: Card = currentCard.last_review 
+        ? {
+            ...createEmptyCard(),
+            ...currentCard,
+            due: new Date(currentCard.due!),
+            last_review: new Date(currentCard.last_review),
+          }
+        : createEmptyCard(currentCard.due ? new Date(currentCard.due) : undefined);
 
-    if (settings.algorithm === 'fsrs') {
-      setSm2ScheduledIntervals(null);
-      const now = new Date();
-      let elapsedDays = 0;
-      if (currentCard.lastReviewDate) {
-        const lastReview = new Date(currentCard.lastReviewDate);
-        elapsedDays = (now.getTime() - lastReview.getTime()) / (1000 * 60 * 60 * 24);
-      }
-      const cardData = { stability: currentCard.stability, difficulty: currentCard.difficulty };
-      const outcomes = fsrs(cardData, elapsedDays, settings.fsrsParameters);
-      setFsrsScheduledOutcomes(outcomes);
-    } else if (settings.algorithm === 'sm2') {
-      setFsrsScheduledOutcomes(null);
-      const srsData = {
-        repetitions: currentCard.repetitions || 0,
-        easeFactor: currentCard.easeFactor || settings.initialEaseFactor,
-        interval: currentCard.interval || 0,
-        lapses: currentCard.lapses || 0,
-        isSuspended: currentCard.isSuspended || false,
-        lastInterval: currentCard.lastInterval,
-      };
-
-      setSm2ScheduledIntervals({
-        [Rating.Again]: sm2(srsData, 0, settings).interval,
-        [Rating.Hard]: sm2(srsData, 3, settings).interval,
-        [Rating.Good]: sm2(srsData, 4, settings).interval,
-        [Rating.Easy]: sm2(srsData, 5, settings).interval,
-      });
+      const outcomes = fsrsInstance.repeat(cardToReview, new Date());
+      setScheduledOutcomes(outcomes);
     }
-  }, [currentCard, settings]);
+  }, [isFlipped, currentCard, scheduledOutcomes, fsrsInstance]);
 
   useEffect(() => {
     if (initialDueCount > 0 && remainingCards.length === 0) {
@@ -163,92 +83,33 @@ const StudyPage = () => {
     }
   }, [remainingCards.length, initialDueCount, navigate]);
 
-  const getSiblings = useCallback((card: FlashcardData, allCards: FlashcardData[]): FlashcardData[] => {
-    if (!card) return [];
-    if (card.type === 'imageOcclusion') {
-      return allCards.filter(c => c.id !== card.id && c.type === 'imageOcclusion' && c.imageUrl === card.imageUrl && c.occlusions === card.occlusions);
-    }
-    if (card.type === 'basic') {
-      return allCards.filter(c => c.id !== card.id && c.type === 'basic' && c.question === card.answer && c.answer === card.question);
-    }
-    return [];
-  }, []);
+  const handleRating = useCallback(async (rating: Rating) => {
+    if (!currentCard || !scheduledOutcomes) return;
 
-  const handleRating = useCallback(async (rating: ReviewRating) => {
-    if (!currentCard) return;
+    const result = scheduledOutcomes[rating];
+    const updatedFsrsCard = result.card;
 
-    const now = new Date();
-    let updatedCard: FlashcardData;
-    const allFlashcards = deck ? getAllFlashcardsFromDeck(deck) : [];
-
-    if (settings.algorithm === 'fsrs') {
-      if (!fsrsScheduledOutcomes) return;
+    const updatedCard: FlashcardData = {
+      ...currentCard,
+      ...updatedFsrsCard,
+      due: updatedFsrsCard.due.toISOString(),
+      last_review: updatedFsrsCard.last_review?.toISOString(),
+    };
     
-      const newSrsData = fsrsScheduledOutcomes[rating];
-      const nextReviewDate = new Date(new Date().setDate(now.getDate() + newSrsData.interval));
+    const logToSave: ReviewLog = {
+      cardId: currentCard.id,
+      ...result.log,
+      due: result.log.due.toISOString(),
+      review: result.log.review.toISOString(),
+    };
 
-      updatedCard = {
-        ...currentCard,
-        stability: newSrsData.stability,
-        difficulty: newSrsData.difficulty,
-        interval: newSrsData.interval,
-        nextReviewDate: nextReviewDate.toISOString(),
-        lastReviewDate: now.toISOString(),
-        repetitions: (currentCard.repetitions || 0) + 1,
-        lapses: rating === 1 ? (currentCard.lapses || 0) + 1 : currentCard.lapses,
-      };
-
-      let elapsedDays = 0;
-      if (currentCard.lastReviewDate) {
-        const lastReview = new Date(currentCard.lastReviewDate);
-        elapsedDays = (now.getTime() - lastReview.getTime()) / (1000 * 60 * 60 * 24);
-      }
-
-      await addReviewLog({
-        cardId: currentCard.id,
-        reviewTime: now.toISOString(),
-        rating,
-        previousStability: currentCard.stability,
-        previousDifficulty: currentCard.difficulty,
-        elapsedDays,
-        newStability: newSrsData.stability,
-        newDifficulty: newSrsData.difficulty,
-        scheduledDays: newSrsData.interval,
-      });
-
-    } else { // SM-2 Logic
-      const quality = rating === 1 ? 0 : rating + 1;
-      const srsData = {
-        repetitions: currentCard.repetitions || 0,
-        easeFactor: currentCard.easeFactor || settings.initialEaseFactor,
-        interval: currentCard.interval || 0,
-        lapses: currentCard.lapses || 0,
-        isSuspended: currentCard.isSuspended || false,
-        lastInterval: currentCard.lastInterval,
-      };
-      const newSrsData = sm2(srsData, quality, settings);
-      const nextReviewDate = new Date(new Date().setDate(now.getDate() + newSrsData.interval));
-      updatedCard = { ...currentCard, ...newSrsData, nextReviewDate: nextReviewDate.toISOString(), lastReviewDate: now.toISOString() };
-    }
-    
-    const idsToComplete = new Set<string>([currentCard.id]);
-    if (settings.algorithm === 'sm2') {
-        const siblings = getSiblings(currentCard, allFlashcards);
-        siblings.forEach(sibling => {
-            const isNew = !sibling.interval || sibling.interval === 0;
-            const isReview = sibling.interval && sibling.interval >= settings.graduatingInterval;
-            const isInterdayLearning = sibling.interval && sibling.interval >= 1 && sibling.interval < settings.graduatingInterval;
-
-            if (isNew && settings.buryNewSiblings) idsToComplete.add(sibling.id);
-            if (isReview && settings.buryReviewSiblings) idsToComplete.add(sibling.id);
-            if (isInterdayLearning && settings.buryInterdayLearningSiblings) idsToComplete.add(sibling.id);
-        });
-    }
-
+    await addReviewLog(logToSave);
     setDecks(prevDecks => updateFlashcard(prevDecks, updatedCard));
-    setCompletedCardIds(prev => new Set([...prev, ...idsToComplete]));
+    
+    setCompletedCardIds(prev => new Set([...prev, currentCard.id]));
     setIsFlipped(false);
-  }, [currentCard, setDecks, settings, getSiblings, deck, fsrsScheduledOutcomes]);
+    setScheduledOutcomes(null);
+  }, [currentCard, scheduledOutcomes, setDecks]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -357,26 +218,22 @@ const StudyPage = () => {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full">
               <Button onClick={() => handleRating(Rating.Again)} className="relative bg-red-500 hover:bg-red-600 text-white font-bold h-16 text-base flex flex-col">
                 <span>Again</span>
-                {fsrsScheduledOutcomes && <span className="text-xs font-normal opacity-80">{formatInterval(fsrsScheduledOutcomes[Rating.Again].interval)}</span>}
-                {sm2ScheduledIntervals && <span className="text-xs font-normal opacity-80">{formatInterval(sm2ScheduledIntervals[Rating.Again])}</span>}
+                {scheduledOutcomes && <span className="text-xs font-normal opacity-80">{formatInterval(scheduledOutcomes[Rating.Again].card.scheduled_days)}</span>}
                 <span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">1</span>
               </Button>
               <Button onClick={() => handleRating(Rating.Hard)} className="relative bg-orange-400 hover:bg-orange-500 text-white font-bold h-16 text-base flex flex-col">
                 <span>Hard</span>
-                {fsrsScheduledOutcomes && <span className="text-xs font-normal opacity-80">{formatInterval(fsrsScheduledOutcomes[Rating.Hard].interval)}</span>}
-                {sm2ScheduledIntervals && <span className="text-xs font-normal opacity-80">{formatInterval(sm2ScheduledIntervals[Rating.Hard])}</span>}
+                {scheduledOutcomes && <span className="text-xs font-normal opacity-80">{formatInterval(scheduledOutcomes[Rating.Hard].card.scheduled_days)}</span>}
                 <span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">2</span>
               </Button>
               <Button onClick={() => handleRating(Rating.Good)} className="relative bg-green-500 hover:bg-green-600 text-white font-bold h-16 text-base flex flex-col">
                 <span>Good</span>
-                {fsrsScheduledOutcomes && <span className="text-xs font-normal opacity-80">{formatInterval(fsrsScheduledOutcomes[Rating.Good].interval)}</span>}
-                {sm2ScheduledIntervals && <span className="text-xs font-normal opacity-80">{formatInterval(sm2ScheduledIntervals[Rating.Good])}</span>}
+                {scheduledOutcomes && <span className="text-xs font-normal opacity-80">{formatInterval(scheduledOutcomes[Rating.Good].card.scheduled_days)}</span>}
                 <span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">3</span>
               </Button>
               <Button onClick={() => handleRating(Rating.Easy)} className="relative bg-blue-500 hover:bg-blue-600 text-white font-bold h-16 text-base flex flex-col">
                 <span>Easy</span>
-                {fsrsScheduledOutcomes && <span className="text-xs font-normal opacity-80">{formatInterval(fsrsScheduledOutcomes[Rating.Easy].interval)}</span>}
-                {sm2ScheduledIntervals && <span className="text-xs font-normal opacity-80">{formatInterval(sm2ScheduledIntervals[Rating.Easy])}</span>}
+                {scheduledOutcomes && <span className="text-xs font-normal opacity-80">{formatInterval(scheduledOutcomes[Rating.Easy].card.scheduled_days)}</span>}
                 <span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">4</span>
               </Button>
             </div>

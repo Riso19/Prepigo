@@ -1,47 +1,15 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { FSRSParameters, defaultFSRSParameters } from "@/lib/fsrs";
+import { FSRSParameters, defaultFSRSParameters } from "ts-fsrs";
 
 const DB_NAME = 'PrepigoSettingsDB';
 const DB_VERSION = 1;
 const SETTINGS_STORE = 'settings';
 
 export interface SrsSettings {
-  // Algorithm Choice
-  algorithm: 'sm2' | 'fsrs';
   fsrsParameters: FSRSParameters;
-
-  // Daily Limits
   newCardsPerDay: number;
   maxReviewsPerDay: number;
-
-  // New Cards (SM-2)
-  learningSteps: string;
-  graduatingInterval: number;
-  easyInterval: number;
-  insertionOrder: 'sequential' | 'random'; // This is now part of display order, but let's keep for SM-2 compatibility
-
-  // Lapses (SM-2)
-  relearningSteps: string;
-  minimumInterval: number;
-  leechThreshold: number;
-  leechAction: 'tagOnly' | 'suspend';
-
-  // Burying (SM-2)
-  buryNewSiblings: boolean;
-  buryReviewSiblings: boolean;
-  buryInterdayLearningSiblings: boolean;
-
-  // Advanced (SM-2)
-  maximumInterval: number;
-  initialEaseFactor: number;
-  easyBonus: number;
-  intervalModifier: number;
-  hardInterval: number;
-  newInterval: number;
-  minEaseFactor: number;
-
-  // Display Order
   newCardGatherOrder: 'deck' | 'ascending' | 'descending' | 'randomNotes' | 'randomCards';
   newCardSortOrder: 'gathered' | 'typeThenGathered' | 'typeThenRandom' | 'randomNote' | 'random';
   newReviewOrder: 'mix' | 'after' | 'before';
@@ -57,41 +25,9 @@ interface SettingsDB extends DBSchema {
 }
 
 const defaultSettings: SrsSettings = {
-  // Algorithm Choice
-  algorithm: 'sm2',
   fsrsParameters: defaultFSRSParameters,
-
-  // Daily Limits
   newCardsPerDay: 20,
   maxReviewsPerDay: 200,
-
-  // New Cards
-  learningSteps: "10m 1d",
-  graduatingInterval: 7,
-  easyInterval: 10,
-  insertionOrder: 'sequential',
-
-  // Lapses
-  relearningSteps: "10m",
-  minimumInterval: 1,
-  leechThreshold: 8,
-  leechAction: 'tagOnly',
-
-  // Burying
-  buryNewSiblings: true,
-  buryReviewSiblings: true,
-  buryInterdayLearningSiblings: true,
-
-  // Advanced
-  maximumInterval: 365,
-  initialEaseFactor: 2.5,
-  easyBonus: 1.3,
-  intervalModifier: 1.0,
-  hardInterval: 1.2,
-  newInterval: 0.6,
-  minEaseFactor: 1.3,
-
-  // Display Order Defaults
   newCardGatherOrder: 'deck',
   newCardSortOrder: 'typeThenGathered',
   newReviewOrder: 'mix',
