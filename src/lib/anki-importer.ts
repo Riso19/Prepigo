@@ -69,21 +69,46 @@ export const importAnkiFile = async (
 
     const mediaFile = zip.file('media');
     if (mediaFile) {
-      const mediaJSON = JSON.parse(await mediaFile.async('string'));
-      const mediaFiles = Object.keys(mediaJSON);
-      onProgress({ message: 'Extracting media...', value: 10 });
-      for (let i = 0; i < mediaFiles.length; i++) {
-        const key = mediaFiles[i];
-        const fileName = mediaJSON[key];
-        const fileEntry = zip.file(key);
-        if (fileEntry) {
-          const blob = await fileEntry.async('blob');
-          mediaToStore.set(fileName, blob);
+        onProgress({ message: 'Reading media map...', value: 10 });
+        const mediaBytes = await mediaFile.async('uint8array');
+        const decoder = new TextDecoder("utf-8", { fatal: false });
+        let mediaString = decoder.decode(mediaBytes);
+
+        // Sanitize string: trim whitespace, remove BOM, and remove illegal control characters.
+        mediaString = mediaString.trim().replace(/^\uFEFF/, '');
+        mediaString = mediaString.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+
+        let mediaJSON: { [key: string]: string } = {};
+        try {
+            mediaJSON = JSON.parse(mediaString);
+        } catch (e) {
+            console.warn("Could not parse media JSON file. Attempting to recover mappings with regex.", e);
+            // Fallback to regex parsing for corrupted JSON
+            const regex = /"(\d+)":\s*"([^"]+)"/g;
+            let match;
+            while ((match = regex.exec(mediaString)) !== null) {
+                const key = match[1];
+                const value = match[2];
+                mediaJSON[key] = value;
+            }
         }
-        if (i % 20 === 0) {
-            onProgress({ message: `Extracting media... (${i}/${mediaFiles.length})`, value: 10 + (i / mediaFiles.length) * 20 });
+
+        const mediaFiles = Object.keys(mediaJSON);
+        if (mediaFiles.length > 0) {
+            onProgress({ message: 'Extracting media...', value: 15 });
+            for (let i = 0; i < mediaFiles.length; i++) {
+                const key = mediaFiles[i];
+                const fileName = mediaJSON[key];
+                const fileEntry = zip.file(key);
+                if (fileEntry) {
+                    const blob = await fileEntry.async('blob');
+                    mediaToStore.set(fileName, blob);
+                }
+                if (i % 20 === 0 || i === mediaFiles.length - 1) {
+                    onProgress({ message: `Extracting media... (${i + 1}/${mediaFiles.length})`, value: 15 + (i / mediaFiles.length) * 15 });
+                }
+            }
         }
-      }
     }
   } else {
     dbBytes = new Uint8Array(await file.arrayBuffer());
