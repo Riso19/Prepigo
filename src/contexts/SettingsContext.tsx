@@ -28,6 +28,7 @@ export interface SrsSettings {
   reviewSortOrder: 'dueDateRandom' | 'dueDateDeck' | 'overdue';
   buryNewSiblings: boolean;
   buryReviewSiblings: boolean;
+  buryInterdayLearningSiblings: boolean;
 }
 
 interface SettingsDB extends DBSchema {
@@ -57,6 +58,7 @@ const defaultSettings: SrsSettings = {
   reviewSortOrder: 'dueDateRandom',
   buryNewSiblings: false,
   buryReviewSiblings: false,
+  buryInterdayLearningSiblings: false,
 };
 
 // --- Database Functions ---

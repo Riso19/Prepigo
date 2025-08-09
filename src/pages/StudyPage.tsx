@@ -2,10 +2,9 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useDecks } from "@/contexts/DecksContext";
 import { useSettings } from "@/contexts/SettingsContext";
-import { findDeckById, getAllFlashcardsFromDeck, updateFlashcard, tagLeech } from "@/lib/deck-utils";
+import { findDeckById, getAllFlashcardsFromDeck, updateFlashcard } from "@/lib/deck-utils";
 import { addReviewLog } from "@/lib/idb";
 import { FlashcardData, ReviewLog, Sm2State } from "@/data/decks";
-import { showSuccess } from "@/utils/toast";
 import Flashcard from "@/components/Flashcard";
 import ClozePlayer from "@/components/ClozePlayer";
 import ImageOcclusionPlayer from "@/components/ImageOcclusionPlayer";
@@ -13,6 +12,22 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Home } from "lucide-react";
 import { fsrs, Card, State, Rating, RecordLog, generatorParameters, createEmptyCard } from "ts-fsrs";
 import { sm2, Sm2Quality } from "@/lib/sm2";
+
+const parseSteps = (steps: string): number[] => {
+  // returns intervals in minutes
+  return steps.trim().split(/\s+/).map(step => {
+    const value = parseInt(step, 10);
+    if (isNaN(value)) return 1; // Default to 1 minute if parsing fails
+    if (step.endsWith('d')) {
+      return value * 24 * 60;
+    }
+    if (step.endsWith('h')) {
+      return value * 60;
+    }
+    // assume minutes by default
+    return value;
+  });
+};
 
 const StudyPage = () => {
   const { deckId } = useParams<{ deckId: string }>();
@@ -156,35 +171,43 @@ const StudyPage = () => {
       const logToSave: ReviewLog = { cardId: currentCard.id, ...result.log, due: result.log.due.toISOString(), review: result.log.review.toISOString() };
       await addReviewLog(logToSave);
     } else { // SM-2 Logic
-      const sm2State = currentCard.srs?.sm2 || { state: 'new', repetitions: 0, lapses: 0, easinessFactor: settings.sm2InitialEasinessFactor, interval: 0, due: new Date().toISOString() };
-      const learningSteps = settings.learningSteps.split(' ').map(Number);
-      const relearningSteps = settings.relearningSteps.split(' ').map(Number);
+      const sm2State = currentCard.srs?.sm2 || { state: 'new', repetitions: 0, lapses: 0, easinessFactor: settings.sm2InitialEasinessFactor, interval: 0, due: new Date().toISOString(), learningStep: 0 };
       let nextSm2State: Sm2State = { ...sm2State };
       let wasLapse = false;
 
       if (rating === Rating.Again) {
-        nextSm2State.state = 'relearning';
+        wasLapse = sm2State.state === 'review';
         nextSm2State.lapses = (sm2State.lapses || 0) + 1;
+        nextSm2State.state = 'relearning';
+        nextSm2State.learningStep = 0;
+        const relearningSteps = parseSteps(settings.relearningSteps);
         const nextDue = new Date();
         nextDue.setMinutes(nextDue.getMinutes() + relearningSteps[0]);
         nextSm2State.due = nextDue.toISOString();
-        wasLapse = sm2State.state === 'review';
       } else {
-        if (sm2State.state === 'learning' || sm2State.state === 'relearning') {
-          // Still in learning steps
-          nextSm2State.state = sm2State.state;
-          const nextDue = new Date();
-          nextDue.setMinutes(nextDue.getMinutes() + learningSteps[0]); // Simplified: always use first step for now
-          nextSm2State.due = nextDue.toISOString();
-          // Graduate on Easy or Good (simplified)
-          if (rating === Rating.Easy || rating === Rating.Good) {
+        const cardState = sm2State.state || 'new';
+        if (cardState === 'learning' || cardState === 'relearning' || cardState === 'new') {
+          const isNew = cardState === 'new';
+          const steps = (cardState === 'relearning') ? parseSteps(settings.relearningSteps) : parseSteps(settings.learningSteps);
+          let stepIndex = isNew ? -1 : (sm2State.learningStep || 0);
+
+          if (rating === Rating.Good) stepIndex++;
+          else if (rating === Rating.Easy) stepIndex = steps.length;
+
+          if (stepIndex >= steps.length) {
             nextSm2State.state = 'review';
-            nextSm2State.interval = settings.sm2FirstInterval;
-            const graduateDueDate = new Date();
-            graduateDueDate.setDate(graduateDueDate.getDate() + nextSm2State.interval);
-            nextSm2State.due = graduateDueDate.toISOString();
+            nextSm2State.learningStep = undefined;
+            const sm2Params = { initialEasinessFactor: settings.sm2InitialEasinessFactor, minEasinessFactor: settings.sm2MinEasinessFactor, firstInterval: settings.sm2FirstInterval, secondInterval: settings.sm2SecondInterval };
+            const result = sm2(Rating.Good, sm2Params, { ...sm2State, repetitions: isNew ? 0 : sm2State.repetitions });
+            nextSm2State = { ...nextSm2State, ...result };
+          } else {
+            nextSm2State.state = isNew ? 'learning' : cardState;
+            nextSm2State.learningStep = stepIndex;
+            const nextDue = new Date();
+            nextDue.setMinutes(nextDue.getMinutes() + steps[stepIndex]);
+            nextSm2State.due = nextDue.toISOString();
           }
-        } else { // Is a review card
+        } else if (cardState === 'review') {
           const qualityMap: { [key in Rating]: Sm2Quality } = { [Rating.Manual]: 0, [Rating.Again]: 1, [Rating.Hard]: 3, [Rating.Good]: 4, [Rating.Easy]: 5 };
           const sm2Params = { initialEasinessFactor: settings.sm2InitialEasinessFactor, minEasinessFactor: settings.sm2MinEasinessFactor, firstInterval: settings.sm2FirstInterval, secondInterval: settings.sm2SecondInterval };
           const result = sm2(qualityMap[rating], sm2Params, sm2State);
@@ -208,9 +231,24 @@ const StudyPage = () => {
     setDecks(prevDecks => updateFlashcard(prevDecks, updatedCard));
     
     if (settings.scheduler === 'sm2' && currentCard.noteId) {
-        if ((settings.buryNewSiblings && updatedCard.srs?.sm2?.state === 'review') || (settings.buryReviewSiblings && updatedCard.srs?.sm2?.state === 'review')) {
-            setBuriedNoteIds(prev => new Set([...prev, currentCard.noteId!]));
-        }
+      const cardState = currentCard.srs?.sm2?.state || 'new';
+      let shouldBury = false;
+
+      if (cardState === 'new' && settings.buryNewSiblings) {
+          shouldBury = true;
+      } else if (cardState === 'review' && settings.buryReviewSiblings) {
+          shouldBury = true;
+      } else if ((cardState === 'learning' || cardState === 'relearning') && settings.buryInterdayLearningSiblings) {
+          const steps = cardState === 'learning' ? parseSteps(settings.learningSteps) : parseSteps(settings.relearningSteps);
+          const currentStepIndex = currentCard.srs?.sm2?.learningStep || 0;
+          if (currentStepIndex < steps.length && steps[currentStepIndex] >= 1440) { // 1440 minutes in a day
+              shouldBury = true;
+          }
+      }
+
+      if (shouldBury) {
+          setBuriedNoteIds(prev => new Set([...prev, currentCard.noteId!]));
+      }
     }
 
     advanceCard();

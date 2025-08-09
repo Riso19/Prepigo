@@ -56,6 +56,7 @@ const settingsSchema = z.object({
   reviewSortOrder: z.enum(['dueDateRandom', 'dueDateDeck', 'overdue']),
   buryNewSiblings: z.boolean(),
   buryReviewSiblings: z.boolean(),
+  buryInterdayLearningSiblings: z.boolean(),
 });
 
 const SettingsPage = () => {
@@ -330,6 +331,16 @@ const SettingsPage = () => {
                           <div className="space-y-0.5">
                             <FormLabel>Bury review siblings</FormLabel>
                             <FormDescription>Hide other review cards from the same note until the next day.</FormDescription>
+                          </div>
+                          <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField control={form.control} name="buryInterdayLearningSiblings" render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                          <div className="space-y-0.5">
+                            <FormLabel>Bury interday learning siblings</FormLabel>
+                            <FormDescription>Hide other learning cards from the same note (due tomorrow or later) until the next day.</FormDescription>
                           </div>
                           <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                         </FormItem>

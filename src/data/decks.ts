@@ -28,6 +28,7 @@ const sm2StateSchema = z.object({
   lapses: z.number().optional(),
   state: z.enum(['new', 'learning', 'review', 'relearning']).optional(),
   last_review: z.string().optional(),
+  learningStep: z.number().optional(),
 });
 export type Sm2State = z.infer<typeof sm2StateSchema>;
 
