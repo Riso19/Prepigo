@@ -48,6 +48,7 @@ const settingsSchema = z.object({
   sm2MaximumInterval: z.coerce.number().int().min(1, "Must be at least 1 day"),
   sm2GraduatingInterval: z.coerce.number().int().min(1, "Must be at least 1 day"),
   sm2EasyInterval: z.coerce.number().int().min(1, "Must be at least 1 day"),
+  sm2MinimumInterval: z.coerce.number().int().min(1, "Must be at least 1 day"),
   learningSteps: z.string().regex(/^(\d+[smhd]?\s*)*\d+[smhd]?$/, "Must be space-separated numbers with optional s,m,h,d units."),
   relearningSteps: z.string().regex(/^(\d+[smhd]?\s*)*\d+[smhd]?$/, "Must be space-separated numbers with optional s,m,h,d units."),
   leechThreshold: z.coerce.number().int().min(1, "Must be at least 1"),
@@ -330,6 +331,14 @@ const SettingsPage = () => {
                             <FormLabel>New Interval Multiplier</FormLabel>
                             <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
                             <FormDescription>Multiplier for a lapsed card's interval (default: 0.60).</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="sm2MinimumInterval" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Minimum Interval (days)</FormLabel>
+                            <FormControl><Input type="number" {...field} /></FormControl>
+                            <FormDescription>The minimum interval after a lapse (default: 1).</FormDescription>
                             <FormMessage />
                           </FormItem>
                         )} />

@@ -19,6 +19,7 @@ export interface SrsSettings {
   sm2MaximumInterval: number;
   sm2GraduatingInterval: number;
   sm2EasyInterval: number;
+  sm2MinimumInterval: number;
   learningSteps: string;
   relearningSteps: string;
   leechThreshold: number;
@@ -55,6 +56,7 @@ const defaultSettings: SrsSettings = {
   sm2MaximumInterval: 365,
   sm2GraduatingInterval: 1,
   sm2EasyInterval: 4,
+  sm2MinimumInterval: 1,
   learningSteps: "1 10", // in minutes, space-separated
   relearningSteps: "10", // in minutes, space-separated
   leechThreshold: 8,

@@ -15,7 +15,7 @@ import { sm2, Sm2Quality } from "@/lib/sm2";
 import { SrsSettings } from "@/contexts/SettingsContext";
 
 const parseSteps = (steps: string): number[] => {
-  return steps.trim().split(/\s+/).map(stepStr => {
+  return steps.trim().split(/\s+/).filter(s => s).map(stepStr => {
     const value = parseFloat(stepStr);
     if (isNaN(value)) return 1; // Default to 1 minute if parsing fails
     if (stepStr.endsWith('d')) return value * 24 * 60;
@@ -148,16 +148,24 @@ const StudyPage = () => {
       if (rating === Rating.Again) {
         if (isReview) { // Lapsed review card
           nextSm2State.lapses = (sm2State.lapses || 0) + 1;
-          nextSm2State.state = 'relearning';
-          nextSm2State.learningStep = 0;
           nextSm2State.easinessFactor = Math.max(settings.sm2MinEasinessFactor, sm2State.easinessFactor - 0.20);
+          
+          const newInterval = Math.max(settings.sm2MinimumInterval, sm2State.interval * settings.sm2LapsedIntervalMultiplier);
+          nextSm2State.interval = newInterval;
+
           const relearningSteps = parseSteps(settings.relearningSteps);
-          const lapsedInterval = sm2State.interval > 0 ? sm2State.interval : 1;
-          const newInterval = lapsedInterval * settings.sm2LapsedIntervalMultiplier;
-          const firstStep = newInterval > 0 ? newInterval * 1440 : relearningSteps[0];
-          const nextDue = new Date();
-          nextDue.setMinutes(nextDue.getMinutes() + Math.max(1, firstStep));
-          nextSm2State.due = nextDue.toISOString();
+          if (relearningSteps.length > 0) {
+            nextSm2State.state = 'relearning';
+            nextSm2State.learningStep = 0;
+            const nextDue = new Date();
+            nextDue.setMinutes(nextDue.getMinutes() + relearningSteps[0]);
+            nextSm2State.due = nextDue.toISOString();
+          } else {
+            // No relearning steps, just reschedule
+            const nextDue = new Date();
+            nextDue.setDate(nextDue.getDate() + newInterval);
+            nextSm2State.due = nextDue.toISOString();
+          }
         } else { // New or learning card rated 'Again'
           nextSm2State.learningStep = 0;
           const learningSteps = parseSteps(settings.learningSteps);
@@ -192,12 +200,14 @@ const StudyPage = () => {
           const currentStep = sm2State.learningStep || 0;
           const nextStep = currentStep + 1;
 
-          if (nextStep >= steps.length) { // Graduate with Graduating Interval
+          if (nextStep >= steps.length) { // Graduate
             nextSm2State.state = 'review';
             nextSm2State.learningStep = undefined;
-            nextSm2State.interval = settings.sm2GraduatingInterval;
+            // On graduation from relearning, use the new lapsed interval. Otherwise, use graduating interval.
+            const graduationInterval = cardState === 'relearning' ? sm2State.interval : settings.sm2GraduatingInterval;
+            nextSm2State.interval = graduationInterval;
             const nextDue = new Date();
-            nextDue.setDate(nextDue.getDate() + nextSm2State.interval);
+            nextDue.setDate(nextDue.getDate() + graduationInterval);
             nextSm2State.due = nextDue.toISOString();
           } else { // Advance to next learning step
             nextSm2State.state = isNew ? 'learning' : cardState;
@@ -313,7 +323,10 @@ const StudyPage = () => {
                 hardIntervalMultiplier: settings.sm2HardIntervalMultiplier,
                 maximumInterval: settings.sm2MaximumInterval,
             };
-            if (rating === Rating.Again) return `${settings.relearningSteps.split(' ')[0]}m`;
+            if (rating === Rating.Again) {
+              const relearningSteps = parseSteps(settings.relearningSteps);
+              return relearningSteps.length > 0 ? `${relearningSteps[0]}m` : `${settings.sm2MinimumInterval}d`;
+            }
             const result = sm2(qualityMap[rating], sm2Params, sm2State);
             return formatInterval(result.interval);
         } else { // New or Learning
@@ -323,7 +336,10 @@ const StudyPage = () => {
             if (rating === Rating.Easy) return `${settings.sm2EasyInterval}d`;
             if (rating === Rating.Good) {
                 const nextStep = currentStep + 1;
-                if (nextStep >= steps.length) return `${settings.sm2GraduatingInterval}d`;
+                if (nextStep >= steps.length) {
+                  const graduationInterval = cardState === 'relearning' ? sm2State.interval : settings.sm2GraduatingInterval;
+                  return `${graduationInterval}d`;
+                }
                 return `${steps[nextStep]}m`;
             }
         }
