@@ -118,7 +118,6 @@ const SettingsPage = () => {
     if (rescheduleOnSave && data.scheduler === 'fsrs') {
       const toastId = toast.loading("Starting reschedule...");
       try {
-        // Allow toast to render before blocking thread
         await new Promise(resolve => setTimeout(resolve, 50));
 
         const allFlashcards: FlashcardData[] = decks.flatMap(deck => getAllFlashcardsFromDeck(deck));
@@ -175,8 +174,8 @@ const SettingsPage = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.endsWith('.json') && !file.name.endsWith('.apkg')) {
-      showError("Unsupported file type. Please select a .json or .apkg file.");
+    if (!file.name.endsWith('.json') && !file.name.endsWith('.apkg') && !file.name.endsWith('.anki2') && !file.name.endsWith('.anki21')) {
+      showError("Unsupported file type. Please select a .json, .apkg, or .anki2 file.");
       if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
@@ -198,7 +197,7 @@ const SettingsPage = () => {
         const validation = decksSchema.safeParse(parsedData);
         if (!validation.success) throw new Error("Invalid JSON backup file format.");
         importedData = validation.data;
-      } else if (fileToImport.name.endsWith('.apkg')) {
+      } else if (fileToImport.name.endsWith('.apkg') || fileToImport.name.endsWith('.anki2') || fileToImport.name.endsWith('.anki21')) {
         importedData = await importApkg(fileToImport, includeScheduling);
       }
 
@@ -630,7 +629,7 @@ const SettingsPage = () => {
                   <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                     <Button onClick={handleExport} variant="outline" type="button">Export Data</Button>
                     <Button asChild variant="outline" type="button"><Label htmlFor="import-file" className="cursor-pointer">Import Data</Label></Button>
-                    <Input id="import-file" type="file" className="hidden" onChange={handleFileSelect} accept=".json,.apkg" ref={fileInputRef} />
+                    <Input id="import-file" type="file" className="hidden" onChange={handleFileSelect} accept=".json,.apkg,.anki2,.anki21" ref={fileInputRef} />
                     <Button variant="destructive" onClick={() => setIsResetAlertOpen(true)} className="sm:ml-auto" type="button">Reset All Data</Button>
                   </div>
                   <p className="text-sm text-muted-foreground">Export your decks, or import from a backup. Resetting restores the app to its initial state.</p>
@@ -654,7 +653,7 @@ const SettingsPage = () => {
               This will overwrite all your current decks and flashcards. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {fileToImport?.name.endsWith('.apkg') && (
+          {(fileToImport?.name.endsWith('.apkg') || fileToImport?.name.endsWith('.anki2') || fileToImport?.name.endsWith('.anki21')) && (
             <div className="flex items-center space-x-2 pt-2">
               <Checkbox
                 id="include-scheduling"

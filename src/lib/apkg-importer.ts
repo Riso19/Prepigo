@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import initSqlJs from 'sql.js';
+import initSqlJs, { Database } from 'sql.js';
 import { DeckData, FlashcardData, BasicFlashcard, ClozeFlashcard, SrsData, Sm2State } from '@/data/decks';
 
 // Anki's field separator
@@ -38,15 +38,12 @@ const convertAnkiSrsData = (
       break;
     case 1: // learning
       state = 'learning';
-      // Anki's learning `due` is a timestamp. Let's check if it's seconds or ms.
-      // If `due` is less than the timestamp for the year 2000 in ms, it's probably seconds.
       dueDate = new Date(due < 946684800000 ? due * 1000 : due);
       break;
     case 2: // review
       state = 'review';
-      // `due` is days since collection creation date
       const creationDate = new Date(creationTimestamp * 1000);
-      creationDate.setHours(0, 0, 0, 0); // Start of the day
+      creationDate.setHours(0, 0, 0, 0);
       dueDate = new Date(creationDate);
       dueDate.setDate(creationDate.getDate() + due);
       break;
@@ -79,20 +76,53 @@ const convertAnkiSrsData = (
 
 // --- Main Importer Function ---
 export const importApkg = async (file: File, includeScheduling: boolean): Promise<DeckData[]> => {
-  const zip = await JSZip.loadAsync(file);
-
-  // 1. Find and load the SQLite database
-  const dbFileEntry = zip.file(/collection\.anki2(1)?/)[0];
-  if (!dbFileEntry) {
-    throw new Error('Could not find collection.anki2 or collection.anki21 in the .apkg file.');
-  }
-  const dbFile = await dbFileEntry.async('uint8array');
-
-  // 2. Initialize sql.js
+  let db: Database;
   const SQL = await initSqlJs({
     locateFile: file => `https://sql.js.org/dist/${file}`
   });
-  const db = new SQL.Database(dbFile);
+  let mediaMap: { [key: string]: string } = {};
+
+  try {
+    // --- Try to process as a zipped .apkg file ---
+    const zip = await JSZip.loadAsync(file);
+    
+    const dbFileEntry = zip.file(/collection\.anki2(1)?/)[0];
+    if (!dbFileEntry) {
+      throw new Error('Could not find a collection database in the .apkg file.');
+    }
+    const dbFile = await dbFileEntry.async('uint8array');
+    db = new SQL.Database(dbFile);
+
+    // Process media files
+    const mediaFile = zip.file('media');
+    if (mediaFile) {
+      const mediaJSON = JSON.parse(await mediaFile.async('string'));
+      for (const key in mediaJSON) {
+        const fileName = mediaJSON[key];
+        const fileEntry = zip.file(key);
+        if (fileEntry) {
+          const blob = await fileEntry.async('blob');
+          const dataUrl = await new Promise<string>(resolve => {
+            const reader = new FileReader();
+            reader.onload = e => resolve(e.target!.result as string);
+            reader.readAsDataURL(blob);
+          });
+          mediaMap[fileName] = dataUrl;
+        }
+      }
+    }
+  } catch (zipError) {
+    // --- If zip fails, try to process as a raw .anki2 database file ---
+    console.log("Could not process as zip, attempting to read as raw database file.", zipError);
+    try {
+      const fileBuffer = await file.arrayBuffer();
+      db = new SQL.Database(new Uint8Array(fileBuffer));
+      // No media to process in a raw database file
+    } catch (dbError) {
+      console.error("Failed to read as both zip and raw database.", dbError);
+      throw new Error('The provided file is not a valid .apkg archive or .anki2 database file.');
+    }
+  }
 
   // 3. Extract data from the database
   const colData = db.exec("SELECT models, decks, crt FROM col")[0].values[0];
@@ -102,26 +132,6 @@ export const importApkg = async (file: File, includeScheduling: boolean): Promis
   
   const notesData = db.exec("SELECT id, mid, flds, tags FROM notes")[0]?.values || [];
   const cardsData = db.exec("SELECT id, nid, did, ord, type, queue, due, ivl, factor, reps, lapses FROM cards")[0]?.values || [];
-
-  // 4. Process media files into data URLs
-  const mediaMap: { [key: string]: string } = {};
-  const mediaFile = zip.file('media');
-  if (mediaFile) {
-    const mediaJSON = JSON.parse(await mediaFile.async('string'));
-    for (const key in mediaJSON) {
-      const fileName = mediaJSON[key];
-      const fileEntry = zip.file(key);
-      if (fileEntry) {
-        const blob = await fileEntry.async('blob');
-        const dataUrl = await new Promise<string>(resolve => {
-          const reader = new FileReader();
-          reader.onload = e => resolve(e.target!.result as string);
-          reader.readAsDataURL(blob);
-        });
-        mediaMap[fileName] = dataUrl;
-      }
-    }
-  }
 
   const replaceMediaSrc = (html: string): string => {
     if (!html) return '';
@@ -183,13 +193,11 @@ export const importApkg = async (file: File, includeScheduling: boolean): Promis
       let question = template.qfmt;
       let answer = template.afmt;
 
-      // Replace field placeholders like {{Front}}
       for (const key in fieldMap) {
         question = question.replace(new RegExp(`{{${key}}}`, 'g'), fieldMap[key]);
         answer = answer.replace(new RegExp(`{{${key}}}`, 'g'), fieldMap[key]);
       }
       
-      // Handle special {{FrontSide}} placeholder on back of card
       answer = answer.replace(/{{FrontSide}}/, fieldMap[model.flds[0].name]);
 
       flashcard = {
@@ -206,7 +214,6 @@ export const importApkg = async (file: File, includeScheduling: boolean): Promis
       if (includeScheduling) {
         flashcard.srs = convertAnkiSrsData(cardValue, creationTimestamp);
       } else {
-        // If not including scheduling, strip leech and marked tags
         tags = tags.filter(t => t.toLowerCase() !== 'leech' && t.toLowerCase() !== 'marked');
       }
       flashcard.tags = tags;
@@ -228,7 +235,6 @@ export const importApkg = async (file: File, includeScheduling: boolean): Promis
       const parentName = parts.slice(0, -1).join('::');
       const parentDeck = deckNameMap[parentName];
       if (parentDeck) {
-        // Rename child to not include parent path
         deck.name = parts[parts.length - 1];
         parentDeck.subDecks!.push(deck);
       }
