@@ -1,0 +1,106 @@
+import { createContext, useContext, useState, ReactNode, useEffect } from "react";
+import { openDB, DBSchema, IDBPDatabase } from 'idb';
+
+const DB_NAME = 'PrepigoSettingsDB';
+const DB_VERSION = 1;
+const SETTINGS_STORE = 'settings';
+
+export interface SrsSettings {
+  initialEaseFactor: number;
+  learningSteps: string; // Comma-separated days, e.g., "1, 3"
+  minEaseFactor: number;
+}
+
+interface SettingsDB extends DBSchema {
+  [SETTINGS_STORE]: {
+    key: string;
+    value: SrsSettings;
+  };
+}
+
+const defaultSettings: SrsSettings = {
+  initialEaseFactor: 2.5,
+  learningSteps: "1, 6", // Default intervals: 1 day, then 6 days
+  minEaseFactor: 1.3,
+};
+
+// --- Database Functions ---
+let settingsDbPromise: Promise<IDBPDatabase<SettingsDB>>;
+const getSettingsDb = () => {
+  if (!settingsDbPromise) {
+    settingsDbPromise = openDB<SettingsDB>(DB_NAME, DB_VERSION, {
+      upgrade(db) {
+        if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
+          db.createObjectStore(SETTINGS_STORE);
+        }
+      },
+    });
+  }
+  return settingsDbPromise;
+};
+
+const getSettingsFromDB = async (): Promise<SrsSettings | null> => {
+  const db = await getSettingsDb();
+  const settings = await db.get(SETTINGS_STORE, 'srsSettings');
+  return settings ? settings : null;
+};
+
+const saveSettingsToDB = async (settings: SrsSettings): Promise<void> => {
+  const db = await getSettingsDb();
+  await db.put(SETTINGS_STORE, settings, 'srsSettings');
+};
+
+
+// --- React Context ---
+interface SettingsContextType {
+  settings: SrsSettings;
+  setSettings: (newSettings: SrsSettings) => void;
+  isLoading: boolean;
+}
+
+const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
+
+export const SettingsProvider = ({ children }: { children: ReactNode }) => {
+  const [settings, setSettingsState] = useState<SrsSettings>(defaultSettings);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        let dbSettings = await getSettingsFromDB();
+        if (!dbSettings) {
+          await saveSettingsToDB(defaultSettings);
+          dbSettings = defaultSettings;
+        }
+        setSettingsState(dbSettings);
+      } catch (error) {
+        console.error("Failed to load settings, falling back to defaults.", error);
+        setSettingsState(defaultSettings);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadSettings();
+  }, []);
+
+  const setSettings = (newSettings: SrsSettings) => {
+    setSettingsState(newSettings);
+    saveSettingsToDB(newSettings).catch(error => {
+      console.error("Failed to save settings", error);
+    });
+  };
+
+  return (
+    <SettingsContext.Provider value={{ settings, setSettings, isLoading }}>
+      {!isLoading && children}
+    </SettingsContext.Provider>
+  );
+};
+
+export const useSettings = () => {
+  const context = useContext(SettingsContext);
+  if (context === undefined) {
+    throw new Error("useSettings must be used within a SettingsProvider");
+  }
+  return context;
+};

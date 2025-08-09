@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useDecks } from "@/contexts/DecksContext";
+import { useSettings } from "@/contexts/SettingsContext";
 import { findDeckById, getAllFlashcardsFromDeck, updateFlashcard } from "@/lib/deck-utils";
 import { sm2 } from "@/lib/srs";
 import { FlashcardData } from "@/data/decks";
@@ -14,6 +15,7 @@ import { ArrowLeft, Home } from "lucide-react";
 const StudyPage = () => {
   const { deckId } = useParams<{ deckId: string }>();
   const { decks, setDecks } = useDecks();
+  const { settings } = useSettings();
   const navigate = useNavigate();
 
   const deck = useMemo(() => (deckId ? findDeckById(decks, deckId) : null), [decks, deckId]);
@@ -34,15 +36,12 @@ const StudyPage = () => {
   const [sessionCompleted, setSessionCompleted] = useState(false);
 
   useEffect(() => {
-    // This effect runs once on mount to capture the initial number of due cards.
-    // The dependency array is empty to ensure it only runs once.
     setInitialDueCount(dueFlashcards.length);
   }, []);
 
   const currentCard = dueFlashcards.length > 0 ? dueFlashcards[0] : null;
 
   useEffect(() => {
-    // This effect handles the end of the session.
     if (!sessionCompleted && initialDueCount > 0 && dueFlashcards.length === 0) {
       setSessionCompleted(true);
       showSuccess("Congratulations! You've finished your review session.");
@@ -56,10 +55,10 @@ const StudyPage = () => {
     const quality = rating === 1 ? 0 : rating + 1;
     const srsData = {
       repetitions: currentCard.repetitions || 0,
-      easeFactor: currentCard.easeFactor || 2.5,
+      easeFactor: currentCard.easeFactor || settings.initialEaseFactor,
       interval: currentCard.interval || 0,
     };
-    const newSrsData = sm2(srsData, quality);
+    const newSrsData = sm2(srsData, quality, settings);
     const now = new Date();
     const nextReviewDate = new Date(new Date().setDate(now.getDate() + newSrsData.interval));
     const updatedCard: FlashcardData = {
@@ -70,7 +69,7 @@ const StudyPage = () => {
     
     setDecks(prevDecks => updateFlashcard(prevDecks, updatedCard));
     setIsFlipped(false);
-  }, [currentCard, setDecks]);
+  }, [currentCard, setDecks, settings]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -118,7 +117,6 @@ const StudyPage = () => {
   }
 
   if (initialDueCount > 0 && dueFlashcards.length === 0) {
-    // This is the state when the session is finished, but navigation hasn't happened yet.
     return (
         <div className="min-h-screen flex flex-col items-center justify-center text-center p-4">
             <h2 className="text-2xl font-bold mb-4">Session Complete!</h2>
@@ -146,7 +144,7 @@ const StudyPage = () => {
   };
 
   const renderCard = () => {
-    if (!currentCard) return null; // Safety check
+    if (!currentCard) return null;
     switch (currentCard.type) {
       case 'basic':
         return <Flashcard question={currentCard.question} answer={currentCard.answer} isFlipped={isFlipped} onClick={handleCardClick} />;
