@@ -29,28 +29,39 @@ const StudyPage = () => {
       .sort(() => Math.random() - 0.5); // Shuffle due cards
   }, [allFlashcards]);
 
-  const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
+  const [initialDueCount, setInitialDueCount] = useState(0);
+  const [sessionCompleted, setSessionCompleted] = useState(false);
+
+  useEffect(() => {
+    // This effect runs once on mount to capture the initial number of due cards.
+    // The dependency array is empty to ensure it only runs once.
+    setInitialDueCount(dueFlashcards.length);
+  }, []);
+
+  const currentCard = dueFlashcards.length > 0 ? dueFlashcards[0] : null;
+
+  useEffect(() => {
+    // This effect handles the end of the session.
+    if (!sessionCompleted && initialDueCount > 0 && dueFlashcards.length === 0) {
+      setSessionCompleted(true);
+      showSuccess("Congratulations! You've finished your review session.");
+      navigate('/');
+    }
+  }, [dueFlashcards.length, initialDueCount, navigate, sessionCompleted]);
 
   const handleRating = useCallback((rating: number) => {
-    const currentCard = dueFlashcards[currentIndex];
     if (!currentCard) return;
 
-    // Map button rating (1-4) to SM-2 quality (0-5)
-    // 1: Again -> q=0, 2: Hard -> q=3, 3: Good -> q=4, 4: Easy -> q=5
     const quality = rating === 1 ? 0 : rating + 1;
-
     const srsData = {
       repetitions: currentCard.repetitions || 0,
       easeFactor: currentCard.easeFactor || 2.5,
       interval: currentCard.interval || 0,
     };
-
     const newSrsData = sm2(srsData, quality);
-
     const now = new Date();
     const nextReviewDate = new Date(new Date().setDate(now.getDate() + newSrsData.interval));
-
     const updatedCard: FlashcardData = {
       ...currentCard,
       ...newSrsData,
@@ -58,17 +69,8 @@ const StudyPage = () => {
     };
     
     setDecks(prevDecks => updateFlashcard(prevDecks, updatedCard));
-
     setIsFlipped(false);
-    setTimeout(() => {
-      if (currentIndex + 1 >= dueFlashcards.length) {
-        showSuccess("Congratulations! You've finished your review session.");
-        navigate('/');
-      } else {
-        setCurrentIndex(prev => prev + 1);
-      }
-    }, 150);
-  }, [currentIndex, dueFlashcards, setDecks, navigate]);
+  }, [currentCard, setDecks]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -77,7 +79,6 @@ const StudyPage = () => {
         setIsFlipped(true);
         return;
       }
-
       if (isFlipped) {
         switch (event.key) {
           case '1': handleRating(1); break;
@@ -88,7 +89,6 @@ const StudyPage = () => {
         }
       }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFlipped, handleRating]);
@@ -117,6 +117,16 @@ const StudyPage = () => {
     );
   }
 
+  if (initialDueCount > 0 && dueFlashcards.length === 0) {
+    // This is the state when the session is finished, but navigation hasn't happened yet.
+    return (
+        <div className="min-h-screen flex flex-col items-center justify-center text-center p-4">
+            <h2 className="text-2xl font-bold mb-4">Session Complete!</h2>
+            <p className="text-muted-foreground mb-6">Redirecting you back to your decks...</p>
+        </div>
+    );
+  }
+
   if (dueFlashcards.length === 0) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center text-center p-4">
@@ -129,8 +139,6 @@ const StudyPage = () => {
     );
   }
 
-  const currentCard = dueFlashcards[currentIndex];
-
   const handleCardClick = () => {
     if (!isFlipped) {
       setIsFlipped(true);
@@ -138,6 +146,7 @@ const StudyPage = () => {
   };
 
   const renderCard = () => {
+    if (!currentCard) return null; // Safety check
     switch (currentCard.type) {
       case 'basic':
         return <Flashcard question={currentCard.question} answer={currentCard.answer} isFlipped={isFlipped} onClick={handleCardClick} />;
@@ -150,6 +159,8 @@ const StudyPage = () => {
     }
   };
 
+  const currentCardNumber = initialDueCount - dueFlashcards.length + 1;
+
   return (
     <div className="min-h-screen w-full bg-secondary/50 flex flex-col items-center justify-center p-4 sm:p-6 md:p-8">
        <Button variant="ghost" onClick={() => navigate("/")} className="absolute top-4 left-4">
@@ -161,7 +172,7 @@ const StudyPage = () => {
         {renderCard()}
 
         <div className="text-sm text-muted-foreground">
-          Card {currentIndex + 1} of {dueFlashcards.length}
+          {initialDueCount > 0 && `Card ${currentCardNumber} of ${initialDueCount}`}
         </div>
         
         <div className="w-full mt-4">
