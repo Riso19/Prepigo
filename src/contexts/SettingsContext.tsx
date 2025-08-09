@@ -9,6 +9,10 @@ const SETTINGS_STORE = 'settings';
 export interface SrsSettings {
   scheduler: 'fsrs' | 'sm2';
   fsrsParameters: FSRSParameters;
+  sm2InitialEasinessFactor: number;
+  sm2MinEasinessFactor: number;
+  sm2FirstInterval: number;
+  sm2SecondInterval: number;
   newCardsPerDay: number;
   maxReviewsPerDay: number;
   newCardGatherOrder: 'deck' | 'ascending' | 'descending' | 'randomNotes' | 'randomCards';
@@ -28,6 +32,10 @@ interface SettingsDB extends DBSchema {
 const defaultSettings: SrsSettings = {
   scheduler: 'fsrs',
   fsrsParameters: generatorParameters(),
+  sm2InitialEasinessFactor: 2.5,
+  sm2MinEasinessFactor: 1.3,
+  sm2FirstInterval: 1,
+  sm2SecondInterval: 6,
   newCardsPerDay: 20,
   maxReviewsPerDay: 200,
   newCardGatherOrder: 'deck',

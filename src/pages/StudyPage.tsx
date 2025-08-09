@@ -101,17 +101,23 @@ const StudyPage = () => {
       } else { // sm2
         if (sm2Intervals) return;
         const sm2Data = currentCard.srs?.sm2;
+        const sm2Params = {
+          initialEasinessFactor: settings.sm2InitialEasinessFactor,
+          minEasinessFactor: settings.sm2MinEasinessFactor,
+          firstInterval: settings.sm2FirstInterval,
+          secondInterval: settings.sm2SecondInterval,
+        };
         const intervals = {
           [Rating.Manual]: 0, // Placeholder to satisfy type
-          [Rating.Again]: sm2(1, sm2Data).interval,
-          [Rating.Hard]: sm2(3, sm2Data).interval,
-          [Rating.Good]: sm2(4, sm2Data).interval,
-          [Rating.Easy]: sm2(5, sm2Data).interval,
+          [Rating.Again]: sm2(1, sm2Params, sm2Data).interval,
+          [Rating.Hard]: sm2(3, sm2Params, sm2Data).interval,
+          [Rating.Good]: sm2(4, sm2Params, sm2Data).interval,
+          [Rating.Easy]: sm2(5, sm2Params, sm2Data).interval,
         };
         setSm2Intervals(intervals);
       }
     }
-  }, [isFlipped, currentCard, settings.scheduler, fsrsInstance, fsrsOutcomes, sm2Intervals]);
+  }, [isFlipped, currentCard, settings, fsrsInstance, fsrsOutcomes, sm2Intervals]);
 
   useEffect(() => {
     if (initialDueCount > 0 && remainingCards.length === 0) {
@@ -137,7 +143,13 @@ const StudyPage = () => {
       await addReviewLog(logToSave);
     } else { // sm2
       const qualityMap: { [key in Rating]: Sm2Quality } = { [Rating.Manual]: 0, [Rating.Again]: 1, [Rating.Hard]: 3, [Rating.Good]: 4, [Rating.Easy]: 5 };
-      const newSm2State = sm2(qualityMap[rating], currentCard.srs?.sm2);
+      const sm2Params = {
+        initialEasinessFactor: settings.sm2InitialEasinessFactor,
+        minEasinessFactor: settings.sm2MinEasinessFactor,
+        firstInterval: settings.sm2FirstInterval,
+        secondInterval: settings.sm2SecondInterval,
+      };
+      const newSm2State = sm2(qualityMap[rating], sm2Params, currentCard.srs?.sm2);
       updatedCard = { ...currentCard, srs: { ...currentCard.srs, sm2: newSm2State } };
     }
     
@@ -146,7 +158,7 @@ const StudyPage = () => {
     setIsFlipped(false);
     setFsrsOutcomes(null);
     setSm2Intervals(null);
-  }, [currentCard, settings.scheduler, fsrsOutcomes, sm2Intervals, setDecks, navigate]);
+  }, [currentCard, settings, fsrsOutcomes, sm2Intervals, setDecks, navigate]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

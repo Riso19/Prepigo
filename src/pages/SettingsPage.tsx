@@ -38,6 +38,10 @@ const fsrsParametersSchema = z.object({
 const settingsSchema = z.object({
   scheduler: z.enum(['fsrs', 'sm2']),
   fsrsParameters: fsrsParametersSchema,
+  sm2InitialEasinessFactor: z.coerce.number().min(1.3, "Must be at least 1.3"),
+  sm2MinEasinessFactor: z.coerce.number().min(1.3, "Must be at least 1.3"),
+  sm2FirstInterval: z.coerce.number().int().min(1, "Must be at least 1 day"),
+  sm2SecondInterval: z.coerce.number().int().min(1, "Must be at least 1 day"),
   newCardsPerDay: z.coerce.number().int().min(0, "Must be 0 or greater"),
   maxReviewsPerDay: z.coerce.number().int().min(0, "Must be 0 or greater"),
   newCardGatherOrder: z.enum(['deck', 'ascending', 'descending', 'randomNotes', 'randomCards']),
@@ -60,6 +64,8 @@ const SettingsPage = () => {
     values: settings,
     defaultValues: settings,
   });
+
+  const scheduler = form.watch('scheduler');
 
   const onSubmit = (data: SrsSettings) => {
     setSettings(data);
@@ -186,32 +192,79 @@ const SettingsPage = () => {
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle>FSRS Parameters</CardTitle>
-                    <CardDescription>
-                      These settings only apply if FSRS is selected as the scheduler. It's recommended to keep the defaults unless you know what you're doing.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormField control={form.control} name="fsrsParameters.request_retention" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Requested Retention</FormLabel>
-                        <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
-                        <FormDescription>The probability of recalling a card you want to aim for.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="fsrsParameters.maximum_interval" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Maximum Interval (days)</FormLabel>
-                        <FormControl><Input type="number" {...field} /></FormControl>
-                        <FormDescription>The longest possible interval between reviews.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                  </CardContent>
-                </Card>
+                {scheduler === 'fsrs' && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>FSRS Parameters</CardTitle>
+                      <CardDescription>
+                        These settings only apply if FSRS is selected as the scheduler. It's recommended to keep the defaults unless you know what you're doing.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <FormField control={form.control} name="fsrsParameters.request_retention" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Requested Retention</FormLabel>
+                          <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+                          <FormDescription>The probability of recalling a card you want to aim for.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="fsrsParameters.maximum_interval" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Maximum Interval (days)</FormLabel>
+                          <FormControl><Input type="number" {...field} /></FormControl>
+                          <FormDescription>The longest possible interval between reviews.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    </CardContent>
+                  </Card>
+                )}
+
+                {scheduler === 'sm2' && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>SM-2 Parameters</CardTitle>
+                      <CardDescription>
+                        Customize the behavior of the classic SM-2 algorithm.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <FormField control={form.control} name="sm2InitialEasinessFactor" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Initial Easiness Factor</FormLabel>
+                          <FormControl><Input type="number" step="0.1" {...field} /></FormControl>
+                          <FormDescription>Starting E-Factor for new cards.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="sm2MinEasinessFactor" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Minimum Easiness Factor</FormLabel>
+                          <FormControl><Input type="number" step="0.1" {...field} /></FormControl>
+                          <FormDescription>The lowest possible E-Factor.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="sm2FirstInterval" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>First Interval (days)</FormLabel>
+                          <FormControl><Input type="number" {...field} /></FormControl>
+                          <FormDescription>Interval after the first correct answer.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="sm2SecondInterval" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Second Interval (days)</FormLabel>
+                          <FormControl><Input type="number" {...field} /></FormControl>
+                          <FormDescription>Interval after the second correct answer.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    </CardContent>
+                  </Card>
+                )}
 
                 <Card>
                   <CardHeader><CardTitle>Daily Limits</CardTitle></CardHeader>
