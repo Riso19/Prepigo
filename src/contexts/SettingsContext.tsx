@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { FSRSParameters, defaultFSRSParameters } from "ts-fsrs";
+import { FSRSParameters, generatorParameters } from "ts-fsrs";
 
 const DB_NAME = 'PrepigoSettingsDB';
 const DB_VERSION = 1;
@@ -25,7 +25,7 @@ interface SettingsDB extends DBSchema {
 }
 
 const defaultSettings: SrsSettings = {
-  fsrsParameters: defaultFSRSParameters,
+  fsrsParameters: generatorParameters(),
   newCardsPerDay: 20,
   maxReviewsPerDay: 200,
   newCardGatherOrder: 'deck',

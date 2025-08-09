@@ -48,7 +48,7 @@ const settingsSchema = z.object({
 
 const SettingsPage = () => {
   const { settings, setSettings, isLoading } = useSettings();
-  const { setDecks } = useDecks();
+  const { decks, setDecks } = useDecks();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isResetAlertOpen, setIsResetAlertOpen] = useState(false);
   const [isImportAlertOpen, setIsImportAlertOpen] = useState(false);

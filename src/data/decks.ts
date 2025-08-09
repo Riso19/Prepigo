@@ -14,6 +14,7 @@ const srsSchema = z.object({
   lapses: z.number().optional(),
   state: z.nativeEnum(State).optional(),
   last_review: z.string().optional(),
+  isSuspended: z.boolean().optional(),
 });
 
 // --- Flashcard Schemas ---
