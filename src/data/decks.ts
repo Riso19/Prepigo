@@ -5,6 +5,10 @@ export interface BasicFlashcard {
   type: "basic";
   question: string;
   answer: string;
+  repetitions?: number;
+  easeFactor?: number;
+  interval?: number;
+  nextReviewDate?: string; // ISO string
 }
 
 export interface ClozeFlashcard {
@@ -12,6 +16,10 @@ export interface ClozeFlashcard {
   type: "cloze";
   text: string;
   description?: string;
+  repetitions?: number;
+  easeFactor?: number;
+  interval?: number;
+  nextReviewDate?: string; // ISO string
 }
 
 export interface Occlusion {
@@ -29,6 +37,10 @@ export interface ImageOcclusionFlashcard {
   occlusions: Occlusion[];
   questionOcclusionId: number; // The id of the occlusion to be guessed
   description?: string;
+  repetitions?: number;
+  easeFactor?: number;
+  interval?: number;
+  nextReviewDate?: string; // ISO string
 }
 
 export type FlashcardData = BasicFlashcard | ClozeFlashcard | ImageOcclusionFlashcard;

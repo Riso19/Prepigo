@@ -10,6 +10,7 @@ import StudyPage from "./pages/StudyPage";
 import CreateFlashcardPage from "./pages/CreateFlashcardPage";
 import DeckViewPage from "./pages/DeckViewPage";
 import EditFlashcardPage from "./pages/EditFlashcardPage";
+import SettingsPage from "./pages/SettingsPage";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +27,7 @@ const App = () => (
             <Route path="/deck/:deckId/add" element={<CreateFlashcardPage />} />
             <Route path="/deck/:deckId/view" element={<DeckViewPage />} />
             <Route path="/deck/:deckId/edit/:flashcardId" element={<EditFlashcardPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
