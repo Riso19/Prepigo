@@ -10,10 +10,14 @@ export interface SrsSettings {
   scheduler: 'fsrs' | 'sm2';
   fsrsParameters: FSRSParameters;
   // SM-2 specific
-  sm2InitialEasinessFactor: number;
+  sm2StartingEase: number;
   sm2MinEasinessFactor: number;
+  sm2EasyBonus: number;
+  sm2IntervalModifier: number;
+  sm2HardIntervalMultiplier: number;
+  sm2LapsedIntervalMultiplier: number;
+  sm2MaximumInterval: number;
   sm2FirstInterval: number;
-  sm2SecondInterval: number;
   learningSteps: string;
   relearningSteps: string;
   leechThreshold: number;
@@ -41,10 +45,14 @@ interface SettingsDB extends DBSchema {
 const defaultSettings: SrsSettings = {
   scheduler: 'fsrs',
   fsrsParameters: generatorParameters(),
-  sm2InitialEasinessFactor: 2.5,
+  sm2StartingEase: 2.5,
   sm2MinEasinessFactor: 1.3,
+  sm2EasyBonus: 1.3,
+  sm2IntervalModifier: 1.0,
+  sm2HardIntervalMultiplier: 1.2,
+  sm2LapsedIntervalMultiplier: 0.6,
+  sm2MaximumInterval: 365,
   sm2FirstInterval: 1,
-  sm2SecondInterval: 6,
   learningSteps: "1 10", // in minutes, space-separated
   relearningSteps: "10", // in minutes, space-separated
   leechThreshold: 8,

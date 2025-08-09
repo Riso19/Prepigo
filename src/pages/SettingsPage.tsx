@@ -39,10 +39,14 @@ const fsrsParametersSchema = z.object({
 const settingsSchema = z.object({
   scheduler: z.enum(['fsrs', 'sm2']),
   fsrsParameters: fsrsParametersSchema,
-  sm2InitialEasinessFactor: z.coerce.number().min(1.3, "Must be at least 1.3"),
+  sm2StartingEase: z.coerce.number().min(1.3, "Must be at least 1.3"),
   sm2MinEasinessFactor: z.coerce.number().min(1.3, "Must be at least 1.3"),
+  sm2EasyBonus: z.coerce.number().min(1, "Must be at least 1.0"),
+  sm2IntervalModifier: z.coerce.number().min(0.1, "Must be at least 0.1"),
+  sm2HardIntervalMultiplier: z.coerce.number().min(1.0, "Must be at least 1.0"),
+  sm2LapsedIntervalMultiplier: z.coerce.number().min(0, "Must be at least 0").max(1, "Must be 1.0 or less"),
+  sm2MaximumInterval: z.coerce.number().int().min(1, "Must be at least 1 day"),
   sm2FirstInterval: z.coerce.number().int().min(1, "Must be at least 1 day"),
-  sm2SecondInterval: z.coerce.number().int().min(1, "Must be at least 1 day"),
   learningSteps: z.string().regex(/^(\d+\s*)*\d+$/, "Must be space-separated numbers"),
   relearningSteps: z.string().regex(/^(\d+\s*)*\d+$/, "Must be space-separated numbers"),
   leechThreshold: z.coerce.number().int().min(1, "Must be at least 1"),
@@ -230,14 +234,30 @@ const SettingsPage = () => {
                   <>
                     <Card>
                       <CardHeader>
-                        <CardTitle>SM-2: New Cards</CardTitle>
+                        <CardTitle>SM-2: General</CardTitle>
                       </CardHeader>
                       <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <FormField control={form.control} name="learningSteps" render={({ field }) => (
                           <FormItem>
                             <FormLabel>Learning Steps (minutes)</FormLabel>
                             <FormControl><Input {...field} /></FormControl>
-                            <FormDescription>Space-separated list of intervals.</FormDescription>
+                            <FormDescription>Space-separated list of intervals for new cards.</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="relearningSteps" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Relearning Steps (minutes)</FormLabel>
+                            <FormControl><Input {...field} /></FormControl>
+                            <FormDescription>Steps for cards you forget during review.</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="sm2FirstInterval" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Graduating Interval (days)</FormLabel>
+                            <FormControl><Input type="number" {...field} /></FormControl>
+                            <FormDescription>The first interval for a card after finishing learning steps.</FormDescription>
                             <FormMessage />
                           </FormItem>
                         )} />
@@ -245,17 +265,65 @@ const SettingsPage = () => {
                     </Card>
                     <Card>
                       <CardHeader>
-                        <CardTitle>SM-2: Lapses</CardTitle>
+                        <CardTitle>SM-2: Advanced</CardTitle>
+                        <CardDescription>Fine-tune the SM-2 scheduling algorithm.</CardDescription>
                       </CardHeader>
                       <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <FormField control={form.control} name="relearningSteps" render={({ field }) => (
+                        <FormField control={form.control} name="sm2StartingEase" render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Relearning Steps (minutes)</FormLabel>
-                            <FormControl><Input {...field} /></FormControl>
-                            <FormDescription>Steps for cards you forget.</FormDescription>
+                            <FormLabel>Starting Ease</FormLabel>
+                            <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+                            <FormDescription>Initial ease factor for new cards.</FormDescription>
                             <FormMessage />
                           </FormItem>
                         )} />
+                        <FormField control={form.control} name="sm2EasyBonus" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Easy Bonus</FormLabel>
+                            <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+                            <FormDescription>A multiplier for "Easy" reviews.</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="sm2IntervalModifier" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Interval Modifier</FormLabel>
+                            <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+                            <FormDescription>A global multiplier for all intervals.</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="sm2HardIntervalMultiplier" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Hard Interval</FormLabel>
+                            <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+                            <FormDescription>Multiplier for the previous interval on "Hard".</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="sm2LapsedIntervalMultiplier" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>New Interval</FormLabel>
+                            <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+                            <FormDescription>Multiplier for a lapsed card's interval.</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="sm2MaximumInterval" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Maximum Interval (days)</FormLabel>
+                            <FormControl><Input type="number" {...field} /></FormControl>
+                            <FormDescription>The longest a review interval can be.</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>SM-2: Leeches</CardTitle>
+                      </CardHeader>
+                      <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <FormField control={form.control} name="leechThreshold" render={({ field }) => (
                           <FormItem>
                             <FormLabel>Leech Threshold</FormLabel>

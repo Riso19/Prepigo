@@ -140,7 +140,7 @@ const StudyPage = () => {
     if (settings.scheduler === 'fsrs') {
       // FSRS logic remains the same
     } else { // SM-2 Logic
-      const sm2State = currentCard.srs?.sm2 || { state: 'new', repetitions: 0, lapses: 0, easinessFactor: settings.sm2InitialEasinessFactor, interval: 0, due: new Date().toISOString(), learningStep: 0 };
+      const sm2State = currentCard.srs?.sm2 || { state: 'new', repetitions: 0, lapses: 0, easinessFactor: settings.sm2StartingEase, interval: 0, due: new Date().toISOString(), learningStep: 0 };
       let nextSm2State: Sm2State = { ...sm2State };
       let wasLapse = false;
 
@@ -149,27 +149,38 @@ const StudyPage = () => {
         nextSm2State.lapses = (sm2State.lapses || 0) + 1;
         nextSm2State.state = 'relearning';
         nextSm2State.learningStep = 0;
+        nextSm2State.easinessFactor = Math.max(settings.sm2MinEasinessFactor, sm2State.easinessFactor - 0.20);
+
         const relearningSteps = parseSteps(settings.relearningSteps);
+        const lapsedInterval = sm2State.interval > 0 ? sm2State.interval : 1;
+        const newInterval = wasLapse ? lapsedInterval * settings.sm2LapsedIntervalMultiplier : 0;
+        const firstStep = newInterval > 0 ? newInterval * 1440 : relearningSteps[0];
+
         const nextDue = new Date();
-        nextDue.setMinutes(nextDue.getMinutes() + relearningSteps[0]);
+        nextDue.setMinutes(nextDue.getMinutes() + Math.max(1, firstStep));
         nextSm2State.due = nextDue.toISOString();
+
       } else {
         const cardState = sm2State.state || 'new';
         if (cardState === 'learning' || cardState === 'relearning' || cardState === 'new') {
           const isNew = cardState === 'new';
+          if (isNew) {
+            nextSm2State.easinessFactor = settings.sm2StartingEase;
+          }
           const steps = (cardState === 'relearning') ? parseSteps(settings.relearningSteps) : parseSteps(settings.learningSteps);
           let stepIndex = isNew ? -1 : (sm2State.learningStep || 0);
 
           if (rating === Rating.Good) stepIndex++;
           else if (rating === Rating.Easy) stepIndex = steps.length;
 
-          if (stepIndex >= steps.length) {
+          if (stepIndex >= steps.length) { // Graduate
             nextSm2State.state = 'review';
             nextSm2State.learningStep = undefined;
-            const sm2Params = { initialEasinessFactor: settings.sm2InitialEasinessFactor, minEasinessFactor: settings.sm2MinEasinessFactor, firstInterval: settings.sm2FirstInterval, secondInterval: settings.sm2SecondInterval };
-            const result = sm2(Rating.Good, sm2Params, { ...sm2State, repetitions: isNew ? 0 : sm2State.repetitions });
-            nextSm2State = { ...nextSm2State, ...result };
-          } else {
+            nextSm2State.interval = settings.sm2FirstInterval;
+            const nextDue = new Date();
+            nextDue.setDate(nextDue.getDate() + nextSm2State.interval);
+            nextSm2State.due = nextDue.toISOString();
+          } else { // Advance learning step
             nextSm2State.state = isNew ? 'learning' : cardState;
             nextSm2State.learningStep = stepIndex;
             const nextDue = new Date();
@@ -178,9 +189,15 @@ const StudyPage = () => {
           }
         } else if (cardState === 'review') {
           const qualityMap: { [key in Rating]: Sm2Quality } = { [Rating.Manual]: 0, [Rating.Again]: 1, [Rating.Hard]: 3, [Rating.Good]: 4, [Rating.Easy]: 5 };
-          const sm2Params = { initialEasinessFactor: settings.sm2InitialEasinessFactor, minEasinessFactor: settings.sm2MinEasinessFactor, firstInterval: settings.sm2FirstInterval, secondInterval: settings.sm2SecondInterval };
-          const result = sm2(qualityMap[rating], sm2Params, sm2State);
-          nextSm2State = { ...nextSm2State, ...result, state: 'review' };
+          const sm2Params = { 
+            startingEase: settings.sm2StartingEase,
+            minEasinessFactor: settings.sm2MinEasinessFactor,
+            easyBonus: settings.sm2EasyBonus,
+            intervalModifier: settings.sm2IntervalModifier,
+            hardIntervalMultiplier: settings.sm2HardIntervalMultiplier,
+            maximumInterval: settings.sm2MaximumInterval,
+          };
+          nextSm2State = sm2(qualityMap[rating], sm2Params, sm2State);
         }
       }
       
@@ -275,14 +292,21 @@ const StudyPage = () => {
 
   const getIntervalText = (rating: Rating) => {
     if (settings.scheduler === 'sm2' && currentCard) {
-        const sm2State = currentCard.srs?.sm2 || { state: 'new', repetitions: 0, easinessFactor: settings.sm2InitialEasinessFactor, interval: 0 };
-        if (sm2State.state === 'learning' || sm2State.state === 'relearning') {
+        const sm2State = currentCard.srs?.sm2 || { state: 'new', repetitions: 0, easinessFactor: settings.sm2StartingEase, interval: 0 };
+        if (sm2State.state === 'learning' || sm2State.state === 'relearning' || sm2State.state === 'new') {
             if (rating === Rating.Again) return `${settings.relearningSteps.split(' ')[0]}m`;
             if (rating === Rating.Good) return `${settings.learningSteps.split(' ')[0]}m`;
             if (rating === Rating.Easy) return `${settings.sm2FirstInterval}d`;
         } else {
             const qualityMap: { [key in Rating]: Sm2Quality } = { [Rating.Manual]: 0, [Rating.Again]: 1, [Rating.Hard]: 3, [Rating.Good]: 4, [Rating.Easy]: 5 };
-            const sm2Params = { initialEasinessFactor: settings.sm2InitialEasinessFactor, minEasinessFactor: settings.sm2MinEasinessFactor, firstInterval: settings.sm2FirstInterval, secondInterval: settings.sm2SecondInterval };
+            const sm2Params = { 
+                startingEase: settings.sm2StartingEase,
+                minEasinessFactor: settings.sm2MinEasinessFactor,
+                easyBonus: settings.sm2EasyBonus,
+                intervalModifier: settings.sm2IntervalModifier,
+                hardIntervalMultiplier: settings.sm2HardIntervalMultiplier,
+                maximumInterval: settings.sm2MaximumInterval,
+            };
             const result = sm2(qualityMap[rating], sm2Params, sm2State);
             return formatInterval(result.interval);
         }
