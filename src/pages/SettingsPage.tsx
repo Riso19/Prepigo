@@ -29,30 +29,41 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+
+const fsrsParametersSchema = z.object({
+    request_retention: z.coerce.number().min(0.7, "Must be at least 0.7").max(0.99, "Must be less than 1.0"),
+    maximum_interval: z.coerce.number().int().min(1, "Must be at least 1 day"),
+    w: z.array(z.number()),
+});
 
 const settingsSchema = z.object({
-  // Daily Limits
+  // Algorithm
+  algorithm: z.enum(['sm2', 'fsrs']),
+  fsrsParameters: fsrsParametersSchema,
+
+  // SM-2: Daily Limits
   newCardsPerDay: z.coerce.number().int().min(0, "Must be 0 or greater"),
   maxReviewsPerDay: z.coerce.number().int().min(0, "Must be 0 or greater"),
 
-  // New Cards
+  // SM-2: New Cards
   learningSteps: z.string().min(1, "Learning steps cannot be empty."),
   graduatingInterval: z.coerce.number().int().min(1, "Must be at least 1 day"),
   easyInterval: z.coerce.number().int().min(1, "Must be at least 1 day"),
   insertionOrder: z.enum(['sequential', 'random']),
 
-  // Lapses
+  // SM-2: Lapses
   relearningSteps: z.string().min(1, "Relearning steps cannot be empty."),
   minimumInterval: z.coerce.number().int().min(1, "Must be at least 1 day"),
   leechThreshold: z.coerce.number().int().min(1, "Must be at least 1"),
   leechAction: z.enum(['tagOnly', 'suspend']),
 
-  // Burying
+  // SM-2: Burying
   buryNewSiblings: z.boolean(),
   buryReviewSiblings: z.boolean(),
   buryInterdayLearningSiblings: z.boolean(),
 
-  // Advanced
+  // SM-2: Advanced
   maximumInterval: z.coerce.number().int().min(1, "Must be at least 1 day"),
   initialEaseFactor: z.coerce.number().min(1.3, "Must be at least 1.3"),
   easyBonus: z.coerce.number().min(1, "Must be at least 1.0"),
@@ -74,6 +85,8 @@ const SettingsPage = () => {
     values: settings,
     defaultValues: settings,
   });
+
+  const watchedAlgorithm = form.watch('algorithm');
 
   const onSubmit = (data: SrsSettings) => {
     setSettings(data);
@@ -166,91 +179,150 @@ const SettingsPage = () => {
               <CardContent className="space-y-8 pt-6">
                 
                 <Card>
-                  <CardHeader><CardTitle>Daily Limits</CardTitle></CardHeader>
-                  <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormField control={form.control} name="newCardsPerDay" render={({ field }) => (
-                      <FormItem><FormLabel>New cards/day</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="maxReviewsPerDay" render={({ field }) => (
-                      <FormItem><FormLabel>Maximum reviews/day</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader><CardTitle>New Cards</CardTitle></CardHeader>
-                  <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormField control={form.control} name="learningSteps" render={({ field }) => (
-                      <FormItem><FormLabel>Learning steps</FormLabel><FormControl><Input {...field} /></FormControl><FormDescription>Space-separated intervals (e.g., 10m 1d 3d).</FormDescription><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="graduatingInterval" render={({ field }) => (
-                      <FormItem><FormLabel>Graduating interval (days)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="easyInterval" render={({ field }) => (
-                      <FormItem><FormLabel>Easy interval (days)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="insertionOrder" render={({ field }) => (
-                      <FormItem><FormLabel>Insertion order</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="sequential">Sequential (oldest first)</SelectItem><SelectItem value="random">Random</SelectItem></SelectContent></Select><FormMessage /></FormItem>
+                  <CardHeader>
+                    <CardTitle>Scheduling Algorithm</CardTitle>
+                    <CardDescription>Choose the spaced repetition algorithm to use.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <FormField control={form.control} name="algorithm" render={({ field }) => (
+                      <FormItem className="space-y-3">
+                        <FormControl>
+                          <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-2">
+                            <FormItem className="flex items-center space-x-3 space-y-0">
+                              <FormControl><RadioGroupItem value="sm2" /></FormControl>
+                              <FormLabel className="font-normal">SM-2 (Classic)</FormLabel>
+                            </FormItem>
+                            <FormItem className="flex items-center space-x-3 space-y-0">
+                              <FormControl><RadioGroupItem value="fsrs" /></FormControl>
+                              <FormLabel className="font-normal">FSRS (Recommended)</FormLabel>
+                            </FormItem>
+                          </RadioGroup>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
                     )} />
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardHeader><CardTitle>Lapses</CardTitle></CardHeader>
-                  <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormField control={form.control} name="relearningSteps" render={({ field }) => (
-                      <FormItem><FormLabel>Relearning steps</FormLabel><FormControl><Input {...field} /></FormControl><FormDescription>Intervals for cards you forget.</FormDescription><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="minimumInterval" render={({ field }) => (
-                      <FormItem><FormLabel>Minimum interval (days)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="leechThreshold" render={({ field }) => (
-                      <FormItem><FormLabel>Leech threshold</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormDescription>Number of lapses before a card is marked as a leech.</FormDescription><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="leechAction" render={({ field }) => (
-                      <FormItem><FormLabel>Leech action</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="tagOnly">Tag Only</SelectItem><SelectItem value="suspend">Suspend Card</SelectItem></SelectContent></Select><FormMessage /></FormItem>
-                    )} />
-                  </CardContent>
-                </Card>
+                {watchedAlgorithm === 'fsrs' && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>FSRS Parameters</CardTitle>
+                      <CardDescription>
+                        Configure the FSRS algorithm. It's recommended to keep the defaults unless you know what you're doing.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <FormField control={form.control} name="fsrsParameters.request_retention" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Requested Retention</FormLabel>
+                          <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+                          <FormDescription>The probability of recalling a card you want to aim for.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="fsrsParameters.maximum_interval" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Maximum Interval (days)</FormLabel>
+                          <FormControl><Input type="number" {...field} /></FormControl>
+                          <FormDescription>The longest possible interval between reviews.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    </CardContent>
+                  </Card>
+                )}
 
-                <Card>
-                  <CardHeader><CardTitle>Burying</CardTitle><CardDescription>Control whether sibling cards are shown on the same day.</CardDescription></CardHeader>
-                  <CardContent className="space-y-6 pt-4">
-                    <FormField control={form.control} name="buryNewSiblings" render={({ field }) => (
-                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel>Bury new siblings</FormLabel><FormDescription>Delay other new cards from the same note until the next day.</FormDescription></div></FormItem>
-                    )} />
-                    <FormField control={form.control} name="buryReviewSiblings" render={({ field }) => (
-                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel>Bury review siblings</FormLabel><FormDescription>Delay other review cards from the same note until the next day.</FormDescription></div></FormItem>
-                    )} />
-                    <FormField control={form.control} name="buryInterdayLearningSiblings" render={({ field }) => (
-                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel>Bury interday learning siblings</FormLabel><FormDescription>Delay other learning cards (interval &gt; 1 day) from the same note until the next day.</FormDescription></div></FormItem>
-                    )} />
-                  </CardContent>
-                </Card>
+                {watchedAlgorithm === 'sm2' && (
+                  <>
+                    <Card>
+                      <CardHeader><CardTitle>Daily Limits</CardTitle></CardHeader>
+                      <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <FormField control={form.control} name="newCardsPerDay" render={({ field }) => (
+                          <FormItem><FormLabel>New cards/day</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="maxReviewsPerDay" render={({ field }) => (
+                          <FormItem><FormLabel>Maximum reviews/day</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                      </CardContent>
+                    </Card>
 
-                <Card>
-                  <CardHeader><CardTitle>Advanced</CardTitle></CardHeader>
-                  <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormField control={form.control} name="maximumInterval" render={({ field }) => (
-                      <FormItem><FormLabel>Maximum interval (days)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="initialEaseFactor" render={({ field }) => (
-                      <FormItem><FormLabel>Starting ease</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="easyBonus" render={({ field }) => (
-                      <FormItem><FormLabel>Easy bonus</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="intervalModifier" render={({ field }) => (
-                      <FormItem><FormLabel>Interval modifier</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="hardInterval" render={({ field }) => (
-                      <FormItem><FormLabel>Hard interval</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="newInterval" render={({ field }) => (
-                      <FormItem><FormLabel>New interval</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                  </CardContent>
-                </Card>
+                    <Card>
+                      <CardHeader><CardTitle>New Cards</CardTitle></CardHeader>
+                      <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <FormField control={form.control} name="learningSteps" render={({ field }) => (
+                          <FormItem><FormLabel>Learning steps</FormLabel><FormControl><Input {...field} /></FormControl><FormDescription>Space-separated intervals (e.g., 10m 1d 3d).</FormDescription><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="graduatingInterval" render={({ field }) => (
+                          <FormItem><FormLabel>Graduating interval (days)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="easyInterval" render={({ field }) => (
+                          <FormItem><FormLabel>Easy interval (days)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="insertionOrder" render={({ field }) => (
+                          <FormItem><FormLabel>Insertion order</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="sequential">Sequential (oldest first)</SelectItem><SelectItem value="random">Random</SelectItem></SelectContent></Select><FormMessage /></FormItem>
+                        )} />
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader><CardTitle>Lapses</CardTitle></CardHeader>
+                      <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <FormField control={form.control} name="relearningSteps" render={({ field }) => (
+                          <FormItem><FormLabel>Relearning steps</FormLabel><FormControl><Input {...field} /></FormControl><FormDescription>Intervals for cards you forget.</FormDescription><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="minimumInterval" render={({ field }) => (
+                          <FormItem><FormLabel>Minimum interval (days)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="leechThreshold" render={({ field }) => (
+                          <FormItem><FormLabel>Leech threshold</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormDescription>Number of lapses before a card is marked as a leech.</FormDescription><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="leechAction" render={({ field }) => (
+                          <FormItem><FormLabel>Leech action</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="tagOnly">Tag Only</SelectItem><SelectItem value="suspend">Suspend Card</SelectItem></SelectContent></Select><FormMessage /></FormItem>
+                        )} />
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader><CardTitle>Burying</CardTitle><CardDescription>Control whether sibling cards are shown on the same day.</CardDescription></CardHeader>
+                      <CardContent className="space-y-6 pt-4">
+                        <FormField control={form.control} name="buryNewSiblings" render={({ field }) => (
+                          <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel>Bury new siblings</FormLabel><FormDescription>Delay other new cards from the same note until the next day.</FormDescription></div></FormItem>
+                        )} />
+                        <FormField control={form.control} name="buryReviewSiblings" render={({ field }) => (
+                          <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel>Bury review siblings</FormLabel><FormDescription>Delay other review cards from the same note until the next day.</FormDescription></div></FormItem>
+                        )} />
+                        <FormField control={form.control} name="buryInterdayLearningSiblings" render={({ field }) => (
+                          <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel>Bury interday learning siblings</FormLabel><FormDescription>Delay other learning cards (interval &gt; 1 day) from the same note until the next day.</FormDescription></div></FormItem>
+                        )} />
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader><CardTitle>Advanced</CardTitle></CardHeader>
+                      <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <FormField control={form.control} name="maximumInterval" render={({ field }) => (
+                          <FormItem><FormLabel>Maximum interval (days)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="initialEaseFactor" render={({ field }) => (
+                          <FormItem><FormLabel>Starting ease</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="easyBonus" render={({ field }) => (
+                          <FormItem><FormLabel>Easy bonus</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="intervalModifier" render={({ field }) => (
+                          <FormItem><FormLabel>Interval modifier</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="hardInterval" render={({ field }) => (
+                          <FormItem><FormLabel>Hard interval</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="newInterval" render={({ field }) => (
+                          <FormItem><FormLabel>New interval</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                      </CardContent>
+                    </Card>
+                  </>
+                )}
 
                 <div className="flex justify-end">
                   <Button type="submit" size="lg">Save All Settings</Button>

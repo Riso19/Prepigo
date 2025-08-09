@@ -1,40 +1,45 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
+import { FSRSParameters, defaultFSRSParameters } from "@/lib/fsrs";
 
 const DB_NAME = 'PrepigoSettingsDB';
 const DB_VERSION = 1;
 const SETTINGS_STORE = 'settings';
 
 export interface SrsSettings {
+  // Algorithm Choice
+  algorithm: 'sm2' | 'fsrs';
+  fsrsParameters: FSRSParameters;
+
   // Daily Limits
   newCardsPerDay: number;
   maxReviewsPerDay: number;
 
-  // New Cards
+  // New Cards (SM-2)
   learningSteps: string;
   graduatingInterval: number;
   easyInterval: number;
   insertionOrder: 'sequential' | 'random';
 
-  // Lapses
+  // Lapses (SM-2)
   relearningSteps: string;
   minimumInterval: number;
   leechThreshold: number;
   leechAction: 'tagOnly' | 'suspend';
 
-  // Burying
+  // Burying (SM-2)
   buryNewSiblings: boolean;
   buryReviewSiblings: boolean;
   buryInterdayLearningSiblings: boolean;
 
-  // Advanced
+  // Advanced (SM-2)
   maximumInterval: number;
-  initialEaseFactor: number; // Corresponds to "Starting Ease"
+  initialEaseFactor: number;
   easyBonus: number;
   intervalModifier: number;
   hardInterval: number;
   newInterval: number;
-  minEaseFactor: number; // Not in the list, but part of original SM-2
+  minEaseFactor: number;
 }
 
 interface SettingsDB extends DBSchema {
@@ -45,6 +50,10 @@ interface SettingsDB extends DBSchema {
 }
 
 const defaultSettings: SrsSettings = {
+  // Algorithm Choice
+  algorithm: 'sm2',
+  fsrsParameters: defaultFSRSParameters,
+
   // Daily Limits
   newCardsPerDay: 20,
   maxReviewsPerDay: 200,
