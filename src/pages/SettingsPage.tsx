@@ -32,6 +32,7 @@ import { Switch } from '@/components/ui/switch';
 import { getAllFlashcardsFromDeck, updateFlashcard } from '@/lib/deck-utils';
 import { fsrs, createEmptyCard, generatorParameters, Card as FsrsCard, Rating } from 'ts-fsrs';
 import { toast } from 'sonner';
+import { importApkg } from '@/lib/apkg-importer';
 
 const fsrsParametersSchema = z.object({
     request_retention: z.coerce.number().min(0.7, "Must be at least 0.7").max(0.99, "Must be less than 1.0"),
@@ -168,29 +169,52 @@ const SettingsPage = () => {
     showSuccess("Data exported successfully!");
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-        try {
-            const content = event.target?.result;
-            const parsedData = JSON.parse(content as string);
-            const validation = decksSchema.safeParse(parsedData);
-            if (!validation.success) {
-                console.error(validation.error);
-                showError("Invalid file format. Please select a valid backup file.");
-                return;
-            }
-            setImportedDecks(validation.data);
-            setIsImportAlertOpen(true);
-        } catch (error) {
-            showError("Failed to read or parse the file.");
-        } finally {
-            if(fileInputRef.current) fileInputRef.current.value = "";
-        }
+
+    const resetInput = () => {
+      if (fileInputRef.current) fileInputRef.current.value = "";
     };
-    reader.readAsText(file);
+
+    if (file.name.endsWith('.json')) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const content = event.target?.result;
+          const parsedData = JSON.parse(content as string);
+          const validation = decksSchema.safeParse(parsedData);
+          if (!validation.success) {
+            console.error(validation.error);
+            showError("Invalid file format. Please select a valid backup file.");
+            return;
+          }
+          setImportedDecks(validation.data);
+          setIsImportAlertOpen(true);
+        } catch (error) {
+          showError("Failed to read or parse the file.");
+        } finally {
+          resetInput();
+        }
+      };
+      reader.readAsText(file);
+    } else if (file.name.endsWith('.apkg')) {
+      const toastId = toast.loading("Importing .apkg file... This may take a moment.");
+      try {
+        const importedData = await importApkg(file);
+        setImportedDecks(importedData);
+        setIsImportAlertOpen(true);
+        toast.success("File processed. Please confirm the import.", { id: toastId });
+      } catch (error) {
+        console.error("APKG Import Error:", error);
+        toast.error(`Failed to import .apkg file: ${(error as Error).message}`, { id: toastId });
+      } finally {
+        resetInput();
+      }
+    } else {
+      showError("Unsupported file type. Please select a .json or .apkg file.");
+      resetInput();
+    }
   };
 
   const confirmImport = () => {
@@ -614,7 +638,7 @@ const SettingsPage = () => {
                   <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                     <Button onClick={handleExport} variant="outline" type="button">Export Data</Button>
                     <Button asChild variant="outline" type="button"><Label htmlFor="import-file" className="cursor-pointer">Import Data</Label></Button>
-                    <Input id="import-file" type="file" className="hidden" onChange={handleFileSelect} accept=".json" ref={fileInputRef} />
+                    <Input id="import-file" type="file" className="hidden" onChange={handleFileSelect} accept=".json,.apkg" ref={fileInputRef} />
                     <Button variant="destructive" onClick={() => setIsResetAlertOpen(true)} className="sm:ml-auto" type="button">Reset All Data</Button>
                   </div>
                   <p className="text-sm text-muted-foreground">Export your decks, or import from a backup. Resetting restores the app to its initial state.</p>
