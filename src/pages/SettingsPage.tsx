@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,6 +17,7 @@ import { useRef, useState } from 'react';
 import { useDecks } from '@/contexts/DecksContext';
 import { DeckData, decksSchema } from '@/data/decks';
 import { clearDecksDB } from '@/lib/idb';
+import { rescheduleCards } from '@/lib/deck-utils';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,6 +31,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Switch } from '@/components/ui/switch';
 
 const fsrsParametersSchema = z.object({
     request_retention: z.coerce.number().min(0.7, "Must be at least 0.7").max(0.99, "Must be less than 1.0"),
@@ -79,6 +81,7 @@ const SettingsPage = () => {
   const [isResetAlertOpen, setIsResetAlertOpen] = useState(false);
   const [isImportAlertOpen, setIsImportAlertOpen] = useState(false);
   const [importedDecks, setImportedDecks] = useState<DeckData[] | null>(null);
+  const [rescheduleOnChange, setRescheduleOnChange] = useState(false);
 
   const form = useForm<SrsSettings>({
     resolver: zodResolver(settingsSchema),
@@ -89,8 +92,25 @@ const SettingsPage = () => {
   const watchedAlgorithm = form.watch('algorithm');
 
   const onSubmit = (data: SrsSettings) => {
-    setSettings(data);
-    showSuccess("Settings saved successfully!");
+    if (data.algorithm === 'fsrs' && rescheduleOnChange) {
+      const loadingToast = showLoading("Saving settings and rescheduling cards...");
+      try {
+        const rescheduled = rescheduleCards(decks, data.fsrsParameters);
+        setDecks(rescheduled);
+        setSettings(data);
+        dismissToast(loadingToast);
+        showSuccess("Settings saved and all cards have been rescheduled.");
+      } catch (e) {
+        console.error("Rescheduling failed", e);
+        dismissToast(loadingToast);
+        setSettings(data);
+        showError("Settings saved, but rescheduling failed.");
+      }
+      setRescheduleOnChange(false);
+    } else {
+      setSettings(data);
+      showSuccess("Settings saved successfully!");
+    }
   };
 
   const handleExport = () => {
@@ -230,6 +250,19 @@ const SettingsPage = () => {
                         </FormItem>
                       )} />
                     </CardContent>
+                    <CardFooter className="flex-col items-start gap-4 border-t p-6 mt-6">
+                      <div className="flex items-center space-x-3">
+                        <Switch
+                          id="reschedule-toggle"
+                          checked={rescheduleOnChange}
+                          onCheckedChange={setRescheduleOnChange}
+                        />
+                        <Label htmlFor="reschedule-toggle" className="cursor-pointer">Reschedule cards on change</Label>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        This option controls whether the due dates of cards will be changed when you enable FSRS, or optimise the parameters. The default is not to reschedule cards: future reviews will use the new scheduling, but there will be no immediate change to your workload. If rescheduling is enabled, the due dates of cards will be changed.
+                      </p>
+                    </CardFooter>
                   </Card>
                 )}
 
