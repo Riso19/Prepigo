@@ -117,3 +117,33 @@ export const updateFlashcard = (decks: DeckData[], updatedFlashcard: FlashcardDa
     return { ...deck, flashcards: newFlashcards, subDecks: newSubDecks };
   });
 };
+
+export const tagLeech = (decks: DeckData[], flashcardId: string): DeckData[] => {
+  return decks.map(deck => {
+    const flashcardIndex = deck.flashcards.findIndex(fc => fc.id === flashcardId);
+    
+    if (flashcardIndex > -1) {
+      const flashcard = deck.flashcards[flashcardIndex];
+      const newTags = [...(flashcard.tags || [])];
+      if (!newTags.includes('leech')) {
+        newTags.push('leech');
+      }
+      const updatedFlashcard = { ...flashcard, tags: newTags };
+      
+      return {
+        ...deck,
+        flashcards: [
+          ...deck.flashcards.slice(0, flashcardIndex),
+          updatedFlashcard,
+          ...deck.flashcards.slice(flashcardIndex + 1),
+        ],
+      };
+    }
+
+    if (deck.subDecks) {
+      return { ...deck, subDecks: tagLeech(deck.subDecks, flashcardId) };
+    }
+
+    return deck;
+  });
+};
