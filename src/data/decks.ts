@@ -3,35 +3,58 @@ import { State } from 'ts-fsrs';
 
 export type FlashcardType = "basic" | "cloze" | "imageOcclusion";
 
-// --- Base SRS fields for all card types, aligned with ts-fsrs Card type ---
-const srsSchema = z.object({
-  due: z.string().optional(),
-  stability: z.number().optional(),
-  difficulty: z.number().optional(),
-  elapsed_days: z.number().optional(),
-  scheduled_days: z.number().optional(),
-  reps: z.number().optional(),
-  lapses: z.number().optional(),
-  state: z.nativeEnum(State).optional(),
+// --- SRS State Schemas ---
+
+// Schema for FSRS state, aligned with ts-fsrs Card type
+const fsrsStateSchema = z.object({
+  due: z.string(),
+  stability: z.number(),
+  difficulty: z.number(),
+  elapsed_days: z.number(),
+  scheduled_days: z.number(),
+  reps: z.number(),
+  lapses: z.number(),
+  state: z.nativeEnum(State),
   last_review: z.string().optional(),
-  learning_steps: z.number().optional(), // Added for full ts-fsrs compatibility
+});
+export type FsrsState = z.infer<typeof fsrsStateSchema>;
+
+// Schema for SM-2 state
+const sm2StateSchema = z.object({
+  due: z.string(),
+  easinessFactor: z.number(),
+  interval: z.number(),
+  repetitions: z.number(),
+  last_review: z.string().optional(),
+});
+export type Sm2State = z.infer<typeof sm2StateSchema>;
+
+// Container for all SRS data for a single card
+const srsDataSchema = z.object({
+  fsrs: fsrsStateSchema.optional(),
+  sm2: sm2StateSchema.optional(),
   isSuspended: z.boolean().optional(),
 });
+export type SrsData = z.infer<typeof srsDataSchema>;
+
 
 // --- Flashcard Schemas ---
-export const basicFlashcardSchema = z.object({
+const baseFlashcardSchema = z.object({
   id: z.string(),
+  srs: srsDataSchema.optional(),
+});
+
+export const basicFlashcardSchema = baseFlashcardSchema.extend({
   type: z.literal("basic"),
   question: z.string(),
   answer: z.string(),
-}).merge(srsSchema);
+});
 
-export const clozeFlashcardSchema = z.object({
-  id: z.string(),
+export const clozeFlashcardSchema = baseFlashcardSchema.extend({
   type: z.literal("cloze"),
   text: z.string(),
   description: z.string().optional(),
-}).merge(srsSchema);
+});
 
 export const occlusionSchema = z.object({
   id: z.number(),
@@ -41,14 +64,13 @@ export const occlusionSchema = z.object({
   height: z.number(),
 });
 
-export const imageOcclusionFlashcardSchema = z.object({
-  id: z.string(),
+export const imageOcclusionFlashcardSchema = baseFlashcardSchema.extend({
   type: z.literal("imageOcclusion"),
   imageUrl: z.string(),
   occlusions: z.array(occlusionSchema),
   questionOcclusionId: z.number(),
   description: z.string().optional(),
-}).merge(srsSchema);
+});
 
 export const flashcardDataSchema = z.union([
   basicFlashcardSchema,
@@ -80,10 +102,10 @@ export const reviewLogSchema = z.object({
   stability: z.number(),
   difficulty: z.number(),
   elapsed_days: z.number(),
-  last_elapsed_days: z.number(), // Added for full ts-fsrs compatibility
+  last_elapsed_days: z.number(),
   scheduled_days: z.number(),
   review: z.string(),
-  learning_steps: z.number().optional(), // Added for full ts-fsrs compatibility
+  learning_steps: z.number().optional(),
 });
 
 // --- Final Schemas for Types and Validation ---

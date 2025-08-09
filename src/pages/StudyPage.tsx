@@ -37,15 +37,19 @@ const StudyPage = () => {
     const allCards = getAllFlashcardsFromDeck(deck);
     
     const dueCards = allCards
-      .filter(card => !card.isSuspended)
-      .filter(card => !card.due || new Date(card.due) <= now);
+      .filter(card => !card.srs?.isSuspended)
+      .filter(card => {
+        const fsrsData = card.srs?.fsrs;
+        if (!fsrsData?.due) return true; // New cards are always due
+        return new Date(fsrsData.due) <= now;
+      });
 
     const newCards = dueCards
-      .filter(c => c.state === undefined || c.state === State.New)
+      .filter(c => c.srs?.fsrs?.state === undefined || c.srs.fsrs.state === State.New)
       .slice(0, settings.newCardsPerDay);
       
     const reviewCards = dueCards
-      .filter(c => c.state !== undefined && c.state !== State.New)
+      .filter(c => c.srs?.fsrs?.state !== undefined && c.srs.fsrs.state !== State.New)
       .slice(0, settings.maxReviewsPerDay);
 
     return [...reviewCards, ...newCards].sort(() => Math.random() - 0.5);
@@ -66,11 +70,12 @@ const StudyPage = () => {
 
   useEffect(() => {
     if (isFlipped && currentCard && !scheduledOutcomes) {
+      const fsrsData = currentCard.srs?.fsrs;
       const cardToReview: Card = {
-        ...createEmptyCard(currentCard.due ? new Date(currentCard.due) : new Date()),
-        ...currentCard,
-        due: currentCard.due ? new Date(currentCard.due) : new Date(),
-        last_review: currentCard.last_review ? new Date(currentCard.last_review) : undefined,
+        ...createEmptyCard(fsrsData?.due ? new Date(fsrsData.due) : new Date()),
+        ...fsrsData,
+        due: fsrsData?.due ? new Date(fsrsData.due) : new Date(),
+        last_review: fsrsData?.last_review ? new Date(fsrsData.last_review) : undefined,
       };
 
       const outcomes = fsrsInstance.repeat(cardToReview, new Date());
@@ -93,9 +98,14 @@ const StudyPage = () => {
 
     const updatedCard: FlashcardData = {
       ...currentCard,
-      ...updatedFsrsCard,
-      due: updatedFsrsCard.due.toISOString(),
-      last_review: updatedFsrsCard.last_review?.toISOString(),
+      srs: {
+        ...currentCard.srs,
+        fsrs: {
+          ...updatedFsrsCard,
+          due: updatedFsrsCard.due.toISOString(),
+          last_review: updatedFsrsCard.last_review?.toISOString(),
+        }
+      }
     };
     
     const logToSave: ReviewLog = {
