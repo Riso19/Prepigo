@@ -24,7 +24,8 @@ const StudyPage = () => {
   
   const [completedCardIds, setCompletedCardIds] = useState<Set<string>>(new Set());
   const [isFlipped, setIsFlipped] = useState(false);
-  const [scheduledOutcomes, setScheduledOutcomes] = useState<FsrsSchedulerResult | null>(null);
+  const [fsrsScheduledOutcomes, setFsrsScheduledOutcomes] = useState<FsrsSchedulerResult | null>(null);
+  const [sm2ScheduledIntervals, setSm2ScheduledIntervals] = useState<{ [key in ReviewRating]: number } | null>(null);
 
   const sessionQueue = useMemo(() => {
     if (!deck) return [];
@@ -118,7 +119,14 @@ const StudyPage = () => {
   const initialDueCount = sessionQueue.length;
 
   useEffect(() => {
-    if (currentCard && settings.algorithm === 'fsrs') {
+    if (!currentCard) {
+      setFsrsScheduledOutcomes(null);
+      setSm2ScheduledIntervals(null);
+      return;
+    }
+
+    if (settings.algorithm === 'fsrs') {
+      setSm2ScheduledIntervals(null);
       const now = new Date();
       let elapsedDays = 0;
       if (currentCard.lastReviewDate) {
@@ -127,11 +135,26 @@ const StudyPage = () => {
       }
       const cardData = { stability: currentCard.stability, difficulty: currentCard.difficulty };
       const outcomes = fsrs(cardData, elapsedDays, settings.fsrsParameters);
-      setScheduledOutcomes(outcomes);
-    } else {
-      setScheduledOutcomes(null);
+      setFsrsScheduledOutcomes(outcomes);
+    } else if (settings.algorithm === 'sm2') {
+      setFsrsScheduledOutcomes(null);
+      const srsData = {
+        repetitions: currentCard.repetitions || 0,
+        easeFactor: currentCard.easeFactor || settings.initialEaseFactor,
+        interval: currentCard.interval || 0,
+        lapses: currentCard.lapses || 0,
+        isSuspended: currentCard.isSuspended || false,
+        lastInterval: currentCard.lastInterval,
+      };
+
+      setSm2ScheduledIntervals({
+        [Rating.Again]: sm2(srsData, 0, settings).interval,
+        [Rating.Hard]: sm2(srsData, 3, settings).interval,
+        [Rating.Good]: sm2(srsData, 4, settings).interval,
+        [Rating.Easy]: sm2(srsData, 5, settings).interval,
+      });
     }
-  }, [currentCard, settings.algorithm, settings.fsrsParameters]);
+  }, [currentCard, settings]);
 
   useEffect(() => {
     if (initialDueCount > 0 && remainingCards.length === 0) {
@@ -159,9 +182,9 @@ const StudyPage = () => {
     const allFlashcards = deck ? getAllFlashcardsFromDeck(deck) : [];
 
     if (settings.algorithm === 'fsrs') {
-      if (!scheduledOutcomes) return; // Should not happen if logic is correct
+      if (!fsrsScheduledOutcomes) return; // Should not happen if logic is correct
     
-      const newSrsData = scheduledOutcomes[rating];
+      const newSrsData = fsrsScheduledOutcomes[rating];
       const nextReviewDate = new Date(new Date().setDate(now.getDate() + newSrsData.interval));
 
       updatedCard = {
@@ -209,7 +232,7 @@ const StudyPage = () => {
     setDecks(prevDecks => updateFlashcard(prevDecks, updatedCard));
     setCompletedCardIds(prev => new Set([...prev, ...idsToComplete]));
     setIsFlipped(false);
-  }, [currentCard, setDecks, settings, getSiblings, deck, scheduledOutcomes]);
+  }, [currentCard, setDecks, settings, getSiblings, deck, fsrsScheduledOutcomes]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -318,22 +341,26 @@ const StudyPage = () => {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full">
               <Button onClick={() => handleRating(Rating.Again)} className="relative bg-red-500 hover:bg-red-600 text-white font-bold h-16 text-base flex flex-col">
                 <span>Again</span>
-                {settings.algorithm === 'fsrs' && scheduledOutcomes && <span className="text-xs font-normal opacity-80">{formatInterval(scheduledOutcomes[Rating.Again].interval)}</span>}
+                {fsrsScheduledOutcomes && <span className="text-xs font-normal opacity-80">{formatInterval(fsrsScheduledOutcomes[Rating.Again].interval)}</span>}
+                {sm2ScheduledIntervals && <span className="text-xs font-normal opacity-80">{formatInterval(sm2ScheduledIntervals[Rating.Again])}</span>}
                 <span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">1</span>
               </Button>
               <Button onClick={() => handleRating(Rating.Hard)} className="relative bg-orange-400 hover:bg-orange-500 text-white font-bold h-16 text-base flex flex-col">
                 <span>Hard</span>
-                {settings.algorithm === 'fsrs' && scheduledOutcomes && <span className="text-xs font-normal opacity-80">{formatInterval(scheduledOutcomes[Rating.Hard].interval)}</span>}
+                {fsrsScheduledOutcomes && <span className="text-xs font-normal opacity-80">{formatInterval(fsrsScheduledOutcomes[Rating.Hard].interval)}</span>}
+                {sm2ScheduledIntervals && <span className="text-xs font-normal opacity-80">{formatInterval(sm2ScheduledIntervals[Rating.Hard])}</span>}
                 <span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">2</span>
               </Button>
               <Button onClick={() => handleRating(Rating.Good)} className="relative bg-green-500 hover:bg-green-600 text-white font-bold h-16 text-base flex flex-col">
                 <span>Good</span>
-                {settings.algorithm === 'fsrs' && scheduledOutcomes && <span className="text-xs font-normal opacity-80">{formatInterval(scheduledOutcomes[Rating.Good].interval)}</span>}
+                {fsrsScheduledOutcomes && <span className="text-xs font-normal opacity-80">{formatInterval(fsrsScheduledOutcomes[Rating.Good].interval)}</span>}
+                {sm2ScheduledIntervals && <span className="text-xs font-normal opacity-80">{formatInterval(sm2ScheduledIntervals[Rating.Good])}</span>}
                 <span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">3</span>
               </Button>
               <Button onClick={() => handleRating(Rating.Easy)} className="relative bg-blue-500 hover:bg-blue-600 text-white font-bold h-16 text-base flex flex-col">
                 <span>Easy</span>
-                {settings.algorithm === 'fsrs' && scheduledOutcomes && <span className="text-xs font-normal opacity-80">{formatInterval(scheduledOutcomes[Rating.Easy].interval)}</span>}
+                {fsrsScheduledOutcomes && <span className="text-xs font-normal opacity-80">{formatInterval(fsrsScheduledOutcomes[Rating.Easy].interval)}</span>}
+                {sm2ScheduledIntervals && <span className="text-xs font-normal opacity-80">{formatInterval(sm2ScheduledIntervals[Rating.Easy])}</span>}
                 <span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">4</span>
               </Button>
             </div>
