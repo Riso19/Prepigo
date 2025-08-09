@@ -94,19 +94,23 @@ export const importAnkiFile = async (file: File, includeScheduling: boolean): Pr
     // Process media files
     const mediaFile = zip.file('media');
     if (mediaFile) {
-      const mediaJSON = JSON.parse(await mediaFile.async('string'));
-      for (const key in mediaJSON) {
-        const fileName = mediaJSON[key];
-        const fileEntry = zip.file(key);
-        if (fileEntry) {
-          const blob = await fileEntry.async('blob');
-          const dataUrl = await new Promise<string>(resolve => {
-            const reader = new FileReader();
-            reader.onload = e => resolve(e.target!.result as string);
-            reader.readAsDataURL(blob);
-          });
-          mediaMap[fileName] = dataUrl;
+      try {
+        const mediaJSON = JSON.parse(await mediaFile.async('string'));
+        for (const key in mediaJSON) {
+          const fileName = mediaJSON[key];
+          const fileEntry = zip.file(key);
+          if (fileEntry) {
+            const blob = await fileEntry.async('blob');
+            const dataUrl = await new Promise<string>(resolve => {
+              const reader = new FileReader();
+              reader.onload = e => resolve(e.target!.result as string);
+              reader.readAsDataURL(blob);
+            });
+            mediaMap[fileName] = dataUrl;
+          }
         }
+      } catch (e) {
+        console.warn("Could not parse the 'media' file in the .apkg. Media files may not be loaded correctly.", e);
       }
     }
   } else if (file.name.endsWith('.anki2') || file.name.endsWith('.anki21')) {
