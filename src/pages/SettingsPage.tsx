@@ -219,13 +219,23 @@ const SettingsPage = () => {
       } else if (fileName.endsWith('.json')) {
         onProgress({ message: 'Reading backup file...', value: 10 });
         const content = await fileToImport.text();
-        const parsedData = JSON.parse(content);
+        let parsedData;
+        try {
+          parsedData = JSON.parse(content);
+        } catch (jsonError) {
+          throw new Error(`Invalid JSON format. Parser error: ${(jsonError as Error).message}`);
+        }
+        
         const validation = decksSchema.safeParse(parsedData);
-        if (!validation.success) throw new Error("Invalid JSON backup file format.");
+        if (!validation.success) {
+          const errorDetails = validation.error.flatten().formErrors.join(', ');
+          console.error("JSON validation failed:", validation.error.flatten());
+          throw new Error(`Backup file has incorrect data structure. Details: ${errorDetails}`);
+        }
         importedDecks = validation.data;
         onProgress({ message: 'Backup file read successfully!', value: 100 });
       } else {
-        throw new Error("Unsupported file type.");
+        throw new Error("Unsupported file type. Please select a .json, .apkg, .anki, or .txt file.");
       }
 
       if (importedDecks) {
@@ -240,11 +250,12 @@ const SettingsPage = () => {
         }
         toast.success("Data imported successfully!", { id: toastId });
       } else {
-        throw new Error("Failed to process file.");
+        throw new Error("File processed, but no valid decks were found to import.");
       }
     } catch (error) {
-      console.error("Import Error:", error);
-      toast.error(`Import failed: ${(error as Error).message}`, { id: toastId, duration: 10000 });
+      const err = error as Error;
+      console.error("Import Error:", err);
+      toast.error(`Import failed: ${err.message}`, { id: toastId, duration: 15000 });
     } finally {
       setFileToImport(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
