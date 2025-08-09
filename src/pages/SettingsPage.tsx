@@ -32,7 +32,7 @@ import { Switch } from '@/components/ui/switch';
 import { getAllFlashcardsFromDeck, updateFlashcard } from '@/lib/deck-utils';
 import { fsrs, createEmptyCard, generatorParameters, Card as FsrsCard, Rating } from 'ts-fsrs';
 import { toast } from 'sonner';
-import { importApkg } from '@/lib/apkg-importer';
+import { importAnkiFile } from '@/lib/anki-importer';
 import { Checkbox } from '@/components/ui/checkbox';
 
 const fsrsParametersSchema = z.object({
@@ -198,7 +198,7 @@ const SettingsPage = () => {
         if (!validation.success) throw new Error("Invalid JSON backup file format.");
         importedData = validation.data;
       } else if (fileToImport.name.endsWith('.apkg') || fileToImport.name.endsWith('.anki2') || fileToImport.name.endsWith('.anki21')) {
-        importedData = await importApkg(fileToImport, includeScheduling);
+        importedData = await importAnkiFile(fileToImport, includeScheduling);
       }
 
       if (importedData) {

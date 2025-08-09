@@ -75,20 +75,18 @@ const convertAnkiSrsData = (
 
 
 // --- Main Importer Function ---
-export const importApkg = async (file: File, includeScheduling: boolean): Promise<DeckData[]> => {
-  let db: Database;
+export const importAnkiFile = async (file: File, includeScheduling: boolean): Promise<DeckData[]> => {
   const SQL = await initSqlJs({
     locateFile: file => `https://sql.js.org/dist/${file}`
   });
+  let db: Database;
   let mediaMap: { [key: string]: string } = {};
 
-  try {
-    // --- Try to process as a zipped .apkg file ---
+  if (file.name.endsWith('.apkg')) {
     const zip = await JSZip.loadAsync(file);
-    
     const dbFileEntry = zip.file(/collection\.anki2(1)?/)[0];
     if (!dbFileEntry) {
-      throw new Error('Could not find a collection database in the .apkg file.');
+      throw new Error('Could not find a "collection.anki2" or "collection.anki21" file inside the .apkg archive.');
     }
     const dbFile = await dbFileEntry.async('uint8array');
     db = new SQL.Database(dbFile);
@@ -111,17 +109,11 @@ export const importApkg = async (file: File, includeScheduling: boolean): Promis
         }
       }
     }
-  } catch (zipError) {
-    // --- If zip fails, try to process as a raw .anki2 database file ---
-    console.log("Could not process as zip, attempting to read as raw database file.", zipError);
-    try {
-      const fileBuffer = await file.arrayBuffer();
-      db = new SQL.Database(new Uint8Array(fileBuffer));
-      // No media to process in a raw database file
-    } catch (dbError) {
-      console.error("Failed to read as both zip and raw database.", dbError);
-      throw new Error('The provided file is not a valid .apkg archive or .anki2 database file.');
-    }
+  } else if (file.name.endsWith('.anki2') || file.name.endsWith('.anki21')) {
+    const fileBuffer = await file.arrayBuffer();
+    db = new SQL.Database(new Uint8Array(fileBuffer));
+  } else {
+    throw new Error('Unsupported file type. Please provide a .apkg, .anki2, or .anki21 file.');
   }
 
   // 3. Extract data from the database
