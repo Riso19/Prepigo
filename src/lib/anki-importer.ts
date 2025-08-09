@@ -2,10 +2,10 @@ import JSZip from 'jszip';
 import initSqlJs, { Database } from 'sql.js';
 import { DeckData, FlashcardData, BasicFlashcard, ClozeFlashcard, SrsData, Sm2State } from '@/data/decks';
 
-// Anki's field separator
+// Per Anki schema, fields are separated by this character.
 const ANKI_FIELD_SEPARATOR = '\x1f';
 
-// --- Interfaces for raw Anki data ---
+// --- Type definitions for raw Anki data based on schema ---
 interface AnkiModel {
   id: number;
   name: string;
@@ -19,11 +19,17 @@ interface AnkiDeck {
   name: string;
 }
 
-const convertAnkiSrsData = (
-  cardValue: any[],
-  creationTimestamp: number
+// --- Helper function to convert Anki's scheduling data ---
+// This function is rewritten to strictly follow the provided schema for the 'cards' table.
+const convertAnkiSchedulingData = (
+  cardRow: any[],
+  collectionCreationTimestamp: number
 ): SrsData => {
-  const [_cardId, _noteId, _deckId, _ord, cardType, queue, due, ivl, factor, reps, lapses] = cardValue as [number, number, number, number, number, number, number, number, number, number, number];
+  // Destructure based on the 'cards' table schema
+  const [
+    _id, _nid, _did, _ord, _mod, _usn,
+    type, queue, due, ivl, factor, reps, lapses
+  ] = cardRow as [number, number, number, number, number, number, number, number, number, number, number, number, number];
 
   const isSuspended = queue === -1;
 
@@ -31,27 +37,31 @@ const convertAnkiSrsData = (
   let dueDate: Date;
   const now = new Date();
 
-  switch (cardType) {
-    case 0: // new
+  // Determine state and due date based on card type
+  switch (type) {
+    case 0: // New card
       state = 'new';
+      // For new cards, 'due' is an order number, not a date. The card is due now.
       dueDate = now;
       break;
-    case 1: // learning
+    case 1: // Learning card
       state = 'learning';
-      dueDate = new Date(due < 946684800000 ? due * 1000 : due);
+      // 'due' is an epoch timestamp in seconds
+      dueDate = new Date(due * 1000);
       break;
-    case 2: // review
+    case 2: // Review card
       state = 'review';
-      const creationDate = new Date(creationTimestamp * 1000);
-      creationDate.setHours(0, 0, 0, 0);
-      dueDate = new Date(creationDate);
-      dueDate.setDate(creationDate.getDate() + due);
+      // 'due' is days relative to collection creation date
+      const creationDate = new Date(collectionCreationTimestamp * 1000);
+      creationDate.setDate(creationDate.getDate() + due);
+      dueDate = creationDate;
       break;
-    case 3: // relearning
+    case 3: // Relearning card
       state = 'relearning';
-      dueDate = new Date(due < 946684800000 ? due * 1000 : due);
+      // 'due' is an epoch timestamp in seconds
+      dueDate = new Date(due * 1000);
       break;
-    default:
+    default: // Should not happen
       state = 'new';
       dueDate = now;
       break;
@@ -59,6 +69,7 @@ const convertAnkiSrsData = (
 
   const sm2: Sm2State = {
     due: dueDate.toISOString(),
+    // 'factor' is in permille (e.g., 2500 for 2.5x)
     easinessFactor: Math.max(1.3, factor / 1000),
     interval: ivl,
     repetitions: reps,
@@ -69,29 +80,28 @@ const convertAnkiSrsData = (
   return {
     sm2,
     isSuspended,
-    newCardOrder: cardType === 0 ? due : undefined,
+    // For new cards, use 'due' as the sorting order
+    newCardOrder: type === 0 ? due : undefined,
   };
 };
 
-
 // --- Main Importer Function ---
 export const importAnkiFile = async (file: File, includeScheduling: boolean): Promise<DeckData[]> => {
-  const SQL = await initSqlJs({
-    locateFile: file => `https://sql.js.org/dist/${file}`
-  });
+  // 1. Initialize SQL.js and load the database file
+  const SQL = await initSqlJs({ locateFile: file => `https://sql.js.org/dist/${file}` });
   let db: Database;
-  let mediaMap: { [key: string]: string } = {};
+  const mediaMap: { [key: string]: string } = {};
 
   if (file.name.endsWith('.apkg')) {
     const zip = await JSZip.loadAsync(file);
     const dbFileEntry = zip.file(/collection\.anki2(1)?/)[0];
     if (!dbFileEntry) {
-      throw new Error('Could not find a "collection.anki2" or "collection.anki21" file inside the .apkg archive.');
+      throw new Error('Database file (collection.anki2 or .anki21) not found in .apkg archive.');
     }
     const dbFile = await dbFileEntry.async('uint8array');
     db = new SQL.Database(dbFile);
 
-    // Process media files
+    // Extract media files if they exist
     const mediaFile = zip.file('media');
     if (mediaFile) {
       try {
@@ -110,7 +120,7 @@ export const importAnkiFile = async (file: File, includeScheduling: boolean): Pr
           }
         }
       } catch (e) {
-        console.warn("Could not parse the 'media' file in the .apkg. Media files may not be loaded correctly.", e);
+        console.warn("Could not parse the 'media' file. Media content may not be displayed correctly.", e);
       }
     }
   } else if (file.name.endsWith('.anki2') || file.name.endsWith('.anki21')) {
@@ -120,81 +130,81 @@ export const importAnkiFile = async (file: File, includeScheduling: boolean): Pr
     throw new Error('Unsupported file type. Please provide a .apkg, .anki2, or .anki21 file.');
   }
 
-  // 3. Extract data from the database
+  // 2. Extract core collection data
   const colResult = db.exec("SELECT models, decks, crt FROM col");
-  if (!colResult || colResult.length === 0 || !colResult[0].values || colResult[0].values.length === 0) {
-    throw new Error("Could not find collection data in the database. The file may be empty or corrupt.");
+  if (!colResult?.[0]?.values?.[0]) {
+    throw new Error("Could not read collection data from the database. The file may be corrupt or empty.");
   }
-  const colData = colResult[0].values[0];
+  const [modelsJSON, decksJSON, collectionCreationTimestamp] = colResult[0].values[0] as [string, string, number];
 
   let models: { [id: string]: AnkiModel };
   try {
-    models = JSON.parse(colData[0] as string);
+    models = JSON.parse(modelsJSON);
   } catch (e) {
-    console.error("Failed to parse 'models' JSON from the database.", e);
-    throw new Error("Could not parse the 'models' data from the Anki database. The file may be corrupt or from an unsupported Anki version.");
+    throw new Error("Failed to parse 'Note Types' (models) from the database. The data may be corrupt.");
   }
 
   let ankiDecks: { [id: string]: AnkiDeck };
   try {
-    ankiDecks = JSON.parse(colData[1] as string);
+    ankiDecks = JSON.parse(decksJSON);
   } catch (e) {
-    console.error("Failed to parse 'decks' JSON from the database.", e);
-    throw new Error("Could not parse the 'decks' data from the Anki database. The file may be corrupt or from an unsupported Anki version.");
+    throw new Error("Failed to parse 'Decks' from the database. The data may be corrupt.");
   }
-  
-  const creationTimestamp = colData[2] as number;
-  
-  const notesData = db.exec("SELECT id, mid, flds, tags FROM notes")[0]?.values || [];
-  const cardsData = db.exec("SELECT id, nid, did, ord, type, queue, due, ivl, factor, reps, lapses FROM cards")[0]?.values || [];
 
+  // 3. Fetch all notes and cards
+  const notesData = db.exec("SELECT id, mid, flds, tags FROM notes")[0]?.values ?? [];
+  const cardsData = db.exec("SELECT id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses FROM cards")[0]?.values ?? [];
+
+  // Helper to replace local media references with data URLs
   const replaceMediaSrc = (html: string): string => {
     if (!html) return '';
     return html.replace(/src="([^"]+)"/g, (match, fileName) => {
-      if (mediaMap[fileName]) {
-        return `src="${mediaMap[fileName]}"`;
-      }
-      return match;
+      return mediaMap[fileName] ? `src="${mediaMap[fileName]}"` : match;
     });
   };
 
-  // 5. Create all deck objects
-  const deckDataMap: { [id: string]: DeckData } = {};
+  // 4. Prepare deck structure
+  const deckDataMap: Map<string, DeckData> = new Map();
   Object.values(ankiDecks).forEach(d => {
-    deckDataMap[d.id.toString()] = {
-      id: d.id.toString(),
+    deckDataMap.set(d.id.toString(), {
+      id: `anki-${d.id}`,
       name: d.name,
       flashcards: [],
       subDecks: []
-    };
+    });
   });
 
-  // 6. Create flashcards and add them to the correct deck
-  cardsData.forEach(cardValue => {
-    const [cardId, noteId, deckId, ord] = cardValue as [number, number, number, number];
-    const note = notesData.find(n => n[0] === noteId);
-    if (!note) return;
+  // 5. Process each card and associate it with a note and deck
+  cardsData.forEach(cardRow => {
+    const cardId = cardRow[0] as number;
+    const noteId = cardRow[1] as number;
+    const deckId = cardRow[2] as number;
+    const ord = cardRow[3] as number;
 
-    const [, modelId, fieldsStr, tagsStr] = note as [number, number, string, string];
+    const noteRow = notesData.find(n => n[0] === noteId);
+    if (!noteRow) return; // Skip orphaned cards
+
+    const modelId = noteRow[1] as number;
+    const fieldsStr = noteRow[2] as string;
+    const tagsStr = noteRow[3] as string;
+
     const model = models[modelId.toString()];
-    if (!model) return;
-
-    const deck = deckDataMap[deckId.toString()];
-    if (!deck) return;
+    const deck = deckDataMap.get(deckId.toString());
+    if (!model || !deck) return; // Skip cards with missing model or deck
 
     const fields = fieldsStr.split(ANKI_FIELD_SEPARATOR);
     const template = model.tmpls[ord];
-    if (!template) return;
+    if (!template) return; // Skip cards with missing template
 
     let flashcard: FlashcardData | null = null;
 
+    // Determine card type (Cloze or Basic)
     if (model.type === 1 || template.qfmt.includes('{{cloze:')) {
-      const textField = fields[0];
+      const textField = fields[0] ?? '';
       const descriptionField = fields.length > 1 ? fields[1] : '';
-      
       flashcard = {
-        id: `anki-${cardId}`,
-        noteId: `anki-${noteId}`,
+        id: `anki-c-${cardId}`,
+        noteId: `anki-n-${noteId}`,
         type: 'cloze',
         text: replaceMediaSrc(textField),
         description: replaceMediaSrc(descriptionField),
@@ -202,22 +212,23 @@ export const importAnkiFile = async (file: File, includeScheduling: boolean): Pr
     } else {
       const fieldMap: { [key: string]: string } = {};
       model.flds.forEach(fld => {
-        fieldMap[fld.name] = fields[fld.ord];
+        fieldMap[fld.name] = fields[fld.ord] ?? '';
       });
 
       let question = template.qfmt;
       let answer = template.afmt;
 
+      // Replace field placeholders
       for (const key in fieldMap) {
         question = question.replace(new RegExp(`{{${key}}}`, 'g'), fieldMap[key]);
         answer = answer.replace(new RegExp(`{{${key}}}`, 'g'), fieldMap[key]);
       }
-      
-      answer = answer.replace(/{{FrontSide}}/, fieldMap[model.flds[0].name]);
+      // Handle special {{FrontSide}} placeholder
+      answer = answer.replace(/{{FrontSide}}/g, question);
 
       flashcard = {
-        id: `anki-${cardId}`,
-        noteId: `anki-${noteId}`,
+        id: `anki-c-${cardId}`,
+        noteId: `anki-n-${noteId}`,
         type: 'basic',
         question: replaceMediaSrc(question),
         answer: replaceMediaSrc(answer),
@@ -225,36 +236,33 @@ export const importAnkiFile = async (file: File, includeScheduling: boolean): Pr
     }
 
     if (flashcard) {
-      let tags = (tagsStr || '').trim().split(' ').filter(t => t);
+      flashcard.tags = (tagsStr || '').trim().split(' ').filter(Boolean);
       if (includeScheduling) {
-        flashcard.srs = convertAnkiSrsData(cardValue, creationTimestamp);
-      } else {
-        tags = tags.filter(t => t.toLowerCase() !== 'leech' && t.toLowerCase() !== 'marked');
+        flashcard.srs = convertAnkiSchedulingData(cardRow, collectionCreationTimestamp);
       }
-      flashcard.tags = tags;
       deck.flashcards.push(flashcard);
     }
   });
 
-  // 7. Build the deck hierarchy
-  const deckList = Object.values(deckDataMap);
-  const deckNameMap: { [name: string]: DeckData } = {};
-  
-  deckList.sort((a, b) => a.name.localeCompare(b.name)).forEach(deck => {
-    deckNameMap[deck.name] = deck;
-  });
+  // 6. Assemble deck hierarchy
+  const rootDecks: DeckData[] = [];
+  const allDecks = Array.from(deckDataMap.values());
 
-  deckList.forEach(deck => {
+  allDecks.forEach(deck => {
     const parts = deck.name.split('::');
     if (parts.length > 1) {
       const parentName = parts.slice(0, -1).join('::');
-      const parentDeck = deckNameMap[parentName];
+      const parentDeck = allDecks.find(d => d.name === parentName);
       if (parentDeck) {
-        deck.name = parts[parts.length - 1];
+        deck.name = parts[parts.length - 1]; // Keep only the subdeck name
         parentDeck.subDecks!.push(deck);
+      } else {
+        rootDecks.push(deck); // Parent not found, treat as root
       }
+    } else {
+      rootDecks.push(deck);
     }
   });
 
-  return deckList.filter(deck => !deck.name.includes('::'));
+  return rootDecks;
 };
