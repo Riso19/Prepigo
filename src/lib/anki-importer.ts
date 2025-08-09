@@ -58,14 +58,6 @@ const convertAnkiSchedulingData = (
   return { sm2, isSuspended, newCardOrder: type === 0 ? due : undefined };
 };
 
-// Helper to check for the standard SQLite file header.
-function isValidSQLite(bytes: Uint8Array): boolean {
-  if (bytes.length < 16) return false;
-  const header = "SQLite format 3\0";
-  const fileHeader = new TextDecoder().decode(bytes.slice(0, 16));
-  return fileHeader === header;
-}
-
 // --- Main Importer Function ---
 export const importAnkiFile = async (file: File, includeScheduling: boolean): Promise<DeckData[]> => {
   const SQL = await initSqlJs({ locateFile: file => `https://sql.js.org/dist/${file}` });
@@ -76,9 +68,15 @@ export const importAnkiFile = async (file: File, includeScheduling: boolean): Pr
   try {
     if (file.name.endsWith('.apkg')) {
       const zip = await JSZip.loadAsync(file);
-      const dbFileEntry = zip.file(/collection\.anki2(1)?/)[0];
+      
+      // Find the correct database file, prioritizing newer formats
+      const dbFileEntry = 
+        zip.file('collection.anki21b') || 
+        zip.file('collection.anki21') || 
+        zip.file('collection.anki2');
+
       if (!dbFileEntry) {
-        throw new Error('The .apkg archive does not contain a "collection.anki2" or "collection.anki21" database file.');
+        throw new Error('The .apkg archive does not contain a "collection.anki2", "collection.anki21", or "collection.anki21b" database file.');
       }
       dbBytes = await dbFileEntry.async('uint8array');
       
@@ -101,10 +99,10 @@ export const importAnkiFile = async (file: File, includeScheduling: boolean): Pr
           }
         } catch (e) { console.warn("Could not parse 'media' file. Media may not be displayed.", e); }
       }
-    } else if (file.name.endsWith('.anki2') || file.name.endsWith('.anki21')) {
+    } else if (file.name.endsWith('.anki2') || file.name.endsWith('.anki21') || file.name.endsWith('.anki21b')) {
       dbBytes = new Uint8Array(await file.arrayBuffer());
     } else {
-      throw new Error(`Unsupported file type: "${file.name}". Please provide a .apkg, .anki2, or .anki21 file.`);
+      throw new Error(`Unsupported file type: "${file.name}". Please provide a .apkg or .anki2(1/1b) file.`);
     }
   } catch (e) {
     throw new Error(`Failed to read or extract the file. It might be corrupted. Original error: ${(e as Error).message}`);
@@ -114,16 +112,12 @@ export const importAnkiFile = async (file: File, includeScheduling: boolean): Pr
     throw new Error("Extracted database file is empty.");
   }
 
-  // Step 2: Validate and open the database
-  if (!isValidSQLite(dbBytes)) {
-    throw new Error("File integrity check failed: The file is not a valid SQLite database (header mismatch). It may be encrypted or corrupted.");
-  }
-
+  // Step 2: Open the database
   let db: Database;
   try {
     db = new SQL.Database(dbBytes);
   } catch (e) {
-    throw new Error(`Failed to open the database, even though the header is correct. The file is likely corrupted. Original error: ${(e as Error).message}`);
+    throw new Error(`Failed to open the database. The file is likely corrupted or password-protected. Original error: ${(e as Error).message}`);
   }
 
   // Step 3: Extract data from tables with detailed error handling
