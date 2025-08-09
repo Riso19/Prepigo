@@ -35,6 +35,7 @@ import { toast } from 'sonner';
 import { importAnkiFile } from '@/lib/anki-importer';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
+import { importAnkiTxtFile } from '@/lib/anki-txt-importer';
 
 const fsrsParametersSchema = z.object({
     request_retention: z.coerce.number().min(0.7, "Must be at least 0.7").max(0.99, "Must be less than 1.0"),
@@ -175,8 +176,8 @@ const SettingsPage = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.endsWith('.json') && !file.name.endsWith('.apkg') && !file.name.endsWith('.anki2') && !file.name.endsWith('.anki21')) {
-      showError("Unsupported file type. Please select a .json, .apkg, or .anki file.");
+    if (!file.name.endsWith('.json') && !file.name.endsWith('.apkg') && !file.name.endsWith('.anki2') && !file.name.endsWith('.anki21') && !file.name.endsWith('.txt')) {
+      showError("Unsupported file type. Please select a .json, .apkg, .anki, or .txt file.");
       if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
@@ -206,7 +207,11 @@ const SettingsPage = () => {
       
       const fileName = fileToImport.name.toLowerCase();
 
-      if (fileName.endsWith('.apkg') || fileName.endsWith('.anki2') || fileName.endsWith('.anki21')) {
+      if (fileName.endsWith('.txt')) {
+        const result = await importAnkiTxtFile(fileToImport, onProgress);
+        importedDecks = result.decks;
+        importedMedia = result.media;
+      } else if (fileName.endsWith('.apkg') || fileName.endsWith('.anki2') || fileName.endsWith('.anki21')) {
         const result = await importAnkiFile(fileToImport, includeScheduling, onProgress);
         importedDecks = result.decks;
         importedMedia = result.media;
@@ -219,7 +224,7 @@ const SettingsPage = () => {
         importedDecks = validation.data;
         onProgress({ message: 'Backup file read successfully!', value: 100 });
       } else {
-        throw new Error("Unsupported file type. Please select a .json or .apkg file.");
+        throw new Error("Unsupported file type.");
       }
 
       if (importedDecks) {
@@ -654,7 +659,7 @@ const SettingsPage = () => {
                   <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                     <Button onClick={handleExport} variant="outline" type="button">Export Data</Button>
                     <Button asChild variant="outline" type="button"><Label htmlFor="import-file" className="cursor-pointer">Import Data</Label></Button>
-                    <Input id="import-file" type="file" className="hidden" onChange={handleFileSelect} accept=".json,.apkg,.anki2,.anki21" ref={fileInputRef} />
+                    <Input id="import-file" type="file" className="hidden" onChange={handleFileSelect} accept=".json,.apkg,.anki2,.anki21,.txt" ref={fileInputRef} />
                     <Button variant="destructive" onClick={() => setIsResetAlertOpen(true)} className="sm:ml-auto" type="button">Reset All Data</Button>
                   </div>
                   <p className="text-sm text-muted-foreground">Export your decks, or import from a backup. Resetting restores the app to its initial state.</p>
