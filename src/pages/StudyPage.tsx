@@ -11,7 +11,7 @@ import ClozePlayer from "@/components/ClozePlayer";
 import ImageOcclusionPlayer from "@/components/ImageOcclusionPlayer";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Home } from "lucide-react";
-import { fsrs, FSRS, Card, State, Rating, RecordLog, generatorParameters, createEmptyCard } from "ts-fsrs";
+import { fsrs, Card, State, Rating, RecordLog, generatorParameters, createEmptyCard } from "ts-fsrs";
 
 const StudyPage = () => {
   const { deckId } = useParams<{ deckId: string }>();
@@ -40,9 +40,13 @@ const StudyPage = () => {
       .filter(card => !card.isSuspended)
       .filter(card => !card.due || new Date(card.due) <= now);
 
-    // This is a simplified queueing logic. A full implementation would handle new/review/relearning states separately.
-    const newCards = dueCards.filter(c => c.state === State.New).slice(0, settings.newCardsPerDay);
-    const reviewCards = dueCards.filter(c => c.state !== State.New).slice(0, settings.maxReviewsPerDay);
+    const newCards = dueCards
+      .filter(c => c.state === undefined || c.state === State.New)
+      .slice(0, settings.newCardsPerDay);
+      
+    const reviewCards = dueCards
+      .filter(c => c.state !== undefined && c.state !== State.New)
+      .slice(0, settings.maxReviewsPerDay);
 
     return [...reviewCards, ...newCards].sort(() => Math.random() - 0.5);
   }, [deck, settings.newCardsPerDay, settings.maxReviewsPerDay]);
@@ -62,14 +66,12 @@ const StudyPage = () => {
 
   useEffect(() => {
     if (isFlipped && currentCard && !scheduledOutcomes) {
-      const cardToReview: Card = currentCard.last_review 
-        ? {
-            ...createEmptyCard(),
-            ...currentCard,
-            due: new Date(currentCard.due!),
-            last_review: new Date(currentCard.last_review),
-          }
-        : createEmptyCard(currentCard.due ? new Date(currentCard.due) : undefined);
+      const cardToReview: Card = {
+        ...createEmptyCard(currentCard.due ? new Date(currentCard.due) : new Date()),
+        ...currentCard,
+        due: currentCard.due ? new Date(currentCard.due) : new Date(),
+        last_review: currentCard.last_review ? new Date(currentCard.last_review) : undefined,
+      };
 
       const outcomes = fsrsInstance.repeat(cardToReview, new Date());
       setScheduledOutcomes(outcomes);
