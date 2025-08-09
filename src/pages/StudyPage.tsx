@@ -182,7 +182,7 @@ const StudyPage = () => {
     const allFlashcards = deck ? getAllFlashcardsFromDeck(deck) : [];
 
     if (settings.algorithm === 'fsrs') {
-      if (!fsrsScheduledOutcomes) return; // Should not happen if logic is correct
+      if (!fsrsScheduledOutcomes) return;
     
       const newSrsData = fsrsScheduledOutcomes[rating];
       const nextReviewDate = new Date(new Date().setDate(now.getDate() + newSrsData.interval));
@@ -198,7 +198,23 @@ const StudyPage = () => {
         lapses: rating === 1 ? (currentCard.lapses || 0) + 1 : currentCard.lapses,
       };
 
-      await addReviewLog({ cardId: currentCard.id, reviewTime: new Date().toISOString(), rating });
+      let elapsedDays = 0;
+      if (currentCard.lastReviewDate) {
+        const lastReview = new Date(currentCard.lastReviewDate);
+        elapsedDays = (now.getTime() - lastReview.getTime()) / (1000 * 60 * 60 * 24);
+      }
+
+      await addReviewLog({
+        cardId: currentCard.id,
+        reviewTime: now.toISOString(),
+        rating,
+        previousStability: currentCard.stability,
+        previousDifficulty: currentCard.difficulty,
+        elapsedDays,
+        newStability: newSrsData.stability,
+        newDifficulty: newSrsData.difficulty,
+        scheduledDays: newSrsData.interval,
+      });
 
     } else { // SM-2 Logic
       const quality = rating === 1 ? 0 : rating + 1;

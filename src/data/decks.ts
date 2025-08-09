@@ -79,6 +79,16 @@ export const reviewLogSchema = z.object({
   cardId: z.string(),
   reviewTime: z.string(), // ISO string
   rating: z.number(), // 1 (Again), 2 (Hard), 3 (Good), 4 (Easy)
+  
+  // State of the card *before* this review
+  previousStability: z.number().optional(),
+  previousDifficulty: z.number().optional(),
+  elapsedDays: z.number(),
+  
+  // State of the card *after* this review
+  newStability: z.number(),
+  newDifficulty: z.number(),
+  scheduledDays: z.number(),
 });
 
 // --- Final Schemas for Types and Validation ---
