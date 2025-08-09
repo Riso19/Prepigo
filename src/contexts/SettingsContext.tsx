@@ -17,7 +17,8 @@ export interface SrsSettings {
   sm2HardIntervalMultiplier: number;
   sm2LapsedIntervalMultiplier: number;
   sm2MaximumInterval: number;
-  sm2FirstInterval: number;
+  sm2GraduatingInterval: number;
+  sm2EasyInterval: number;
   learningSteps: string;
   relearningSteps: string;
   leechThreshold: number;
@@ -52,7 +53,8 @@ const defaultSettings: SrsSettings = {
   sm2HardIntervalMultiplier: 1.2,
   sm2LapsedIntervalMultiplier: 0.6,
   sm2MaximumInterval: 365,
-  sm2FirstInterval: 1,
+  sm2GraduatingInterval: 1,
+  sm2EasyInterval: 4,
   learningSteps: "1 10", // in minutes, space-separated
   relearningSteps: "10", // in minutes, space-separated
   leechThreshold: 8,

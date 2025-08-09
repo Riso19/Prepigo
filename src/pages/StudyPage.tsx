@@ -15,12 +15,13 @@ import { sm2, Sm2Quality } from "@/lib/sm2";
 import { SrsSettings } from "@/contexts/SettingsContext";
 
 const parseSteps = (steps: string): number[] => {
-  return steps.trim().split(/\s+/).map(step => {
-    const value = parseInt(step, 10);
-    if (isNaN(value)) return 1;
-    if (step.endsWith('d')) return value * 24 * 60;
-    if (step.endsWith('h')) return value * 60;
-    return value;
+  return steps.trim().split(/\s+/).map(stepStr => {
+    const value = parseFloat(stepStr);
+    if (isNaN(value)) return 1; // Default to 1 minute if parsing fails
+    if (stepStr.endsWith('d')) return value * 24 * 60;
+    if (stepStr.endsWith('h')) return value * 60;
+    if (stepStr.endsWith('s')) return Math.max(1, value / 60); // Convert seconds to minutes, with a 1-minute minimum
+    return value; // Assume minutes if no unit
   });
 };
 
@@ -73,7 +74,7 @@ const StudyPage = () => {
         } else if (sm2State.state === 'learning' || sm2State.state === 'relearning') {
           const steps = sm2State.state === 'learning' ? parseSteps(settings.learningSteps) : parseSteps(settings.relearningSteps);
           const stepIndex = sm2State.learningStep || 0;
-          if (steps[stepIndex] < 1440) { // less than a day
+          if (stepIndex < steps.length && steps[stepIndex] < 1440) { // less than a day
             intradayLearning.push(card);
           } else {
             interdayLearning.push(card);
@@ -103,7 +104,6 @@ const StudyPage = () => {
     sortedReviews = sortedReviews.slice(0, settings.maxReviewsPerDay);
 
     // 5. Combine Queues
-    let combinedQueue: FlashcardData[] = [];
     const learningCombined = [...intradayLearning, ...interdayLearning].sort((a, b) => new Date(a.srs!.sm2!.due).getTime() - new Date(b.srs!.sm2!.due).getTime());
     
     const reviewsAndInterday = settings.interdayLearningReviewOrder === 'mix' ? shuffle([...sortedReviews, ...interdayLearning]) :
@@ -114,7 +114,7 @@ const StudyPage = () => {
                          settings.newReviewOrder === 'after' ? [...reviewsAndInterday, ...sortedNew] :
                          [...sortedNew, ...reviewsAndInterday];
 
-    combinedQueue = [...intradayLearning, ...finalWithNew];
+    const combinedQueue = [...learningCombined, ...finalWithNew];
 
     setSessionQueue(combinedQueue);
     setCurrentCardIndex(0);
@@ -142,68 +142,76 @@ const StudyPage = () => {
     } else { // SM-2 Logic
       const sm2State = currentCard.srs?.sm2 || { state: 'new', repetitions: 0, lapses: 0, easinessFactor: settings.sm2StartingEase, interval: 0, due: new Date().toISOString(), learningStep: 0 };
       let nextSm2State: Sm2State = { ...sm2State };
-      let wasLapse = false;
+      const cardState = sm2State.state || 'new';
+      const isReview = cardState === 'review';
 
       if (rating === Rating.Again) {
-        wasLapse = sm2State.state === 'review';
-        nextSm2State.lapses = (sm2State.lapses || 0) + 1;
-        nextSm2State.state = 'relearning';
-        nextSm2State.learningStep = 0;
-        nextSm2State.easinessFactor = Math.max(settings.sm2MinEasinessFactor, sm2State.easinessFactor - 0.20);
-
-        const relearningSteps = parseSteps(settings.relearningSteps);
-        const lapsedInterval = sm2State.interval > 0 ? sm2State.interval : 1;
-        const newInterval = wasLapse ? lapsedInterval * settings.sm2LapsedIntervalMultiplier : 0;
-        const firstStep = newInterval > 0 ? newInterval * 1440 : relearningSteps[0];
-
-        const nextDue = new Date();
-        nextDue.setMinutes(nextDue.getMinutes() + Math.max(1, firstStep));
-        nextSm2State.due = nextDue.toISOString();
-
-      } else {
-        const cardState = sm2State.state || 'new';
-        if (cardState === 'learning' || cardState === 'relearning' || cardState === 'new') {
-          const isNew = cardState === 'new';
-          if (isNew) {
-            nextSm2State.easinessFactor = settings.sm2StartingEase;
-          }
+        if (isReview) { // Lapsed review card
+          nextSm2State.lapses = (sm2State.lapses || 0) + 1;
+          nextSm2State.state = 'relearning';
+          nextSm2State.learningStep = 0;
+          nextSm2State.easinessFactor = Math.max(settings.sm2MinEasinessFactor, sm2State.easinessFactor - 0.20);
+          const relearningSteps = parseSteps(settings.relearningSteps);
+          const lapsedInterval = sm2State.interval > 0 ? sm2State.interval : 1;
+          const newInterval = lapsedInterval * settings.sm2LapsedIntervalMultiplier;
+          const firstStep = newInterval > 0 ? newInterval * 1440 : relearningSteps[0];
+          const nextDue = new Date();
+          nextDue.setMinutes(nextDue.getMinutes() + Math.max(1, firstStep));
+          nextSm2State.due = nextDue.toISOString();
+        } else { // New or learning card rated 'Again'
+          nextSm2State.learningStep = 0;
+          const learningSteps = parseSteps(settings.learningSteps);
+          const nextDue = new Date();
+          nextDue.setMinutes(nextDue.getMinutes() + learningSteps[0]);
+          nextSm2State.due = nextDue.toISOString();
+        }
+      } else if (isReview) { // Review card rated Hard, Good, or Easy
+        const qualityMap: { [key in Rating]: Sm2Quality } = { [Rating.Manual]: 0, [Rating.Again]: 1, [Rating.Hard]: 3, [Rating.Good]: 4, [Rating.Easy]: 5 };
+        const sm2Params = { 
+          startingEase: settings.sm2StartingEase,
+          minEasinessFactor: settings.sm2MinEasinessFactor,
+          easyBonus: settings.sm2EasyBonus,
+          intervalModifier: settings.sm2IntervalModifier,
+          hardIntervalMultiplier: settings.sm2HardIntervalMultiplier,
+          maximumInterval: settings.sm2MaximumInterval,
+        };
+        nextSm2State = sm2(qualityMap[rating], sm2Params, sm2State);
+      } else { // New or learning card rated Good or Easy
+        const isNew = cardState === 'new';
+        if (isNew) nextSm2State.easinessFactor = settings.sm2StartingEase;
+        
+        if (rating === Rating.Easy) { // Graduate immediately with Easy Interval
+          nextSm2State.state = 'review';
+          nextSm2State.learningStep = undefined;
+          nextSm2State.interval = settings.sm2EasyInterval;
+          const nextDue = new Date();
+          nextDue.setDate(nextDue.getDate() + nextSm2State.interval);
+          nextSm2State.due = nextDue.toISOString();
+        } else { // Rating is Good, advance learning step
           const steps = (cardState === 'relearning') ? parseSteps(settings.relearningSteps) : parseSteps(settings.learningSteps);
-          let stepIndex = isNew ? -1 : (sm2State.learningStep || 0);
+          const currentStep = sm2State.learningStep || 0;
+          const nextStep = currentStep + 1;
 
-          if (rating === Rating.Good) stepIndex++;
-          else if (rating === Rating.Easy) stepIndex = steps.length;
-
-          if (stepIndex >= steps.length) { // Graduate
+          if (nextStep >= steps.length) { // Graduate with Graduating Interval
             nextSm2State.state = 'review';
             nextSm2State.learningStep = undefined;
-            nextSm2State.interval = settings.sm2FirstInterval;
+            nextSm2State.interval = settings.sm2GraduatingInterval;
             const nextDue = new Date();
             nextDue.setDate(nextDue.getDate() + nextSm2State.interval);
             nextSm2State.due = nextDue.toISOString();
-          } else { // Advance learning step
+          } else { // Advance to next learning step
             nextSm2State.state = isNew ? 'learning' : cardState;
-            nextSm2State.learningStep = stepIndex;
+            nextSm2State.learningStep = nextStep;
             const nextDue = new Date();
-            nextDue.setMinutes(nextDue.getMinutes() + steps[stepIndex]);
+            nextDue.setMinutes(nextDue.getMinutes() + steps[nextStep]);
             nextSm2State.due = nextDue.toISOString();
           }
-        } else if (cardState === 'review') {
-          const qualityMap: { [key in Rating]: Sm2Quality } = { [Rating.Manual]: 0, [Rating.Again]: 1, [Rating.Hard]: 3, [Rating.Good]: 4, [Rating.Easy]: 5 };
-          const sm2Params = { 
-            startingEase: settings.sm2StartingEase,
-            minEasinessFactor: settings.sm2MinEasinessFactor,
-            easyBonus: settings.sm2EasyBonus,
-            intervalModifier: settings.sm2IntervalModifier,
-            hardIntervalMultiplier: settings.sm2HardIntervalMultiplier,
-            maximumInterval: settings.sm2MaximumInterval,
-          };
-          nextSm2State = sm2(qualityMap[rating], sm2Params, sm2State);
         }
       }
       
       updatedCard = { ...currentCard, srs: { ...currentCard.srs, sm2: nextSm2State } };
 
-      if (wasLapse && nextSm2State.lapses! >= settings.leechThreshold) {
+      if (isReview && rating === Rating.Again && nextSm2State.lapses! >= settings.leechThreshold) {
         if (settings.leechAction === 'suspend') {
           updatedCard.srs = { ...updatedCard.srs, isSuspended: true };
         } else {
@@ -293,11 +301,9 @@ const StudyPage = () => {
   const getIntervalText = (rating: Rating) => {
     if (settings.scheduler === 'sm2' && currentCard) {
         const sm2State = currentCard.srs?.sm2 || { state: 'new', repetitions: 0, easinessFactor: settings.sm2StartingEase, interval: 0 };
-        if (sm2State.state === 'learning' || sm2State.state === 'relearning' || sm2State.state === 'new') {
-            if (rating === Rating.Again) return `${settings.relearningSteps.split(' ')[0]}m`;
-            if (rating === Rating.Good) return `${settings.learningSteps.split(' ')[0]}m`;
-            if (rating === Rating.Easy) return `${settings.sm2FirstInterval}d`;
-        } else {
+        const cardState = sm2State.state || 'new';
+
+        if (cardState === 'review') {
             const qualityMap: { [key in Rating]: Sm2Quality } = { [Rating.Manual]: 0, [Rating.Again]: 1, [Rating.Hard]: 3, [Rating.Good]: 4, [Rating.Easy]: 5 };
             const sm2Params = { 
                 startingEase: settings.sm2StartingEase,
@@ -307,8 +313,19 @@ const StudyPage = () => {
                 hardIntervalMultiplier: settings.sm2HardIntervalMultiplier,
                 maximumInterval: settings.sm2MaximumInterval,
             };
+            if (rating === Rating.Again) return `${settings.relearningSteps.split(' ')[0]}m`;
             const result = sm2(qualityMap[rating], sm2Params, sm2State);
             return formatInterval(result.interval);
+        } else { // New or Learning
+            const steps = cardState === 'relearning' ? parseSteps(settings.relearningSteps) : parseSteps(settings.learningSteps);
+            const currentStep = sm2State.learningStep || 0;
+            if (rating === Rating.Again) return `${steps[0]}m`;
+            if (rating === Rating.Easy) return `${settings.sm2EasyInterval}d`;
+            if (rating === Rating.Good) {
+                const nextStep = currentStep + 1;
+                if (nextStep >= steps.length) return `${settings.sm2GraduatingInterval}d`;
+                return `${steps[nextStep]}m`;
+            }
         }
     }
     return '';
