@@ -379,6 +379,84 @@ const SettingsPage = () => {
                         )} />
                       </CardContent>
                     </Card>
+
+                    <Card>
+                      <CardHeader><CardTitle>New Cards</CardTitle></CardHeader>
+                      <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <FormField control={form.control} name="learningSteps" render={({ field }) => (
+                          <FormItem><FormLabel>Learning steps</FormLabel><FormControl><Input {...field} /></FormControl><FormDescription>Space-separated intervals (e.g., 10m 1d 3d).</FormDescription><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="graduatingInterval" render={({ field }) => (
+                          <FormItem><FormLabel>Graduating interval (days)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="easyInterval" render={({ field }) => (
+                          <FormItem><FormLabel>Easy interval (days)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="insertionOrder" render={({ field }) => (
+                          <FormItem><FormLabel>Insertion order</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="sequential">Sequential (oldest first)</SelectItem><SelectItem value="random">Random</SelectItem></SelectContent></Select><FormMessage /></FormItem>
+                        )} />
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader><CardTitle>Lapses</CardTitle></CardHeader>
+                      <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <FormField control={form.control} name="relearningSteps" render={({ field }) => (
+                          <FormItem><FormLabel>Relearning steps</FormLabel><FormControl><Input {...field} /></FormControl><FormDescription>Intervals for cards you forget.</FormDescription><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="minimumInterval" render={({ field }) => (
+                          <FormItem><FormLabel>Minimum interval (days)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="leechThreshold" render={({ field }) => (
+                          <FormItem><FormLabel>Leech threshold</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormDescription>Number of lapses before a card is marked as a leech.</FormDescription><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="leechAction" render={({ field }) => (
+                          <FormItem><FormLabel>Leech action</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="tagOnly">Tag Only</SelectItem><SelectItem value="suspend">Suspend Card</SelectItem></SelectContent></Select><FormMessage /></FormItem>
+                        )} />
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader><CardTitle>Burying</CardTitle><CardDescription>Control whether sibling cards are shown on the same day.</CardDescription></CardHeader>
+                      <CardContent className="space-y-6 pt-4">
+                        <FormField control={form.control} name="buryNewSiblings" render={({ field }) => (
+                          <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel>Bury new siblings</FormLabel><FormDescription>Delay other new cards from the same note until the next day.</FormDescription></div></FormItem>
+                        )} />
+                        <FormField control={form.control} name="buryReviewSiblings" render={({ field }) => (
+                          <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel>Bury review siblings</FormLabel><FormDescription>Delay other review cards from the same note until the next day.</FormDescription></div></FormItem>
+                        )} />
+                        <FormField control={form.control} name="buryInterdayLearningSiblings" render={({ field }) => (
+                          <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel>Bury interday learning siblings</FormLabel><FormDescription>Delay other learning cards (interval &gt; 1 day) from the same note until the next day.</FormDescription></div></FormItem>
+                        )} />
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader><CardTitle>Advanced</CardTitle></CardHeader>
+                      <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <FormField control={form.control} name="maximumInterval" render={({ field }) => (
+                          <FormItem><FormLabel>Maximum interval (days)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="initialEaseFactor" render={({ field }) => (
+                          <FormItem><FormLabel>Starting ease</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="easyBonus" render={({ field }) => (
+                          <FormItem><FormLabel>Easy bonus</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="intervalModifier" render={({ field }) => (
+                          <FormItem><FormLabel>Interval modifier</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="hardInterval" render={({ field }) => (
+                          <FormItem><FormLabel>Hard interval</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="newInterval" render={({ field }) => (
+                          <FormItem><FormLabel>New interval</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                         <FormField control={form.control} name="minEaseFactor" render={({ field }) => (
+                          <FormItem><FormLabel>Minimum ease</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                      </CardContent>
+                    </Card>
                   </>
                 )}
 
