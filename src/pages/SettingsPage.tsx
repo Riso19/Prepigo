@@ -34,6 +34,7 @@ import { fsrs, createEmptyCard, generatorParameters, Card as FsrsCard, Rating } 
 import { toast } from 'sonner';
 import { importAnkiFile } from '@/lib/anki-importer';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Progress } from '@/components/ui/progress';
 
 const fsrsParametersSchema = z.object({
     request_retention: z.coerce.number().min(0.7, "Must be at least 0.7").max(0.99, "Must be less than 1.0"),
