@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import Header from '@/components/Header';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { useSettings, SrsSettings, clearSettingsDB } from '@/contexts/SettingsContext';
-import { showSuccess, showError, showLoading, dismissToast } from '@/utils/toast';
+import { showSuccess, showError } from '@/utils/toast';
 import { Separator } from '@/components/ui/separator';
 import { useRef, useState } from 'react';
 import { useDecks } from '@/contexts/DecksContext';
@@ -31,6 +31,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { getAllFlashcardsFromDeck, updateFlashcard } from '@/lib/deck-utils';
 import { fsrs, createEmptyCard, generatorParameters, Card as FsrsCard, Rating } from 'ts-fsrs';
+import { toast } from 'sonner';
 
 const fsrsParametersSchema = z.object({
     request_retention: z.coerce.number().min(0.7, "Must be at least 0.7").max(0.99, "Must be less than 1.0"),
@@ -87,7 +88,7 @@ const SettingsPage = () => {
 
   const onSubmit = async (data: SrsSettings) => {
     if (data.newCardInsertionOrder !== settings.newCardInsertionOrder) {
-        const loadingToast = showLoading("Updating new card order...");
+        const loadingToast = toast.loading("Updating new card order...");
         const updateOrderRecursive = (decksToUpdate: DeckData[]): DeckData[] => {
             return decksToUpdate.map(deck => {
                 const updatedFlashcards = deck.flashcards.map(fc => {
@@ -105,21 +106,26 @@ const SettingsPage = () => {
             });
         };
         setDecks(prevDecks => updateOrderRecursive(prevDecks));
-        dismissToast(loadingToast);
-        showSuccess("New card order updated.");
+        toast.success("New card order updated.", { id: loadingToast });
     }
 
     setSettings(data);
     showSuccess("Settings saved successfully!");
 
     if (rescheduleOnSave && data.scheduler === 'fsrs') {
-      const loadingToast = showLoading("Rescheduling all cards...");
+      const toastId = toast.loading("Starting reschedule...");
       try {
+        // Allow toast to render before blocking thread
+        await new Promise(resolve => setTimeout(resolve, 50));
+
         const allFlashcards: FlashcardData[] = decks.flatMap(deck => getAllFlashcardsFromDeck(deck));
+        const totalCards = allFlashcards.length;
         const fsrsInstance = fsrs(generatorParameters(data.fsrsParameters));
         let currentDecks = decks;
+        let processedCount = 0;
 
         for (const card of allFlashcards) {
+          processedCount++;
           const reviewLogs = await getReviewLogsForCard(card.id);
           if (reviewLogs.length > 0) {
             reviewLogs.sort((a, b) => new Date(a.review).getTime() - new Date(b.review).getTime());
@@ -135,14 +141,15 @@ const SettingsPage = () => {
             };
             currentDecks = updateFlashcard(currentDecks, updatedCard);
           }
+          if (processedCount % 10 === 0 || processedCount === totalCards) {
+            toast.loading(`Rescheduling cards... (${processedCount}/${totalCards})`, { id: toastId });
+          }
         }
         setDecks(currentDecks);
-        dismissToast(loadingToast);
-        showSuccess("All cards have been rescheduled.");
+        toast.success(`Rescheduling complete! ${totalCards} cards processed.`, { id: toastId });
       } catch (error) {
         console.error("Failed to reschedule cards:", error);
-        dismissToast(loadingToast);
-        showError("An error occurred during rescheduling.");
+        toast.error("An error occurred during rescheduling.", { id: toastId });
       }
     }
   };
@@ -197,18 +204,16 @@ const SettingsPage = () => {
 
   const handleReset = async () => {
     setIsResetAlertOpen(false);
-    const loadingToast = showLoading("Resetting all data...");
+    const toastId = toast.loading("Resetting all data...");
     try {
         await clearDecksDB();
         await clearSettingsDB();
-        dismissToast(loadingToast);
-        showSuccess("All data has been reset. The app will now reload.");
+        toast.success("All data has been reset. The app will now reload.", { id: toastId });
         setTimeout(() => {
             window.location.reload();
         }, 1500);
     } catch (error) {
-        dismissToast(loadingToast);
-        showError("Failed to reset data.");
+        toast.error("Failed to reset data.", { id: toastId });
     }
   };
 
