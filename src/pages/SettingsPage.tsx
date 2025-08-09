@@ -203,8 +203,14 @@ const SettingsPage = () => {
     try {
       let importedDecks: DeckData[] | null = null;
       let importedMedia: Map<string, Blob> | null = null;
+      
+      const fileName = fileToImport.name.toLowerCase();
 
-      if (fileToImport.name.endsWith('.json')) {
+      if (fileName.endsWith('.apkg') || fileName.endsWith('.anki2') || fileName.endsWith('.anki21')) {
+        const result = await importAnkiFile(fileToImport, includeScheduling, onProgress);
+        importedDecks = result.decks;
+        importedMedia = result.media;
+      } else if (fileName.endsWith('.json')) {
         onProgress({ message: 'Reading backup file...', value: 10 });
         const content = await fileToImport.text();
         const parsedData = JSON.parse(content);
@@ -213,9 +219,7 @@ const SettingsPage = () => {
         importedDecks = validation.data;
         onProgress({ message: 'Backup file read successfully!', value: 100 });
       } else {
-        const result = await importAnkiFile(fileToImport, includeScheduling, onProgress);
-        importedDecks = result.decks;
-        importedMedia = result.media;
+        throw new Error("Unsupported file type. Please select a .json or .apkg file.");
       }
 
       if (importedDecks) {
