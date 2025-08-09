@@ -58,60 +58,101 @@ const convertAnkiSchedulingData = (
   return { sm2, isSuspended, newCardOrder: type === 0 ? due : undefined };
 };
 
+// Helper to check for the standard SQLite file header.
+function isValidSQLite(bytes: Uint8Array): boolean {
+  if (bytes.length < 16) return false;
+  const header = "SQLite format 3\0";
+  const fileHeader = new TextDecoder().decode(bytes.slice(0, 16));
+  return fileHeader === header;
+}
+
 // --- Main Importer Function ---
 export const importAnkiFile = async (file: File, includeScheduling: boolean): Promise<DeckData[]> => {
   const SQL = await initSqlJs({ locateFile: file => `https://sql.js.org/dist/${file}` });
   let dbBytes: Uint8Array;
   const mediaMap: { [key: string]: string } = {};
 
-  // 1. Extract the database file bytes
-  if (file.name.endsWith('.apkg')) {
-    const zip = await JSZip.loadAsync(file);
-    const dbFileEntry = zip.file(/collection\.anki2(1)?/)[0];
-    if (!dbFileEntry) throw new Error('Database file (collection.anki2 or .anki21) not found in .apkg archive.');
-    dbBytes = await dbFileEntry.async('uint8array');
-    
-    const mediaFile = zip.file('media');
-    if (mediaFile) {
-      try {
-        const mediaJSON = JSON.parse(await mediaFile.async('string'));
-        for (const key in mediaJSON) {
-          const fileName = mediaJSON[key];
-          const fileEntry = zip.file(key);
-          if (fileEntry) {
-            const blob = await fileEntry.async('blob');
-            const dataUrl = await new Promise<string>(resolve => {
-              const reader = new FileReader();
-              reader.onload = e => resolve(e.target!.result as string);
-              reader.readAsDataURL(blob);
-            });
-            mediaMap[fileName] = dataUrl;
+  // Step 1: Extract database bytes from the user's file
+  try {
+    if (file.name.endsWith('.apkg')) {
+      const zip = await JSZip.loadAsync(file);
+      const dbFileEntry = zip.file(/collection\.anki2(1)?/)[0];
+      if (!dbFileEntry) {
+        throw new Error('The .apkg archive does not contain a "collection.anki2" or "collection.anki21" database file.');
+      }
+      dbBytes = await dbFileEntry.async('uint8array');
+      
+      const mediaFile = zip.file('media');
+      if (mediaFile) {
+        try {
+          const mediaJSON = JSON.parse(await mediaFile.async('string'));
+          for (const key in mediaJSON) {
+            const fileName = mediaJSON[key];
+            const fileEntry = zip.file(key);
+            if (fileEntry) {
+              const blob = await fileEntry.async('blob');
+              const dataUrl = await new Promise<string>(resolve => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target!.result as string);
+                reader.readAsDataURL(blob);
+              });
+              mediaMap[fileName] = dataUrl;
+            }
           }
-        }
-      } catch (e) { console.warn("Could not parse 'media' file. Media may not be displayed.", e); }
+        } catch (e) { console.warn("Could not parse 'media' file. Media may not be displayed.", e); }
+      }
+    } else if (file.name.endsWith('.anki2') || file.name.endsWith('.anki21')) {
+      dbBytes = new Uint8Array(await file.arrayBuffer());
+    } else {
+      throw new Error(`Unsupported file type: "${file.name}". Please provide a .apkg, .anki2, or .anki21 file.`);
     }
-  } else if (file.name.endsWith('.anki2') || file.name.endsWith('.anki21')) {
-    dbBytes = new Uint8Array(await file.arrayBuffer());
-  } else {
-    throw new Error('Unsupported file type. Please provide a .apkg, .anki2, or .anki21 file.');
+  } catch (e) {
+    throw new Error(`Failed to read or extract the file. It might be corrupted. Original error: ${(e as Error).message}`);
   }
 
-  // 2. Verify and open the database
+  if (!dbBytes || dbBytes.length === 0) {
+    throw new Error("Extracted database file is empty.");
+  }
+
+  // Step 2: Validate and open the database
+  if (!isValidSQLite(dbBytes)) {
+    throw new Error("File integrity check failed: The file is not a valid SQLite database (header mismatch). It may be encrypted or corrupted.");
+  }
+
   let db: Database;
   try {
     db = new SQL.Database(dbBytes);
   } catch (e) {
-    console.error("SQLite initialization failed:", e);
-    throw new Error("Failed to open the Anki file. It may be corrupt, password-protected, or not a valid Anki database.");
+    throw new Error(`Failed to open the database, even though the header is correct. The file is likely corrupted. Original error: ${(e as Error).message}`);
   }
 
-  // 3. Extract data from the database
-  const colResult = db.exec("SELECT models, decks, crt FROM col");
-  if (!colResult?.[0]?.values?.[0]) throw new Error("Could not read collection data. The file may be corrupt.");
-  
-  const [modelsJSON, decksJSON, collectionCreationTimestamp] = colResult[0].values[0] as [string, string, number];
-  const models: { [id: string]: AnkiModel } = JSON.parse(modelsJSON);
-  const ankiDecks: { [id: string]: AnkiDeck } = JSON.parse(decksJSON);
+  // Step 3: Extract data from tables with detailed error handling
+  let models: { [id: string]: AnkiModel };
+  let ankiDecks: { [id:string]: AnkiDeck };
+  let collectionCreationTimestamp: number;
+  try {
+    const colResult = db.exec("SELECT models, decks, crt FROM col");
+    if (!colResult?.[0]?.values?.[0]) {
+      throw new Error("Could not read the main 'col' table. The database schema might be different or the table is empty.");
+    }
+    const [modelsJSON, decksJSON, crt] = colResult[0].values[0] as [string, string, number];
+    collectionCreationTimestamp = crt;
+
+    try {
+      models = JSON.parse(modelsJSON);
+    } catch (e) {
+      throw new Error(`Failed to parse 'Note Types' (models) JSON. The data is malformed. Error: ${(e as Error).message}`);
+    }
+
+    try {
+      ankiDecks = JSON.parse(decksJSON);
+    } catch (e) {
+      throw new Error(`Failed to parse 'Decks' JSON. The data is malformed. Error: ${(e as Error).message}`);
+    }
+  } catch (e) {
+    throw new Error(`An error occurred while reading data from the database tables. Original error: ${(e as Error).message}`);
+  }
+
   const notesData = db.exec("SELECT id, mid, flds, tags FROM notes")[0]?.values ?? [];
   const cardsData = db.exec("SELECT id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses FROM cards")[0]?.values ?? [];
 
