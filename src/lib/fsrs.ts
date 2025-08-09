@@ -14,7 +14,11 @@ export interface FSRSData {
 export const defaultFSRSParameters: FSRSParameters = {
   request_retention: 0.9,
   maximum_interval: 36500,
-  w: [0.40255, 1.18385, 3.173, 15.69105, 7.1949, 0.5345, 1.4604, 0.0046, 1.54575, 0.1192, 1.01925, 1.9395, 0.11, 0.29605, 2.2698, 0.2315, 2.9898, 0.51655, 0.6621],
+  w: [ // FSRS-6 parameters
+    0.212, 1.2931, 2.3065, 8.2956, 6.4133, 0.8334, 3.0194, 0.001, 
+    1.8722, 0.1666, 0.796, 1.4835, 0.0614, 0.2, 0.88, 0.01, 
+    2.05, 0.2, 0.9, 0.5, 1.0
+  ],
 };
 
 const constrain = (value: number, min: number, max: number) => {
@@ -26,7 +30,7 @@ const ivl_fn = (s: number, r: number): number => {
 };
 
 /**
- * The core FSRS-5 scheduling function.
+ * The core FSRS-6 scheduling function.
  * @param cardData The current stability and difficulty of the card.
  * @param rating The user's review rating (1-4), referred to as G.
  * @param elapsedDays The number of days since the last review.
@@ -53,13 +57,14 @@ export const fsrs = (
     d = w[4] - Math.exp(w[5]) * (G - 1) + 1;
   } else {
     if (elapsedDays < 1) {
-      // Same-day review stability update (FSRS-5 formula)
-      s = s * Math.exp(w[17] * (G - 3 + w[18]));
+      // FSRS-6 same-day review logic
+      s = s * Math.exp(w[17] * (G - 3 + w[18])) * Math.pow(s, -w[19]);
       // Difficulty does not change on same-day reviews
     } else {
       // Subsequent-day review
-      // Retrievability (from FSRS-4.5)
-      const r = Math.pow(1 + elapsedDays / (9 * s), -1);
+      // FSRS-6 Retrievability
+      const factor = Math.pow(0.9, -1 / w[20]) - 1;
+      const r = Math.pow(1 + factor * elapsedDays / s, -w[20]);
 
       // Stability update (from FSRS-4.5)
       switch (G) {
