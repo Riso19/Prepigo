@@ -8,6 +8,8 @@ const srsSchema = z.object({
   easeFactor: z.number().optional(),
   interval: z.number().optional(),
   nextReviewDate: z.string().optional(),
+  lapses: z.number().optional(),
+  isSuspended: z.boolean().optional(),
 });
 
 // --- Flashcard Schemas ---

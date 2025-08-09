@@ -25,6 +25,7 @@ const StudyPage = () => {
     const now = new Date().toISOString();
     return allFlashcards
       .filter(card => {
+        if (card.isSuspended) return false; // Filter out suspended cards
         if (!card.nextReviewDate) return true; // New cards are always due
         return card.nextReviewDate <= now;
       })
@@ -57,6 +58,8 @@ const StudyPage = () => {
       repetitions: currentCard.repetitions || 0,
       easeFactor: currentCard.easeFactor || settings.initialEaseFactor,
       interval: currentCard.interval || 0,
+      lapses: currentCard.lapses || 0,
+      isSuspended: currentCard.isSuspended || false,
     };
     const newSrsData = sm2(srsData, quality, settings);
     const now = new Date();
