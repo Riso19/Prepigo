@@ -16,7 +16,7 @@ import { Separator } from '@/components/ui/separator';
 import { useRef, useState } from 'react';
 import { useDecks } from '@/contexts/DecksContext';
 import { DeckData, decksSchema, FlashcardData } from '@/data/decks';
-import { clearDecksDB, getReviewLogsForCard } from '@/lib/idb';
+import { clearDecksDB, getReviewLogsForCard, saveMediaToDB, clearMediaDB } from '@/lib/idb';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -175,7 +175,7 @@ const SettingsPage = () => {
     if (!file) return;
 
     if (!file.name.endsWith('.json') && !file.name.endsWith('.apkg') && !file.name.endsWith('.anki2') && !file.name.endsWith('.anki21')) {
-      showError("Unsupported file type. Please select a .json, .apkg, or .anki2 file.");
+      showError("Unsupported file type. Please select a .json, .apkg, or .anki file.");
       if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
@@ -186,32 +186,51 @@ const SettingsPage = () => {
 
   const confirmImport = async () => {
     if (!fileToImport) return;
+    setIsImportAlertOpen(false);
 
-    const toastId = toast.loading("Importing file...");
+    const toastId = toast.loading("Starting import...");
+    const onProgress = (progress: { message: string; value: number }) => {
+        toast.loading(
+            <div className="flex flex-col gap-2">
+                <p>{progress.message}</p>
+                <Progress value={progress.value} className="w-full" />
+            </div>,
+            { id: toastId }
+        );
+    };
+
     try {
-      let importedData: DeckData[] | null = null;
+      let importedDecks: DeckData[] | null = null;
+      let importedMedia: Map<string, Blob> | null = null;
 
       if (fileToImport.name.endsWith('.json')) {
+        onProgress({ message: 'Reading backup file...', value: 10 });
         const content = await fileToImport.text();
         const parsedData = JSON.parse(content);
         const validation = decksSchema.safeParse(parsedData);
         if (!validation.success) throw new Error("Invalid JSON backup file format.");
-        importedData = validation.data;
-      } else if (fileToImport.name.endsWith('.apkg') || fileToImport.name.endsWith('.anki2') || fileToImport.name.endsWith('.anki21')) {
-        importedData = await importAnkiFile(fileToImport, includeScheduling);
+        importedDecks = validation.data;
+        onProgress({ message: 'Backup file read successfully!', value: 100 });
+      } else {
+        const result = await importAnkiFile(fileToImport, includeScheduling, onProgress);
+        importedDecks = result.decks;
+        importedMedia = result.media;
       }
 
-      if (importedData) {
-        setDecks(importedData);
+      if (importedDecks) {
+        onProgress({ message: 'Saving decks to database...', value: 98 });
+        setDecks(importedDecks);
+        if (importedMedia && importedMedia.size > 0) {
+            await saveMediaToDB(importedMedia);
+        }
         toast.success("Data imported successfully!", { id: toastId });
       } else {
         throw new Error("Failed to process file.");
       }
     } catch (error) {
       console.error("Import Error:", error);
-      toast.error(`Import failed: ${(error as Error).message}`, { id: toastId });
+      toast.error(`Import failed: ${(error as Error).message}`, { id: toastId, duration: 10000 });
     } finally {
-      setIsImportAlertOpen(false);
       setFileToImport(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
@@ -223,6 +242,7 @@ const SettingsPage = () => {
     try {
         await clearDecksDB();
         await clearSettingsDB();
+        await clearMediaDB();
         toast.success("All data has been reset. The app will now reload.", { id: toastId });
         setTimeout(() => {
             window.location.reload();

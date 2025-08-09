@@ -1,5 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { useResolvedHtml } from "@/hooks/use-resolved-html";
 
 interface ClozePlayerProps {
   text: string;
@@ -9,9 +10,12 @@ interface ClozePlayerProps {
 }
 
 const ClozePlayer = ({ text, description, isFlipped, onClick }: ClozePlayerProps) => {
+  const resolvedText = useResolvedHtml(text);
+  const resolvedDescription = useResolvedHtml(description);
+
   const renderClozeText = (isRevealed: boolean) => {
     const clozeRegex = /{{c(\d+)::(.+?)}}/g;
-    let processedText = text;
+    let processedText = resolvedText;
 
     if (isRevealed) {
       processedText = processedText.replace(clozeRegex, (_match, _id, content) => {
@@ -36,7 +40,7 @@ const ClozePlayer = ({ text, description, isFlipped, onClick }: ClozePlayerProps
           {isFlipped && description && (
             <>
               <Separator className="my-4" />
-              <div className="text-sm text-muted-foreground prose dark:prose-invert max-w-none text-left" dangerouslySetInnerHTML={{ __html: description }} />
+              <div className="text-sm text-muted-foreground prose dark:prose-invert max-w-none text-left" dangerouslySetInnerHTML={{ __html: resolvedDescription }} />
             </>
           )}
         </CardContent>

@@ -1,6 +1,8 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Occlusion } from "@/data/decks";
 import { useState, useRef, useEffect } from 'react';
+import { getMediaFromDB } from "@/lib/idb";
+import { useResolvedHtml } from "@/hooks/use-resolved-html";
 
 interface ImageOcclusionPlayerProps {
   imageUrl: string;
@@ -13,10 +15,34 @@ interface ImageOcclusionPlayerProps {
 
 const ImageOcclusionPlayer = ({ imageUrl, occlusions, questionOcclusionId, description, isFlipped, onClick }: ImageOcclusionPlayerProps) => {
   const [imgDimensions, setImgDimensions] = useState<{ width: number; height: number } | null>(null);
+  const [resolvedImageUrl, setResolvedImageUrl] = useState<string | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+  const resolvedDescription = useResolvedHtml(description);
 
   useEffect(() => {
-    if (imageUrl && imgRef.current) {
+    let objectUrl: string | null = null;
+    const resolveUrl = async () => {
+      if (imageUrl?.startsWith('media://')) {
+        const fileName = imageUrl.substring('media://'.length);
+        const blob = await getMediaFromDB(fileName);
+        if (blob) {
+          objectUrl = URL.createObjectURL(blob);
+          setResolvedImageUrl(objectUrl);
+        }
+      } else {
+        setResolvedImageUrl(imageUrl);
+      }
+    };
+    resolveUrl();
+    return () => {
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [imageUrl]);
+
+  useEffect(() => {
+    if (resolvedImageUrl && imgRef.current) {
       const imgElement = imgRef.current;
       const handleLoad = () => {
         setImgDimensions({ width: imgElement.naturalWidth, height: imgElement.naturalHeight });
@@ -32,14 +58,14 @@ const ImageOcclusionPlayer = ({ imageUrl, occlusions, questionOcclusionId, descr
         imgElement.removeEventListener('load', handleLoad);
       };
     }
-  }, [imageUrl]);
+  }, [resolvedImageUrl]);
 
   return (
     <div className="w-full h-auto max-w-2xl cursor-pointer" onClick={onClick}>
       <Card>
         <CardContent className="p-0">
           <div className="relative">
-            <img ref={imgRef} src={imageUrl} alt="Study card" className="w-full h-auto block rounded-t-lg" />
+            {resolvedImageUrl && <img ref={imgRef} src={resolvedImageUrl} alt="Study card" className="w-full h-auto block rounded-t-lg" />}
             {imgDimensions && (
               <svg 
                 className="absolute top-0 left-0 w-full h-full"
@@ -70,7 +96,7 @@ const ImageOcclusionPlayer = ({ imageUrl, occlusions, questionOcclusionId, descr
           {isFlipped && description && (
             <div className="p-4 border-t">
               <p className="text-sm font-semibold text-muted-foreground mb-2">Extra Info:</p>
-              <div className="prose dark:prose-invert max-w-none text-sm" dangerouslySetInnerHTML={{ __html: description }} />
+              <div className="prose dark:prose-invert max-w-none text-sm" dangerouslySetInnerHTML={{ __html: resolvedDescription }} />
             </div>
           )}
         </CardContent>

@@ -2,9 +2,10 @@ import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { DeckData, ReviewLog } from '@/data/decks';
 
 const DB_NAME = 'PrepigoDB';
-const DB_VERSION = 2; // Increment version to trigger upgrade
+const DB_VERSION = 3; // Increment version to trigger upgrade
 const DECKS_STORE = 'decks';
 const REVIEW_LOGS_STORE = 'review_logs';
+const MEDIA_STORE = 'media';
 
 interface PrepigoDB extends DBSchema {
   [DECKS_STORE]: {
@@ -15,6 +16,10 @@ interface PrepigoDB extends DBSchema {
     key: number;
     value: ReviewLog;
     indexes: { 'cardId': string };
+  };
+  [MEDIA_STORE]: {
+    key: string; // filename
+    value: { id: string; blob: Blob };
   };
 }
 
@@ -34,6 +39,11 @@ const getDb = () => {
             const store = db.createObjectStore(REVIEW_LOGS_STORE, { autoIncrement: true });
             store.createIndex('cardId', 'cardId');
           }
+        }
+        if (oldVersion < 3) {
+            if (!db.objectStoreNames.contains(MEDIA_STORE)) {
+                db.createObjectStore(MEDIA_STORE, { keyPath: 'id' });
+            }
         }
       },
     });
@@ -74,4 +84,28 @@ export const getReviewLogsForCard = async (cardId: string): Promise<ReviewLog[]>
 export const clearReviewLogsDB = async (): Promise<void> => {
   const db = await getDb();
   await db.clear(REVIEW_LOGS_STORE);
+};
+
+// --- Media Functions ---
+
+export const saveMediaToDB = async (media: Map<string, Blob>): Promise<void> => {
+    const db = await getDb();
+    const tx = db.transaction(MEDIA_STORE, 'readwrite');
+    const promises: Promise<any>[] = [];
+    for (const [id, blob] of media.entries()) {
+        promises.push(tx.store.put({ id, blob }));
+    }
+    await Promise.all(promises);
+    await tx.done;
+};
+
+export const getMediaFromDB = async (id: string): Promise<Blob | undefined> => {
+    const db = await getDb();
+    const result = await db.get(MEDIA_STORE, id);
+    return result?.blob;
+};
+
+export const clearMediaDB = async (): Promise<void> => {
+    const db = await getDb();
+    await db.clear(MEDIA_STORE);
 };

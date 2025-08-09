@@ -1,17 +1,16 @@
 import JSZip from 'jszip';
 import initSqlJs, { Database } from 'sql.js';
-import { DeckData, FlashcardData, BasicFlashcard, ClozeFlashcard, SrsData, Sm2State } from '@/data/decks';
+import { DeckData, FlashcardData, BasicFlashcard, ClozeFlashcard, SrsData, Sm2State, ImageOcclusionFlashcard } from '@/data/decks';
 
-// Per Anki schema, fields are separated by this character.
 const ANKI_FIELD_SEPARATOR = '\x1f';
 
-// --- Type definitions for raw Anki data based on schema ---
 interface AnkiModel {
   id: number;
   name: string;
   flds: { name: string; ord: number }[];
   tmpls: { name: string; qfmt: string; afmt: string; ord: number }[];
-  type: number; // 0 for standard, 1 for cloze
+  type: number;
+  css: string;
 }
 
 interface AnkiDeck {
@@ -19,16 +18,8 @@ interface AnkiDeck {
   name: string;
 }
 
-// --- Helper function to convert Anki's scheduling data ---
-const convertAnkiSchedulingData = (
-  cardRow: any[],
-  collectionCreationTimestamp: number
-): SrsData => {
-  const [
-    _id, _nid, _did, _ord, _mod, _usn,
-    type, queue, due, ivl, factor, reps, lapses
-  ] = cardRow as [number, number, number, number, number, number, number, number, number, number, number, number, number];
-
+const convertAnkiSchedulingData = (cardRow: any[], collectionCreationTimestamp: number): SrsData => {
+  const [ _id, _nid, _did, _ord, _mod, _usn, type, queue, due, ivl, factor, reps, lapses ] = cardRow as number[];
   const isSuspended = queue === -1;
   let state: Sm2State['state'];
   let dueDate: Date;
@@ -46,152 +37,124 @@ const convertAnkiSchedulingData = (
     default: state = 'new'; dueDate = now; break;
   }
 
-  const sm2: Sm2State = {
-    due: dueDate.toISOString(),
-    easinessFactor: Math.max(1.3, factor / 1000),
-    interval: ivl,
-    repetitions: reps,
-    lapses: lapses,
-    state: state,
+  return {
+    sm2: {
+      due: dueDate.toISOString(),
+      easinessFactor: Math.max(1.3, factor / 1000),
+      interval: ivl,
+      repetitions: reps,
+      lapses: lapses,
+      state: state,
+    },
+    isSuspended,
+    newCardOrder: type === 0 ? due : undefined,
   };
-
-  return { sm2, isSuspended, newCardOrder: type === 0 ? due : undefined };
 };
 
-// --- Main Importer Function ---
-export const importAnkiFile = async (file: File, includeScheduling: boolean): Promise<DeckData[]> => {
+export const importAnkiFile = async (
+  file: File,
+  includeScheduling: boolean,
+  onProgress: (progress: { message: string; value: number }) => void
+): Promise<{ decks: DeckData[]; media: Map<string, Blob> }> => {
   const SQL = await initSqlJs({ locateFile: file => `https://sql.js.org/dist/${file}` });
   let dbBytes: Uint8Array;
-  const mediaMap: { [key: string]: string } = {};
+  const mediaToStore = new Map<string, Blob>();
 
-  // Step 1: Extract database bytes from the user's file
-  try {
-    if (file.name.endsWith('.apkg')) {
-      const zip = await JSZip.loadAsync(file);
-      
-      // Find the correct database file, prioritizing newer formats
-      const dbFileEntry = 
-        zip.file('collection.anki21b') || 
-        zip.file('collection.anki21') || 
-        zip.file('collection.anki2');
+  onProgress({ message: 'Unzipping package...', value: 5 });
+  if (file.name.endsWith('.apkg')) {
+    const zip = await JSZip.loadAsync(file);
+    const dbFileEntry = zip.file('collection.anki21b') || zip.file('collection.anki21') || zip.file('collection.anki2');
+    if (!dbFileEntry) throw new Error('Database file not found in .apkg.');
+    dbBytes = await dbFileEntry.async('uint8array');
 
-      if (!dbFileEntry) {
-        throw new Error('The .apkg archive does not contain a "collection.anki2", "collection.anki21", or "collection.anki21b" database file.');
+    const mediaFile = zip.file('media');
+    if (mediaFile) {
+      const mediaJSON = JSON.parse(await mediaFile.async('string'));
+      const mediaFiles = Object.keys(mediaJSON);
+      onProgress({ message: 'Extracting media...', value: 10 });
+      for (let i = 0; i < mediaFiles.length; i++) {
+        const key = mediaFiles[i];
+        const fileName = mediaJSON[key];
+        const fileEntry = zip.file(key);
+        if (fileEntry) {
+          const blob = await fileEntry.async('blob');
+          mediaToStore.set(fileName, blob);
+        }
+        if (i % 20 === 0) {
+            onProgress({ message: `Extracting media... (${i}/${mediaFiles.length})`, value: 10 + (i / mediaFiles.length) * 20 });
+        }
       }
-      dbBytes = await dbFileEntry.async('uint8array');
-      
-      const mediaFile = zip.file('media');
-      if (mediaFile) {
-        try {
-          const mediaJSON = JSON.parse(await mediaFile.async('string'));
-          for (const key in mediaJSON) {
-            const fileName = mediaJSON[key];
-            const fileEntry = zip.file(key);
-            if (fileEntry) {
-              const blob = await fileEntry.async('blob');
-              const dataUrl = await new Promise<string>(resolve => {
-                const reader = new FileReader();
-                reader.onload = e => resolve(e.target!.result as string);
-                reader.readAsDataURL(blob);
-              });
-              mediaMap[fileName] = dataUrl;
-            }
-          }
-        } catch (e) { console.warn("Could not parse 'media' file. Media may not be displayed.", e); }
-      }
-    } else if (file.name.endsWith('.anki2') || file.name.endsWith('.anki21') || file.name.endsWith('.anki21b')) {
-      dbBytes = new Uint8Array(await file.arrayBuffer());
-    } else {
-      throw new Error(`Unsupported file type: "${file.name}". Please provide a .apkg or .anki2(1/1b) file.`);
     }
-  } catch (e) {
-    throw new Error(`Failed to read or extract the file. It might be corrupted. Original error: ${(e as Error).message}`);
+  } else {
+    dbBytes = new Uint8Array(await file.arrayBuffer());
   }
 
-  if (!dbBytes || dbBytes.length === 0) {
-    throw new Error("Extracted database file is empty.");
-  }
+  onProgress({ message: 'Loading database...', value: 30 });
+  const db = new SQL.Database(dbBytes);
 
-  // Step 2: Open the database
-  let db: Database;
-  try {
-    db = new SQL.Database(dbBytes);
-  } catch (e) {
-    throw new Error(`Failed to open the database. The file is likely corrupted or password-protected. Original error: ${(e as Error).message}`);
-  }
-
-  // Step 3: Extract data from tables with detailed error handling
-  let models: { [id: string]: AnkiModel };
-  let ankiDecks: { [id:string]: AnkiDeck };
-  let collectionCreationTimestamp: number;
-  try {
-    const colResult = db.exec("SELECT models, decks, crt FROM col");
-    if (!colResult?.[0]?.values?.[0]) {
-      throw new Error("Could not read the main 'col' table. The database schema might be different or the table is empty.");
-    }
-    const [modelsJSON, decksJSON, crt] = colResult[0].values[0] as [string, string, number];
-    collectionCreationTimestamp = crt;
-
-    try {
-      models = JSON.parse(modelsJSON);
-    } catch (e) {
-      throw new Error(`Failed to parse 'Note Types' (models) JSON. The data is malformed. Error: ${(e as Error).message}`);
-    }
-
-    try {
-      ankiDecks = JSON.parse(decksJSON);
-    } catch (e) {
-      throw new Error(`Failed to parse 'Decks' JSON. The data is malformed. Error: ${(e as Error).message}`);
-    }
-  } catch (e) {
-    throw new Error(`An error occurred while reading data from the database tables. Original error: ${(e as Error).message}`);
-  }
-
+  onProgress({ message: 'Reading tables...', value: 40 });
+  const colResult = db.exec("SELECT models, decks, crt FROM col")[0].values[0] as [string, string, number];
+  const [modelsJSON, decksJSON, crt] = colResult;
+  const models: { [id: string]: AnkiModel } = JSON.parse(modelsJSON);
+  const ankiDecks: { [id: string]: AnkiDeck } = JSON.parse(decksJSON);
   const notesData = db.exec("SELECT id, mid, flds, tags FROM notes")[0]?.values ?? [];
   const cardsData = db.exec("SELECT id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses FROM cards")[0]?.values ?? [];
 
   const replaceMediaSrc = (html: string): string => {
     if (!html) return '';
-    return html.replace(/src="([^"]+)"/g, (match, fileName) => mediaMap[fileName] ? `src="${mediaMap[fileName]}"` : match);
+    return html.replace(/src="([^"]+)"/g, (_match, fileName) => `src="media://${fileName}"`);
   };
 
-  // 4. Prepare deck structure
   const deckDataMap: Map<string, DeckData> = new Map();
   Object.values(ankiDecks).forEach(d => {
     deckDataMap.set(d.id.toString(), { id: `anki-${d.id}`, name: d.name, flashcards: [], subDecks: [] });
   });
 
-  // 5. Process each card
-  cardsData.forEach(cardRow => {
-    const [_id, noteId, deckId, ord] = cardRow as [number, number, number, number];
+  onProgress({ message: 'Processing cards...', value: 50 });
+  for (let i = 0; i < cardsData.length; i++) {
+    const cardRow = cardsData[i];
+    const [_id, noteId, deckId, ord] = cardRow as number[];
     const noteRow = notesData.find(n => n[0] === noteId);
-    if (!noteRow) return;
+    if (!noteRow) continue;
 
     const [_noteId, modelId, fieldsStr, tagsStr] = noteRow as [number, number, string, string];
     const model = models[modelId.toString()];
     const deck = deckDataMap.get(deckId.toString());
-    if (!model || !deck) return;
+    if (!model || !deck) continue;
 
     const fields = fieldsStr.split(ANKI_FIELD_SEPARATOR);
     const template = model.tmpls[ord];
-    if (!template) return;
+    if (!template) continue;
 
     let flashcard: FlashcardData | null = null;
-    if (model.type === 1 || template.qfmt.includes('{{cloze:')) {
+    const fieldMap: { [key: string]: string } = {};
+    model.flds.forEach(fld => { fieldMap[fld.name] = fields[fld.ord] ?? ''; });
+
+    if (model.name.toLowerCase().includes('image occlusion')) {
+        // Basic handling for IO, assuming specific field names
+        const imageField = fieldMap['Image'] || '';
+        const questionField = fieldMap['Header'] || '';
+        const answerField = fieldMap['Extra'] || '';
+        const imageUrl = imageField.match(/src="([^"]+)"/)?.[1];
+        if (imageUrl) {
+            flashcard = {
+                id: `anki-c-${_id}`, noteId: `anki-n-${noteId}`, type: 'basic',
+                question: replaceMediaSrc(questionField + imageField),
+                answer: replaceMediaSrc(answerField),
+            } as BasicFlashcard;
+        }
+    } else if (model.type === 1 || template.qfmt.includes('{{cloze:')) {
       flashcard = {
         id: `anki-c-${_id}`, noteId: `anki-n-${noteId}`, type: 'cloze',
-        text: replaceMediaSrc(fields[0] ?? ''),
-        description: replaceMediaSrc(fields.length > 1 ? fields[1] : ''),
+        text: replaceMediaSrc(fieldMap[model.flds[0].name] ?? ''),
+        description: replaceMediaSrc(fieldMap[model.flds[1]?.name] ?? ''),
       } as ClozeFlashcard;
     } else {
-      const fieldMap: { [key: string]: string } = {};
-      model.flds.forEach(fld => { fieldMap[fld.name] = fields[fld.ord] ?? ''; });
       let question = template.qfmt;
       let answer = template.afmt;
       for (const key in fieldMap) {
-        const regex = new RegExp(`{{${key}}}`, 'g');
-        question = question.replace(regex, fieldMap[key]);
-        answer = answer.replace(regex, fieldMap[key]);
+        question = question.replace(new RegExp(`{{${key}}}`, 'g'), fieldMap[key]);
+        answer = answer.replace(new RegExp(`{{${key}}}`, 'g'), fieldMap[key]);
       }
       answer = answer.replace(/{{FrontSide}}/g, question);
       flashcard = {
@@ -202,12 +165,15 @@ export const importAnkiFile = async (file: File, includeScheduling: boolean): Pr
 
     if (flashcard) {
       flashcard.tags = (tagsStr || '').trim().split(' ').filter(Boolean);
-      if (includeScheduling) flashcard.srs = convertAnkiSchedulingData(cardRow, collectionCreationTimestamp);
+      if (includeScheduling) flashcard.srs = convertAnkiSchedulingData(cardRow, crt);
       deck.flashcards.push(flashcard);
     }
-  });
+    if (i % 100 === 0) {
+        onProgress({ message: `Processing cards... (${i}/${cardsData.length})`, value: 50 + (i / cardsData.length) * 40 });
+    }
+  }
 
-  // 6. Assemble deck hierarchy
+  onProgress({ message: 'Finalizing decks...', value: 95 });
   const rootDecks: DeckData[] = [];
   const allDecks = Array.from(deckDataMap.values());
   allDecks.forEach(deck => {
@@ -226,5 +192,6 @@ export const importAnkiFile = async (file: File, includeScheduling: boolean): Pr
     }
   });
 
-  return rootDecks;
+  onProgress({ message: 'Import complete!', value: 100 });
+  return { decks: rootDecks, media: mediaToStore };
 };

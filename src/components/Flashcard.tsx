@@ -1,5 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { useResolvedHtml } from "@/hooks/use-resolved-html";
 
 interface FlashcardProps {
   question: string;
@@ -9,6 +10,9 @@ interface FlashcardProps {
 }
 
 const Flashcard = ({ question, answer, isFlipped, onClick }: FlashcardProps) => {
+  const resolvedQuestion = useResolvedHtml(question);
+  const resolvedAnswer = useResolvedHtml(answer);
+
   return (
     <div className="w-full h-80 [perspective:1000px] cursor-pointer" onClick={onClick}>
       <div
@@ -22,7 +26,7 @@ const Flashcard = ({ question, answer, isFlipped, onClick }: FlashcardProps) => 
           <Card className="w-full h-full flex flex-col items-center justify-center">
             <CardContent className="p-6 text-center">
               <p className="text-lg font-semibold text-muted-foreground">Question:</p>
-              <div className="mt-2 text-2xl font-bold prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: question }} />
+              <div className="mt-2 text-2xl font-bold prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: resolvedQuestion }} />
             </CardContent>
           </Card>
         </div>
@@ -31,7 +35,7 @@ const Flashcard = ({ question, answer, isFlipped, onClick }: FlashcardProps) => 
           <Card className="w-full h-full flex flex-col items-center justify-center bg-secondary">
             <CardContent className="p-6 text-center">
               <p className="text-lg font-semibold text-muted-foreground">Answer:</p>
-              <div className="mt-2 text-2xl font-bold prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: answer }} />
+              <div className="mt-2 text-2xl font-bold prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: resolvedAnswer }} />
             </CardContent>
           </Card>
         </div>
