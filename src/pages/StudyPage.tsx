@@ -4,7 +4,7 @@ import { useDecks } from "@/contexts/DecksContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { findDeckById, getAllFlashcardsFromDeck, updateFlashcard } from "@/lib/deck-utils";
 import { sm2 } from "@/lib/srs";
-import { fsrs, ReviewRating } from "@/lib/fsrs";
+import { fsrs, Rating, ReviewRating, FsrsSchedulerResult } from "@/lib/fsrs";
 import { addReviewLog } from "@/lib/idb";
 import { FlashcardData } from "@/data/decks";
 import { showSuccess } from "@/utils/toast";
@@ -24,6 +24,7 @@ const StudyPage = () => {
   
   const [completedCardIds, setCompletedCardIds] = useState<Set<string>>(new Set());
   const [isFlipped, setIsFlipped] = useState(false);
+  const [scheduledOutcomes, setScheduledOutcomes] = useState<FsrsSchedulerResult | null>(null);
 
   const sessionQueue = useMemo(() => {
     if (!deck) return [];
@@ -117,6 +118,22 @@ const StudyPage = () => {
   const initialDueCount = sessionQueue.length;
 
   useEffect(() => {
+    if (currentCard && settings.algorithm === 'fsrs') {
+      const now = new Date();
+      let elapsedDays = 0;
+      if (currentCard.lastReviewDate) {
+        const lastReview = new Date(currentCard.lastReviewDate);
+        elapsedDays = (now.getTime() - lastReview.getTime()) / (1000 * 60 * 60 * 24);
+      }
+      const cardData = { stability: currentCard.stability, difficulty: currentCard.difficulty };
+      const outcomes = fsrs(cardData, elapsedDays, settings.fsrsParameters);
+      setScheduledOutcomes(outcomes);
+    } else {
+      setScheduledOutcomes(null);
+    }
+  }, [currentCard, settings.algorithm, settings.fsrsParameters]);
+
+  useEffect(() => {
     if (initialDueCount > 0 && remainingCards.length === 0) {
       showSuccess("Congratulations! You've finished your review session.");
       navigate('/');
@@ -142,15 +159,9 @@ const StudyPage = () => {
     const allFlashcards = deck ? getAllFlashcardsFromDeck(deck) : [];
 
     if (settings.algorithm === 'fsrs') {
-      let elapsedDays = 0;
-      if (currentCard.lastReviewDate) {
-        const lastReview = new Date(currentCard.lastReviewDate);
-        elapsedDays = (now.getTime() - lastReview.getTime()) / (1000 * 60 * 60 * 24);
-      }
-
-      const cardData = { stability: currentCard.stability, difficulty: currentCard.difficulty };
-      const newSrsData = fsrs(cardData, rating, elapsedDays, settings.fsrsParameters);
-      
+      if (!scheduledOutcomes) return; // Should not happen if logic is correct
+    
+      const newSrsData = scheduledOutcomes[rating];
       const nextReviewDate = new Date(new Date().setDate(now.getDate() + newSrsData.interval));
 
       updatedCard = {
@@ -198,7 +209,7 @@ const StudyPage = () => {
     setDecks(prevDecks => updateFlashcard(prevDecks, updatedCard));
     setCompletedCardIds(prev => new Set([...prev, ...idsToComplete]));
     setIsFlipped(false);
-  }, [currentCard, setDecks, settings, getSiblings, deck]);
+  }, [currentCard, setDecks, settings, getSiblings, deck, scheduledOutcomes]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -209,10 +220,10 @@ const StudyPage = () => {
       }
       if (isFlipped) {
         switch (event.key) {
-          case '1': handleRating(1); break;
-          case '2': handleRating(2); break;
-          case '3': handleRating(3); break;
-          case '4': handleRating(4); break;
+          case '1': handleRating(Rating.Again); break;
+          case '2': handleRating(Rating.Hard); break;
+          case '3': handleRating(Rating.Good); break;
+          case '4': handleRating(Rating.Easy); break;
         }
       }
     };
@@ -273,6 +284,22 @@ const StudyPage = () => {
     }
   };
 
+  const formatInterval = (interval: number): string => {
+    if (interval < 1) {
+      const minutes = Math.round(interval * 24 * 60);
+      return `${minutes}m`;
+    }
+    if (interval < 30) {
+      return `${Math.round(interval)}d`;
+    }
+    if (interval < 365) {
+      const months = interval / 30;
+      return `${Number.isInteger(months) ? months : months.toFixed(1)}mo`;
+    }
+    const years = interval / 365;
+    return `${Number.isInteger(years) ? years : years.toFixed(1)}y`;
+  };
+
   const currentCardNumber = initialDueCount - remainingCards.length + 1;
 
   return (
@@ -289,10 +316,26 @@ const StudyPage = () => {
         <div className="w-full mt-4">
           {isFlipped ? (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full">
-              <Button onClick={() => handleRating(1)} className="relative bg-red-500 hover:bg-red-600 text-white font-bold h-16 text-base">Again<span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">1</span></Button>
-              <Button onClick={() => handleRating(2)} className="relative bg-orange-400 hover:bg-orange-500 text-white font-bold h-16 text-base">Hard<span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">2</span></Button>
-              <Button onClick={() => handleRating(3)} className="relative bg-green-500 hover:bg-green-600 text-white font-bold h-16 text-base">Good<span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">3</span></Button>
-              <Button onClick={() => handleRating(4)} className="relative bg-blue-500 hover:bg-blue-600 text-white font-bold h-16 text-base">Easy<span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">4</span></Button>
+              <Button onClick={() => handleRating(Rating.Again)} className="relative bg-red-500 hover:bg-red-600 text-white font-bold h-16 text-base flex flex-col">
+                <span>Again</span>
+                {settings.algorithm === 'fsrs' && scheduledOutcomes && <span className="text-xs font-normal opacity-80">{formatInterval(scheduledOutcomes[Rating.Again].interval)}</span>}
+                <span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">1</span>
+              </Button>
+              <Button onClick={() => handleRating(Rating.Hard)} className="relative bg-orange-400 hover:bg-orange-500 text-white font-bold h-16 text-base flex flex-col">
+                <span>Hard</span>
+                {settings.algorithm === 'fsrs' && scheduledOutcomes && <span className="text-xs font-normal opacity-80">{formatInterval(scheduledOutcomes[Rating.Hard].interval)}</span>}
+                <span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">2</span>
+              </Button>
+              <Button onClick={() => handleRating(Rating.Good)} className="relative bg-green-500 hover:bg-green-600 text-white font-bold h-16 text-base flex flex-col">
+                <span>Good</span>
+                {settings.algorithm === 'fsrs' && scheduledOutcomes && <span className="text-xs font-normal opacity-80">{formatInterval(scheduledOutcomes[Rating.Good].interval)}</span>}
+                <span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">3</span>
+              </Button>
+              <Button onClick={() => handleRating(Rating.Easy)} className="relative bg-blue-500 hover:bg-blue-600 text-white font-bold h-16 text-base flex flex-col">
+                <span>Easy</span>
+                {settings.algorithm === 'fsrs' && scheduledOutcomes && <span className="text-xs font-normal opacity-80">{formatInterval(scheduledOutcomes[Rating.Easy].interval)}</span>}
+                <span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">4</span>
+              </Button>
             </div>
           ) : (
             <Button onClick={() => setIsFlipped(true)} className="w-full h-16 text-lg relative">Show Answer<span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">Space</span></Button>

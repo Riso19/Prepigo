@@ -1,5 +1,12 @@
 export type ReviewRating = 1 | 2 | 3 | 4; // 1:Again, 2:Hard, 3:Good, 4:Easy
 
+export const Rating = {
+  Again: 1,
+  Hard: 2,
+  Good: 3,
+  Easy: 4,
+} as const;
+
 export interface FSRSParameters {
   request_retention: number;
   maximum_interval: number;
@@ -14,10 +21,10 @@ export interface FSRSData {
 export const defaultFSRSParameters: FSRSParameters = {
   request_retention: 0.9,
   maximum_interval: 36500,
-  w: [ // FSRS-6 parameters
-    0.212, 1.2931, 2.3065, 8.2956, 6.4133, 0.8334, 3.0194, 0.001, 
-    1.8722, 0.1666, 0.796, 1.4835, 0.0614, 0.2, 0.88, 0.01, 
-    2.05, 0.2, 0.9, 0.5, 1.0
+  w: [
+    0.212, 1.2931, 2.3065, 8.2956, 6.4133, 0.8334, 3.0194, 0.001, 1.8722,
+    0.1666, 0.796, 1.4835, 0.0614, 0.2, 0.88, 0.01, 2.05, 0.2, 0.9, 0.5,
+    1.0,
   ],
 };
 
@@ -30,14 +37,9 @@ const ivl_fn = (s: number, r: number): number => {
 };
 
 /**
- * The core FSRS-6 scheduling function.
- * @param cardData The current stability and difficulty of the card.
- * @param rating The user's review rating (1-4), referred to as G.
- * @param elapsedDays The number of days since the last review.
- * @param params The FSRS parameters to use.
- * @returns The new stability, difficulty, and next interval in days.
+ * The core FSRS-6 scheduling function for a single rating.
  */
-export const fsrs = (
+const fsrsForRating = (
   cardData: Partial<FSRSData>,
   rating: ReviewRating,
   elapsedDays: number,
@@ -96,4 +98,33 @@ export const fsrs = (
   const interval = constrain(ivl_fn(s, request_retention), 1, maximum_interval);
 
   return { stability: s, difficulty: d, interval };
+};
+
+export type FsrsSchedulerResult = {
+  [key in ReviewRating]: {
+    stability: number;
+    difficulty: number;
+    interval: number;
+  };
+};
+
+/**
+ * Calculates all possible next states for a card based on FSRS.
+ * Mimics the `repeat` method from the `ts-fsrs` library.
+ * @param cardData The current stability and difficulty of the card.
+ * @param elapsedDays The number of days since the last review.
+ * @param params The FSRS parameters to use.
+ * @returns An object containing the next state for each possible rating.
+ */
+export const fsrs = (
+  cardData: Partial<FSRSData>,
+  elapsedDays: number,
+  params: FSRSParameters = defaultFSRSParameters
+): FsrsSchedulerResult => {
+  return {
+    [Rating.Again]: fsrsForRating(cardData, Rating.Again, elapsedDays, params),
+    [Rating.Hard]: fsrsForRating(cardData, Rating.Hard, elapsedDays, params),
+    [Rating.Good]: fsrsForRating(cardData, Rating.Good, elapsedDays, params),
+    [Rating.Easy]: fsrsForRating(cardData, Rating.Easy, elapsedDays, params),
+  };
 };
