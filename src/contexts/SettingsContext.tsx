@@ -50,6 +50,11 @@ const saveSettingsToDB = async (settings: SrsSettings): Promise<void> => {
   await db.put(SETTINGS_STORE, settings, 'srsSettings');
 };
 
+export const clearSettingsDB = async (): Promise<void> => {
+    const db = await getSettingsDb();
+    await db.clear(SETTINGS_STORE);
+};
+
 
 // --- React Context ---
 interface SettingsContextType {

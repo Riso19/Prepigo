@@ -40,3 +40,8 @@ export const saveDecksToDB = async (decks: DeckData[]): Promise<void> => {
   await Promise.all(decks.map(deck => tx.store.put(deck)));
   await tx.done;
 };
+
+export const clearDecksDB = async (): Promise<void> => {
+  const db = await getDb();
+  await db.clear(DECKS_STORE);
+};

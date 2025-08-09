@@ -7,10 +7,26 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import Header from '@/components/Header';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { useSettings, SrsSettings } from '@/contexts/SettingsContext';
-import { showSuccess } from '@/utils/toast';
+import { useSettings, SrsSettings, clearSettingsDB } from '@/contexts/SettingsContext';
+import { showSuccess, showError, showLoading, dismissToast } from '@/utils/toast';
+import { Separator } from '@/components/ui/separator';
+import { useRef, useState } from 'react';
+import { useDecks } from '@/contexts/DecksContext';
+import { DeckData, decksSchema } from '@/data/decks';
+import { clearDecksDB } from '@/lib/idb';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const settingsSchema = z.object({
   initialEaseFactor: z.coerce.number().min(1.3, "Must be at least 1.3"),
@@ -20,6 +36,11 @@ const settingsSchema = z.object({
 
 const SettingsPage = () => {
   const { settings, setSettings, isLoading } = useSettings();
+  const { decks, setDecks } = useDecks();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isResetAlertOpen, setIsResetAlertOpen] = useState(false);
+  const [isImportAlertOpen, setIsImportAlertOpen] = useState(false);
+  const [importedDecks, setImportedDecks] = useState<DeckData[] | null>(null);
 
   const form = useForm<SrsSettings>({
     resolver: zodResolver(settingsSchema),
@@ -29,6 +50,72 @@ const SettingsPage = () => {
   const onSubmit = (data: SrsSettings) => {
     setSettings(data);
     showSuccess("Settings saved successfully!");
+  };
+
+  const handleExport = () => {
+    const dataStr = JSON.stringify(decks, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `prepigo_backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showSuccess("Data exported successfully!");
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        try {
+            const content = event.target?.result;
+            const parsedData = JSON.parse(content as string);
+            const validation = decksSchema.safeParse(parsedData);
+            if (!validation.success) {
+                console.error(validation.error);
+                showError("Invalid file format. Please select a valid backup file.");
+                return;
+            }
+            setImportedDecks(validation.data);
+            setIsImportAlertOpen(true);
+        } catch (error) {
+            showError("Failed to read or parse the file.");
+        } finally {
+            if(fileInputRef.current) fileInputRef.current.value = "";
+        }
+    };
+    reader.readAsText(file);
+  };
+
+  const confirmImport = () => {
+    if (importedDecks) {
+        setDecks(importedDecks);
+        showSuccess("Data imported successfully! Your decks have been replaced.");
+        setIsImportAlertOpen(false);
+        setImportedDecks(null);
+    }
+  };
+
+  const handleReset = async () => {
+    setIsResetAlertOpen(false);
+    const loadingToast = showLoading("Resetting all data...");
+    try {
+        await clearDecksDB();
+        await clearSettingsDB();
+        dismissToast(loadingToast);
+        showSuccess("All data has been reset. The app will now reload.");
+        setTimeout(() => {
+            window.location.reload();
+        }, 1500);
+    } catch (error) {
+        dismissToast(loadingToast);
+        showError("Failed to reset data.");
+    }
   };
 
   if (isLoading) {
@@ -93,22 +180,74 @@ const SettingsPage = () => {
                       </FormItem>
                     )}
                   />
-                  <div className="flex items-center justify-between">
-                    <Button asChild variant="outline">
-                      <Link to="/">
-                        <ArrowLeft className="mr-2 h-4 w-4" />
-                        Back to My Decks
-                      </Link>
-                    </Button>
-                    <Button type="submit">Save Settings</Button>
+                  <div className="flex justify-end">
+                    <Button type="submit">Save SRS Settings</Button>
                   </div>
                 </form>
               </Form>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">Data Management</h3>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <Button onClick={handleExport} variant="outline">Export Data</Button>
+                <Button asChild variant="outline">
+                  <Label htmlFor="import-file" className="cursor-pointer">Import Data</Label>
+                </Button>
+                <Input id="import-file" type="file" className="hidden" onChange={handleFileSelect} accept=".json" ref={fileInputRef} />
+                <Button variant="destructive" onClick={() => setIsResetAlertOpen(true)} className="sm:ml-auto">Reset All Data</Button>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Export your decks to a JSON file, or import from a backup. Resetting will restore the app to its initial state.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-start pt-4">
+              <Button asChild variant="outline">
+                <Link to="/">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back to My Decks
+                </Link>
+              </Button>
             </div>
           </CardContent>
         </Card>
       </main>
       <MadeWithDyad />
+
+      <AlertDialog open={isImportAlertOpen} onOpenChange={setIsImportAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Import Data?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will overwrite all your current decks and flashcards. This action cannot be undone. Are you sure you want to continue?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmImport}>Import</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={isResetAlertOpen} onOpenChange={setIsResetAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete all your decks, flashcards, and settings. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleReset} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Yes, reset everything
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

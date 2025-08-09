@@ -1,57 +1,81 @@
+import * as z from 'zod';
+
 export type FlashcardType = "basic" | "cloze" | "imageOcclusion";
 
-export interface BasicFlashcard {
-  id: string;
-  type: "basic";
-  question: string;
-  answer: string;
-  repetitions?: number;
-  easeFactor?: number;
-  interval?: number;
-  nextReviewDate?: string; // ISO string
-}
+// --- Base SRS fields for all card types ---
+const srsSchema = z.object({
+  repetitions: z.number().optional(),
+  easeFactor: z.number().optional(),
+  interval: z.number().optional(),
+  nextReviewDate: z.string().optional(),
+});
 
-export interface ClozeFlashcard {
-  id: string;
-  type: "cloze";
-  text: string;
-  description?: string;
-  repetitions?: number;
-  easeFactor?: number;
-  interval?: number;
-  nextReviewDate?: string; // ISO string
-}
+// --- Flashcard Schemas ---
+export const basicFlashcardSchema = z.object({
+  id: z.string(),
+  type: z.literal("basic"),
+  question: z.string(),
+  answer: z.string(),
+}).merge(srsSchema);
 
-export interface Occlusion {
-  id: number;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
+export const clozeFlashcardSchema = z.object({
+  id: z.string(),
+  type: z.literal("cloze"),
+  text: z.string(),
+  description: z.string().optional(),
+}).merge(srsSchema);
 
-export interface ImageOcclusionFlashcard {
-  id: string;
-  type: "imageOcclusion";
-  imageUrl: string; // base64
-  occlusions: Occlusion[];
-  questionOcclusionId: number; // The id of the occlusion to be guessed
-  description?: string;
-  repetitions?: number;
-  easeFactor?: number;
-  interval?: number;
-  nextReviewDate?: string; // ISO string
-}
+export const occlusionSchema = z.object({
+  id: z.number(),
+  x: z.number(),
+  y: z.number(),
+  width: z.number(),
+  height: z.number(),
+});
 
-export type FlashcardData = BasicFlashcard | ClozeFlashcard | ImageOcclusionFlashcard;
+export const imageOcclusionFlashcardSchema = z.object({
+  id: z.string(),
+  type: z.literal("imageOcclusion"),
+  imageUrl: z.string(),
+  occlusions: z.array(occlusionSchema),
+  questionOcclusionId: z.number(),
+  description: z.string().optional(),
+}).merge(srsSchema);
 
-export interface DeckData {
+export const flashcardDataSchema = z.union([
+  basicFlashcardSchema,
+  clozeFlashcardSchema,
+  imageOcclusionFlashcardSchema,
+]);
+
+// --- Deck Schema (Recursive) ---
+// Use a local interface to define the recursive shape
+interface DeckData {
   id: string;
   name: string;
   flashcards: FlashcardData[];
   subDecks?: DeckData[];
 }
 
+// Type the schema with the local interface and use z.lazy only on the recursive property
+export const deckDataSchema: z.ZodType<DeckData> = z.object({
+  id: z.string(),
+  name: z.string(),
+  flashcards: z.array(flashcardDataSchema),
+  subDecks: z.lazy(() => z.array(deckDataSchema)).optional(),
+});
+
+// --- Final Schemas for Types and Validation ---
+export type BasicFlashcard = z.infer<typeof basicFlashcardSchema>;
+export type ClozeFlashcard = z.infer<typeof clozeFlashcardSchema>;
+export type Occlusion = z.infer<typeof occlusionSchema>;
+export type ImageOcclusionFlashcard = z.infer<typeof imageOcclusionFlashcardSchema>;
+export type FlashcardData = z.infer<typeof flashcardDataSchema>;
+export type DeckData = z.infer<typeof deckDataSchema>;
+export const decksSchema = z.array(deckDataSchema);
+
+
+// --- Initial Data ---
 export const decks: DeckData[] = [
   {
     id: "d1",
