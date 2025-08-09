@@ -361,8 +361,10 @@ const StudyPage = () => {
 
   const getIntervalText = (rating: Rating) => {
     if (settings.scheduler === 'fsrs' && fsrsOutcomes) {
-      const interval = fsrsOutcomes[rating].card.scheduled_days;
-      return formatInterval(interval);
+      const nextDueDate = fsrsOutcomes[rating].card.due;
+      const now = new Date();
+      const diffDays = (nextDueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+      return formatInterval(diffDays);
     }
     if (settings.scheduler === 'sm2' && currentCard) {
         const sm2State = currentCard.srs?.sm2 || { state: 'new', repetitions: 0, easinessFactor: settings.sm2StartingEase, interval: 0 };
