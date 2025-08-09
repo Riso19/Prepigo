@@ -100,7 +100,7 @@ export const importApkg = async (file: File, includeScheduling: boolean): Promis
   const ankiDecks: { [id: string]: AnkiDeck } = JSON.parse(colData[1] as string);
   const creationTimestamp = colData[2] as number;
   
-  const notesData = db.exec("SELECT id, mid, flds FROM notes")[0]?.values || [];
+  const notesData = db.exec("SELECT id, mid, flds, tags FROM notes")[0]?.values || [];
   const cardsData = db.exec("SELECT id, nid, did, ord, type, queue, due, ivl, factor, reps, lapses FROM cards")[0]?.values || [];
 
   // 4. Process media files into data URLs
@@ -150,7 +150,7 @@ export const importApkg = async (file: File, includeScheduling: boolean): Promis
     const note = notesData.find(n => n[0] === noteId);
     if (!note) return;
 
-    const [, modelId, fieldsStr] = note as [number, number, string];
+    const [, modelId, fieldsStr, tagsStr] = note as [number, number, string, string];
     const model = models[modelId.toString()];
     if (!model) return;
 
@@ -202,9 +202,14 @@ export const importApkg = async (file: File, includeScheduling: boolean): Promis
     }
 
     if (flashcard) {
+      let tags = (tagsStr || '').trim().split(' ').filter(t => t);
       if (includeScheduling) {
         flashcard.srs = convertAnkiSrsData(cardValue, creationTimestamp);
+      } else {
+        // If not including scheduling, strip leech and marked tags
+        tags = tags.filter(t => t.toLowerCase() !== 'leech' && t.toLowerCase() !== 'marked');
       }
+      flashcard.tags = tags;
       deck.flashcards.push(flashcard);
     }
   });

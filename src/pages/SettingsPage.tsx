@@ -662,7 +662,7 @@ const SettingsPage = () => {
                 onCheckedChange={(checked) => setIncludeScheduling(!!checked)}
               />
               <Label htmlFor="include-scheduling" className="cursor-pointer">
-                Include scheduling information
+                Import learning progress
               </Label>
             </div>
           )}
