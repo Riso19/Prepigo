@@ -15,9 +15,35 @@ export const defaultFSRSParameters: FSRSParameters = {
   request_retention: 0.9,
   maximum_interval: 36500,
   w: [
-    // These are the default parameters for FSRS-4.5
-    0.4, 0.6, 2.4, 5.8, 4.93, 0.94, 0.86, 0.01, 1.49, 0.14, 0.94, 2.18,
-    0.05, 0.34, 1.26, 0.29, 2.61,
+    // Default parameters for FSRS-4.5, with FSRS-6 additions for same-day reviews.
+    // A full FSRS-6 implementation would require updating all 21 parameters.
+    // w_0 to w_3: initial stability for ratings 1-4
+    0.4, 0.6, 2.4, 5.8, 
+    // w_4: initial difficulty
+    4.93, 
+    // w_5: difficulty change factor
+    0.94, 
+    // w_6: difficulty change factor
+    0.86, 
+    // w_7: (unused in this formula)
+    0.01, 
+    // w_8 to w_10: stability update factors for "Good"
+    1.49, 0.14, 0.94, 
+    // w_11 to w_13: stability update factors for "Hard"
+    2.18, 0.05, 0.34, 
+    // w_14: "Easy" bonus
+    1.26, 
+    // w_15, w_16: stability update factors for "Again"
+    0.29, 2.61,
+    // FSRS-6 same-day review parameters
+    // w_17
+    2.5,
+    // w_18
+    -0.5,
+    // w_19
+    0.2,
+    // w_20 (unused in current formulas but included for completeness)
+    0.1,
   ],
 };
 
@@ -54,24 +80,30 @@ export const fsrs = (
     s = w[rating - 1];
     d = constrain(w[4] - (rating - 3) * w[5], 1, 10);
   } else {
-    // Update stability and difficulty for a reviewed card
-    const r = Math.pow(1 + elapsedDays / (9 * s), -1); // Retrievability
-    d = constrain(d - w[6] * (rating - 3), 1, 10);
+    if (elapsedDays < 1) {
+      // FSRS-6 same-day review logic
+      // Difficulty (d) does not change in same-day reviews.
+      const G = rating;
+      s = s * Math.exp(w[17] * (G - 3 + w[18])) * Math.pow(s, -w[19]);
+    } else {
+      // FSRS-4.5 logic for reviews after one or more days
+      const r = Math.pow(1 + elapsedDays / (9 * s), -1); // Retrievability
+      d = constrain(d - w[6] * (rating - 3), 1, 10);
 
-    switch (rating) {
-      case 1: // Again
-        s = w[15] * Math.pow(d, -w[16]);
-        break;
-      case 2: // Hard
-        s = s * (1 + Math.exp(w[11]) * (11 - d) * Math.pow(s, -w[12]) * (Math.exp((1 - r) * w[13]) - 1));
-        break;
-      case 3: // Good
-        s = s * (1 + Math.exp(w[8]) * (11 - d) * Math.pow(s, -w[9]) * (Math.exp((1 - r) * w[10]) - 1));
-        break;
-      case 4: // Easy
-        // The "Good" formula is used, with an added "Easy Bonus" multiplier
-        s = s * (1 + Math.exp(w[8]) * (11 - d) * Math.pow(s, -w[9]) * (Math.exp((1 - r) * w[10]) - 1)) * w[14];
-        break;
+      switch (rating) {
+        case 1: // Again
+          s = w[15] * Math.pow(d, -w[16]);
+          break;
+        case 2: // Hard
+          s = s * (1 + Math.exp(w[11]) * (11 - d) * Math.pow(s, -w[12]) * (Math.exp((1 - r) * w[13]) - 1));
+          break;
+        case 3: // Good
+          s = s * (1 + Math.exp(w[8]) * (11 - d) * Math.pow(s, -w[9]) * (Math.exp((1 - r) * w[10]) - 1));
+          break;
+        case 4: // Easy
+          s = s * (1 + Math.exp(w[8]) * (11 - d) * Math.pow(s, -w[9]) * (Math.exp((1 - r) * w[10]) - 1)) * w[14];
+          break;
+      }
     }
   }
 

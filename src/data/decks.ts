@@ -17,6 +17,7 @@ const srsSchema = z.object({
 
   // Common fields
   nextReviewDate: z.string().optional(),
+  lastReviewDate: z.string().optional(), // Added for FSRS accuracy
   isSuspended: z.boolean().optional(),
 });
 

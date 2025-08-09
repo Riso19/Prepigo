@@ -84,11 +84,11 @@ const StudyPage = () => {
     let updatedCard: FlashcardData;
 
     if (settings.algorithm === 'fsrs') {
-      const lastReviewDate = (currentCard.nextReviewDate && currentCard.interval)
-        ? new Date(new Date(currentCard.nextReviewDate).getTime() - currentCard.interval * 24 * 60 * 60 * 1000)
-        : now;
-      
-      const elapsedDays = (now.getTime() - lastReviewDate.getTime()) / (1000 * 60 * 60 * 24);
+      let elapsedDays = 0;
+      if (currentCard.lastReviewDate) {
+        const lastReview = new Date(currentCard.lastReviewDate);
+        elapsedDays = (now.getTime() - lastReview.getTime()) / (1000 * 60 * 60 * 24);
+      }
 
       const cardData = { stability: currentCard.stability, difficulty: currentCard.difficulty };
       const newSrsData = fsrs(cardData, rating, elapsedDays, settings.fsrsParameters);
@@ -101,6 +101,7 @@ const StudyPage = () => {
         difficulty: newSrsData.difficulty,
         interval: newSrsData.interval,
         nextReviewDate: nextReviewDate.toISOString(),
+        lastReviewDate: now.toISOString(),
         repetitions: (currentCard.repetitions || 0) + 1,
         lapses: rating === 1 ? (currentCard.lapses || 0) + 1 : currentCard.lapses,
       };
@@ -119,7 +120,7 @@ const StudyPage = () => {
       };
       const newSrsData = sm2(srsData, quality, settings);
       const nextReviewDate = new Date(new Date().setDate(now.getDate() + newSrsData.interval));
-      updatedCard = { ...currentCard, ...newSrsData, nextReviewDate: nextReviewDate.toISOString() };
+      updatedCard = { ...currentCard, ...newSrsData, nextReviewDate: nextReviewDate.toISOString(), lastReviewDate: now.toISOString() };
     }
     
     const idsToComplete = new Set<string>([currentCard.id]);
