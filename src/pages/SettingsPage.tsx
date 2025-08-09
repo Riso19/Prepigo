@@ -55,6 +55,7 @@ const settingsSchema = z.object({
   leechAction: z.enum(['tag', 'suspend']),
   newCardsPerDay: z.coerce.number().int().min(0, "Must be 0 or greater"),
   maxReviewsPerDay: z.coerce.number().int().min(0, "Must be 0 or greater"),
+  newCardInsertionOrder: z.enum(['sequential', 'random']),
   newCardGatherOrder: z.enum(['deck', 'ascending', 'descending', 'randomNotes', 'randomCards']),
   newCardSortOrder: z.enum(['gathered', 'typeThenGathered', 'typeThenRandom', 'randomNote', 'random']),
   newReviewOrder: z.enum(['mix', 'after', 'before']),
@@ -82,6 +83,41 @@ const SettingsPage = () => {
   const scheduler = form.watch('scheduler');
 
   const onSubmit = (data: SrsSettings) => {
+    if (data.newCardInsertionOrder !== settings.newCardInsertionOrder) {
+        const loadingToast = showLoading("Updating new card order...");
+        
+        const updateOrderRecursive = (decksToUpdate: DeckData[]): DeckData[] => {
+            return decksToUpdate.map(deck => {
+                const updatedFlashcards = deck.flashcards.map(fc => {
+                    const isNew = !fc.srs?.sm2 || fc.srs.sm2.state === 'new';
+                    if (isNew) {
+                        const newOrder = data.newCardInsertionOrder === 'sequential' 
+                            ? Date.now() + Math.random() // Add jitter to avoid collisions
+                            : Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+                        
+                        return {
+                            ...fc,
+                            srs: {
+                                ...fc.srs,
+                                newCardOrder: newOrder,
+                            }
+                        };
+                    }
+                    return fc;
+                });
+
+                const updatedSubDecks = deck.subDecks ? updateOrderRecursive(deck.subDecks) : [];
+
+                return { ...deck, flashcards: updatedFlashcards, subDecks: updatedSubDecks };
+            });
+        };
+        
+        setDecks(prevDecks => updateOrderRecursive(prevDecks));
+        
+        dismissToast(loadingToast);
+        showSuccess("New card order updated.");
+    }
+
     setSettings(data);
     showSuccess("Settings saved successfully!");
   };
@@ -387,6 +423,20 @@ const SettingsPage = () => {
                     <CardDescription>Control how cards are gathered, sorted, and mixed during study.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
+                    <FormField control={form.control} name="newCardInsertionOrder" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>New card insertion order</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="sequential">Sequential (order added)</SelectItem>
+                            <SelectItem value="random">Random</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>Controls how new cards are ordered when they are created.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
                     <FormField control={form.control} name="newCardGatherOrder" render={({ field }) => (
                       <FormItem>
                         <FormLabel>New card gather order</FormLabel>

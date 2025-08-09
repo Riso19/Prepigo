@@ -27,6 +27,7 @@ export interface SrsSettings {
   // General
   newCardsPerDay: number;
   maxReviewsPerDay: number;
+  newCardInsertionOrder: 'sequential' | 'random';
   newCardGatherOrder: 'deck' | 'ascending' | 'descending' | 'randomNotes' | 'randomCards';
   newCardSortOrder: 'gathered' | 'typeThenGathered' | 'typeThenRandom' | 'randomNote' | 'random';
   newReviewOrder: 'mix' | 'after' | 'before';
@@ -63,6 +64,7 @@ const defaultSettings: SrsSettings = {
   leechAction: 'tag',
   newCardsPerDay: 20,
   maxReviewsPerDay: 200,
+  newCardInsertionOrder: 'sequential',
   newCardGatherOrder: 'deck',
   newCardSortOrder: 'typeThenGathered',
   newReviewOrder: 'mix',

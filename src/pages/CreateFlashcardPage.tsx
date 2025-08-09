@@ -12,11 +12,13 @@ import ImageOcclusionEditor from "@/components/ImageOcclusionEditor";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import HtmlEditor from "@/components/HtmlEditor";
 import { showError } from "@/utils/toast";
+import { useSettings } from "@/contexts/SettingsContext";
 
 const CreateFlashcardPage = () => {
   const { deckId } = useParams<{ deckId: string }>();
   const { decks, setDecks } = useDecks();
   const navigate = useNavigate();
+  const { settings } = useSettings();
 
   const [cardType, setCardType] = useState<FlashcardType>("basic");
   
@@ -63,13 +65,35 @@ const CreateFlashcardPage = () => {
     document.execCommand('insertText', false, newCloze);
   };
 
+  const getNewCardOrder = () => {
+    return settings.newCardInsertionOrder === 'sequential'
+      ? Date.now()
+      : Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+  };
+
   const handleSaveBasic = () => {
     if (!deckId || !question || !answer) return;
     const noteId = `n${Date.now()}`;
-    const newCard: BasicFlashcard = { id: `f${Date.now()}`, noteId, type: "basic", question, answer };
+    const newOrder = getNewCardOrder();
+
+    const newCard: BasicFlashcard = { 
+      id: `f${Date.now()}`, 
+      noteId, 
+      type: "basic", 
+      question, 
+      answer,
+      srs: { newCardOrder: newOrder }
+    };
     setDecks(decks => addFlashcardToDeck(decks, deckId, newCard));
     if (createReverse) {
-      const reverseCard: BasicFlashcard = { id: `f${Date.now() + 1}`, noteId, type: "basic", question: answer, answer: question };
+      const reverseCard: BasicFlashcard = { 
+        id: `f${Date.now() + 1}`, 
+        noteId, 
+        type: "basic", 
+        question: answer, 
+        answer: question,
+        srs: { newCardOrder: newOrder + 1 } // ensure reverse card is sequential
+      };
       setDecks(decks => addFlashcardToDeck(decks, deckId, reverseCard));
     }
     navigate("/");
@@ -77,7 +101,14 @@ const CreateFlashcardPage = () => {
 
   const handleSaveCloze = () => {
     if (!deckId || !clozeText) return;
-    const newCard: ClozeFlashcard = { id: `f${Date.now()}`, noteId: `n${Date.now()}`, type: "cloze", text: clozeText, description };
+    const newCard: ClozeFlashcard = { 
+      id: `f${Date.now()}`, 
+      noteId: `n${Date.now()}`, 
+      type: "cloze", 
+      text: clozeText, 
+      description,
+      srs: { newCardOrder: getNewCardOrder() }
+    };
     setDecks(decks => addFlashcardToDeck(decks, deckId, newCard));
     navigate("/");
   };
@@ -95,6 +126,7 @@ const CreateFlashcardPage = () => {
         occlusions,
         questionOcclusionId: occ.id,
         description,
+        srs: { newCardOrder: getNewCardOrder() }
       };
       currentDecks = addFlashcardToDeck(currentDecks, deckId, newCard);
     });

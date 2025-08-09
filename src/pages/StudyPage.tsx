@@ -85,9 +85,13 @@ const StudyPage = () => {
 
     // 2. Gather New Cards
     let gatheredNew = newCards;
-    if (settings.newCardGatherOrder === 'ascending') gatheredNew.sort((a, b) => a.id.localeCompare(b.id));
-    if (settings.newCardGatherOrder === 'descending') gatheredNew.sort((a, b) => b.id.localeCompare(a.id));
-    if (settings.newCardGatherOrder === 'randomCards') gatheredNew = shuffle(gatheredNew);
+    if (settings.newCardGatherOrder === 'ascending') {
+        gatheredNew.sort((a, b) => (a.srs?.newCardOrder || 0) - (b.srs?.newCardOrder || 0));
+    } else if (settings.newCardGatherOrder === 'descending') {
+        gatheredNew.sort((a, b) => (b.srs?.newCardOrder || 0) - (a.srs?.newCardOrder || 0));
+    } else if (settings.newCardGatherOrder === 'randomCards') {
+        gatheredNew = shuffle(gatheredNew);
+    }
     // 'deck' is default, 'randomNotes' is more complex, simplified for now.
     gatheredNew = gatheredNew.slice(0, settings.newCardsPerDay);
 

@@ -37,6 +37,7 @@ const srsDataSchema = z.object({
   fsrs: fsrsStateSchema.optional(),
   sm2: sm2StateSchema.optional(),
   isSuspended: z.boolean().optional(),
+  newCardOrder: z.number().optional(),
 });
 export type SrsData = z.infer<typeof srsDataSchema>;
 
