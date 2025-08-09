@@ -94,19 +94,24 @@ const SettingsPage = () => {
   const onSubmit = (data: SrsSettings) => {
     if (data.algorithm === 'fsrs' && rescheduleOnChange) {
       const loadingToast = showLoading("Saving settings and rescheduling cards...");
-      try {
-        const rescheduled = rescheduleCards(decks, data.fsrsParameters);
-        setDecks(rescheduled);
-        setSettings(data);
-        dismissToast(loadingToast);
-        showSuccess("Settings saved and all cards have been rescheduled.");
-      } catch (e) {
-        console.error("Rescheduling failed", e);
-        dismissToast(loadingToast);
-        setSettings(data);
-        showError("Settings saved, but rescheduling failed.");
-      }
-      setRescheduleOnChange(false);
+      
+      // Use a timeout to make the heavy computation non-blocking
+      setTimeout(() => {
+        try {
+          const rescheduled = rescheduleCards(decks, data.fsrsParameters);
+          setDecks(rescheduled);
+          setSettings(data);
+          dismissToast(loadingToast);
+          showSuccess("Settings saved and all cards have been rescheduled.");
+        } catch (e) {
+          console.error("Rescheduling failed", e);
+          dismissToast(loadingToast);
+          setSettings(data);
+          showError("Settings saved, but rescheduling failed.");
+        } finally {
+          setRescheduleOnChange(false);
+        }
+      }, 50); // A small delay allows the UI to update with the toast first.
     } else {
       setSettings(data);
       showSuccess("Settings saved successfully!");
