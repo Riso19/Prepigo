@@ -4,13 +4,20 @@ export type FlashcardType = "basic" | "cloze" | "imageOcclusion";
 
 // --- Base SRS fields for all card types ---
 const srsSchema = z.object({
+  // SM-2 fields
   repetitions: z.number().optional(),
   easeFactor: z.number().optional(),
   interval: z.number().optional(),
-  nextReviewDate: z.string().optional(),
   lapses: z.number().optional(),
-  isSuspended: z.boolean().optional(),
   lastInterval: z.number().optional(),
+  
+  // FSRS fields
+  stability: z.number().optional(),
+  difficulty: z.number().optional(),
+
+  // Common fields
+  nextReviewDate: z.string().optional(),
+  isSuspended: z.boolean().optional(),
 });
 
 // --- Flashcard Schemas ---
@@ -52,21 +59,25 @@ export const flashcardDataSchema = z.union([
 ]);
 
 // --- Deck Schema (Recursive) ---
-// Define a base schema for a deck's non-recursive properties.
 const baseDeckSchema = z.object({
   id: z.string(),
   name: z.string(),
   flashcards: z.array(flashcardDataSchema),
 });
 
-// Define and export the recursive DeckData type.
 export type DeckData = z.infer<typeof baseDeckSchema> & {
   subDecks?: DeckData[];
 };
 
-// Now, create the schema that validates the recursive type.
 export const deckDataSchema: z.ZodType<DeckData> = baseDeckSchema.extend({
   subDecks: z.lazy(() => z.array(deckDataSchema)).optional(),
+});
+
+// --- Review Log Schema for FSRS ---
+export const reviewLogSchema = z.object({
+  cardId: z.string(),
+  reviewTime: z.string(), // ISO string
+  rating: z.number(), // 1 (Again), 2 (Hard), 3 (Good), 4 (Easy)
 });
 
 // --- Final Schemas for Types and Validation ---
@@ -75,6 +86,7 @@ export type ClozeFlashcard = z.infer<typeof clozeFlashcardSchema>;
 export type Occlusion = z.infer<typeof occlusionSchema>;
 export type ImageOcclusionFlashcard = z.infer<typeof imageOcclusionFlashcardSchema>;
 export type FlashcardData = z.infer<typeof flashcardDataSchema>;
+export type ReviewLog = z.infer<typeof reviewLogSchema>;
 export const decksSchema = z.array(deckDataSchema);
 
 
