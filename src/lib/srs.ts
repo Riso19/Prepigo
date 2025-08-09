@@ -6,6 +6,7 @@ export interface SrsData {
   interval: number; // in days
   lapses: number;
   isSuspended: boolean;
+  lastInterval?: number;
 }
 
 /**
@@ -35,12 +36,9 @@ function parseStepsToDays(stepsStr: string): number[] {
  * @returns The updated SrsData for the flashcard.
  */
 export function sm2(srsData: SrsData, quality: number, settings: SrsSettings): SrsData {
-  let { repetitions, easeFactor, interval, lapses, isSuspended } = srsData;
+  let { repetitions, easeFactor, interval, lapses, isSuspended, lastInterval } = srsData;
 
-  // Determine the card's state before this review
-  const isNew = interval === 0;
   const isReview = interval >= settings.graduatingInterval;
-  const isLearning = !isNew && !isReview;
 
   if (quality < 3) { // --- Incorrect Response (Again) ---
     repetitions = 0;
@@ -48,13 +46,11 @@ export function sm2(srsData: SrsData, quality: number, settings: SrsSettings): S
     
     if (isReview) {
       lapses += 1;
+      lastInterval = interval; // Store the interval before it lapsed.
     }
 
-    // Handle leech cards
-    if (lapses >= settings.leechThreshold) {
-      if (settings.leechAction === 'suspend') {
-        isSuspended = true;
-      }
+    if (lapses >= settings.leechThreshold && settings.leechAction === 'suspend') {
+      isSuspended = true;
     }
 
     const relearningSteps = parseStepsToDays(settings.relearningSteps);
@@ -62,15 +58,11 @@ export function sm2(srsData: SrsData, quality: number, settings: SrsSettings): S
 
   } else { // --- Correct Response (Hard, Good, Easy) ---
     if (isReview) {
-      // This is a standard review for a graduated card
       interval = interval * easeFactor;
-      if (quality === 3) { // Hard
-        interval *= settings.hardInterval;
-      }
-      if (quality === 5) { // Easy
-        interval *= settings.easyBonus;
-      }
+      if (quality === 3) interval *= settings.hardInterval;
+      if (quality === 5) interval *= settings.easyBonus;
       easeFactor = Math.max(settings.minEaseFactor, easeFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)));
+      lastInterval = undefined; // Successful review, so clear lastInterval.
     
     } else { // Card is in learning/relearning
       const steps = lapses > 0 ? parseStepsToDays(settings.relearningSteps) : parseStepsToDays(settings.learningSteps);
@@ -78,19 +70,24 @@ export function sm2(srsData: SrsData, quality: number, settings: SrsSettings): S
       if (repetitions < steps.length) {
         interval = steps[repetitions];
       } else {
-        // Card is graduating
-        interval = lapses > 0 ? settings.minimumInterval : settings.graduatingInterval;
+        // Card is graduating from learning or relearning
+        if (lapses > 0 && lastInterval) {
+          // Graduating from a lapse: apply newInterval penalty
+          interval = Math.max(settings.minimumInterval, lastInterval * settings.newInterval);
+          lastInterval = undefined; // Clear lastInterval after using it.
+        } else {
+          // Graduating from new
+          interval = settings.graduatingInterval;
+        }
       }
     }
     repetitions += 1;
   }
 
-  // If a new or learning card is rated "Easy", it graduates immediately
-  if ((isNew || isLearning) && quality === 5) {
+  if (quality === 5 && !isReview) {
     interval = settings.easyInterval;
   }
 
-  // Apply global interval modifier and caps
   if (isReview) {
     interval *= settings.intervalModifier;
   }
@@ -98,5 +95,5 @@ export function sm2(srsData: SrsData, quality: number, settings: SrsSettings): S
     interval = settings.maximumInterval;
   }
 
-  return { repetitions, easeFactor, interval, lapses, isSuspended };
+  return { repetitions, easeFactor, interval, lapses, isSuspended, lastInterval };
 }

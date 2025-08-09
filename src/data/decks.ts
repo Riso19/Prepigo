@@ -10,6 +10,7 @@ const srsSchema = z.object({
   nextReviewDate: z.string().optional(),
   lapses: z.number().optional(),
   isSuspended: z.boolean().optional(),
+  lastInterval: z.number().optional(),
 });
 
 // --- Flashcard Schemas ---

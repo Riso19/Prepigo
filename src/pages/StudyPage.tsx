@@ -85,6 +85,7 @@ const StudyPage = () => {
       interval: currentCard.interval || 0,
       lapses: currentCard.lapses || 0,
       isSuspended: currentCard.isSuspended || false,
+      lastInterval: currentCard.lastInterval,
     };
     const newSrsData = sm2(srsData, quality, settings);
     const now = new Date();
