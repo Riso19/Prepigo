@@ -28,6 +28,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const settingsSchema = z.object({
   // Daily Limits
@@ -45,6 +46,11 @@ const settingsSchema = z.object({
   minimumInterval: z.coerce.number().int().min(1, "Must be at least 1 day"),
   leechThreshold: z.coerce.number().int().min(1, "Must be at least 1"),
   leechAction: z.enum(['tagOnly', 'suspend']),
+
+  // Burying
+  buryNewSiblings: z.boolean(),
+  buryReviewSiblings: z.boolean(),
+  buryInterdayLearningSiblings: z.boolean(),
 
   // Advanced
   maximumInterval: z.coerce.number().int().min(1, "Must be at least 1 day"),
@@ -66,6 +72,7 @@ const SettingsPage = () => {
   const form = useForm<SrsSettings>({
     resolver: zodResolver(settingsSchema),
     values: settings,
+    defaultValues: settings,
   });
 
   const onSubmit = (data: SrsSettings) => {
@@ -158,113 +165,69 @@ const SettingsPage = () => {
               </CardHeader>
               <CardContent className="space-y-8 pt-6">
                 
-                {/* Daily Limits */}
                 <Card>
                   <CardHeader><CardTitle>Daily Limits</CardTitle></CardHeader>
                   <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <FormField control={form.control} name="newCardsPerDay" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>New cards/day</FormLabel>
-                        <FormControl><Input type="number" {...field} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
+                      <FormItem><FormLabel>New cards/day</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
                     <FormField control={form.control} name="maxReviewsPerDay" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Maximum reviews/day</FormLabel>
-                        <FormControl><Input type="number" {...field} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
+                      <FormItem><FormLabel>Maximum reviews/day</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
                   </CardContent>
                 </Card>
 
-                {/* New Cards */}
                 <Card>
                   <CardHeader><CardTitle>New Cards</CardTitle></CardHeader>
                   <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <FormField control={form.control} name="learningSteps" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Learning steps</FormLabel>
-                        <FormControl><Input {...field} /></FormControl>
-                        <FormDescription>Space-separated intervals (e.g., 10m 1d 3d).</FormDescription>
-                        <FormMessage />
-                      </FormItem>
+                      <FormItem><FormLabel>Learning steps</FormLabel><FormControl><Input {...field} /></FormControl><FormDescription>Space-separated intervals (e.g., 10m 1d 3d).</FormDescription><FormMessage /></FormItem>
                     )} />
                     <FormField control={form.control} name="graduatingInterval" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Graduating interval (days)</FormLabel>
-                        <FormControl><Input type="number" {...field} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
+                      <FormItem><FormLabel>Graduating interval (days)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
                     <FormField control={form.control} name="easyInterval" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Easy interval (days)</FormLabel>
-                        <FormControl><Input type="number" {...field} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
+                      <FormItem><FormLabel>Easy interval (days)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
                     <FormField control={form.control} name="insertionOrder" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Insertion order</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            <SelectItem value="sequential">Sequential (oldest first)</SelectItem>
-                            <SelectItem value="random">Random</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
+                      <FormItem><FormLabel>Insertion order</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="sequential">Sequential (oldest first)</SelectItem><SelectItem value="random">Random</SelectItem></SelectContent></Select><FormMessage /></FormItem>
                     )} />
                   </CardContent>
                 </Card>
 
-                {/* Lapses */}
                 <Card>
                   <CardHeader><CardTitle>Lapses</CardTitle></CardHeader>
                   <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <FormField control={form.control} name="relearningSteps" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Relearning steps</FormLabel>
-                        <FormControl><Input {...field} /></FormControl>
-                        <FormDescription>Intervals for cards you forget.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
+                      <FormItem><FormLabel>Relearning steps</FormLabel><FormControl><Input {...field} /></FormControl><FormDescription>Intervals for cards you forget.</FormDescription><FormMessage /></FormItem>
                     )} />
                     <FormField control={form.control} name="minimumInterval" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Minimum interval (days)</FormLabel>
-                        <FormControl><Input type="number" {...field} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
+                      <FormItem><FormLabel>Minimum interval (days)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
                     <FormField control={form.control} name="leechThreshold" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Leech threshold</FormLabel>
-                        <FormControl><Input type="number" {...field} /></FormControl>
-                        <FormDescription>Number of lapses before a card is marked as a leech.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
+                      <FormItem><FormLabel>Leech threshold</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormDescription>Number of lapses before a card is marked as a leech.</FormDescription><FormMessage /></FormItem>
                     )} />
                     <FormField control={form.control} name="leechAction" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Leech action</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            <SelectItem value="tagOnly">Tag Only</SelectItem>
-                            <SelectItem value="suspend">Suspend Card</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
+                      <FormItem><FormLabel>Leech action</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="tagOnly">Tag Only</SelectItem><SelectItem value="suspend">Suspend Card</SelectItem></SelectContent></Select><FormMessage /></FormItem>
                     )} />
                   </CardContent>
                 </Card>
 
-                {/* Advanced */}
+                <Card>
+                  <CardHeader><CardTitle>Burying</CardTitle><CardDescription>Control whether sibling cards are shown on the same day.</CardDescription></CardHeader>
+                  <CardContent className="space-y-6 pt-4">
+                    <FormField control={form.control} name="buryNewSiblings" render={({ field }) => (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel>Bury new siblings</FormLabel><FormDescription>Delay other new cards from the same note until the next day.</FormDescription></div></FormItem>
+                    )} />
+                    <FormField control={form.control} name="buryReviewSiblings" render={({ field }) => (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel>Bury review siblings</FormLabel><FormDescription>Delay other review cards from the same note until the next day.</FormDescription></div></FormItem>
+                    )} />
+                    <FormField control={form.control} name="buryInterdayLearningSiblings" render={({ field }) => (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel>Bury interday learning siblings</FormLabel><FormDescription>Delay other learning cards (interval &gt; 1 day) from the same note until the next day.</FormDescription></div></FormItem>
+                    )} />
+                  </CardContent>
+                </Card>
+
                 <Card>
                   <CardHeader><CardTitle>Advanced</CardTitle></CardHeader>
                   <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -295,29 +258,19 @@ const SettingsPage = () => {
 
                 <Separator />
 
-                {/* Data Management */}
                 <div className="space-y-4">
                   <h3 className="text-lg font-semibold">Data Management</h3>
                   <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                     <Button onClick={handleExport} variant="outline" type="button">Export Data</Button>
-                    <Button asChild variant="outline" type="button">
-                      <Label htmlFor="import-file" className="cursor-pointer">Import Data</Label>
-                    </Button>
+                    <Button asChild variant="outline" type="button"><Label htmlFor="import-file" className="cursor-pointer">Import Data</Label></Button>
                     <Input id="import-file" type="file" className="hidden" onChange={handleFileSelect} accept=".json" ref={fileInputRef} />
                     <Button variant="destructive" onClick={() => setIsResetAlertOpen(true)} className="sm:ml-auto" type="button">Reset All Data</Button>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    Export your decks to a JSON file, or import from a backup. Resetting will restore the app to its initial state.
-                  </p>
+                  <p className="text-sm text-muted-foreground">Export your decks, or import from a backup. Resetting restores the app to its initial state.</p>
                 </div>
 
                 <div className="flex items-center justify-start pt-4">
-                  <Button asChild variant="outline" type="button">
-                    <Link to="/">
-                      <ArrowLeft className="mr-2 h-4 w-4" />
-                      Back to My Decks
-                    </Link>
-                  </Button>
+                  <Button asChild variant="outline" type="button"><Link to="/"><ArrowLeft className="mr-2 h-4 w-4" />Back to My Decks</Link></Button>
                 </div>
               </CardContent>
             </Card>
@@ -328,33 +281,15 @@ const SettingsPage = () => {
 
       <AlertDialog open={isImportAlertOpen} onOpenChange={setIsImportAlertOpen}>
         <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Import Data?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will overwrite all your current decks and flashcards. This action cannot be undone. Are you sure you want to continue?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmImport}>Import</AlertDialogAction>
-          </AlertDialogFooter>
+          <AlertDialogHeader><AlertDialogTitle>Import Data?</AlertDialogTitle><AlertDialogDescription>This will overwrite all your current decks and flashcards. This action cannot be undone.</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={confirmImport}>Import</AlertDialogAction></AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
       <AlertDialog open={isResetAlertOpen} onOpenChange={setIsResetAlertOpen}>
         <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete all your decks, flashcards, and settings. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleReset} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Yes, reset everything
-            </AlertDialogAction>
-          </AlertDialogFooter>
+          <AlertDialogHeader><AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle><AlertDialogDescription>This will permanently delete all your decks, flashcards, and settings. This action cannot be undone.</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleReset} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Yes, reset everything</AlertDialogAction></AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>

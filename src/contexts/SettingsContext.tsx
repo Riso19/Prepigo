@@ -22,6 +22,11 @@ export interface SrsSettings {
   leechThreshold: number;
   leechAction: 'tagOnly' | 'suspend';
 
+  // Burying
+  buryNewSiblings: boolean;
+  buryReviewSiblings: boolean;
+  buryInterdayLearningSiblings: boolean;
+
   // Advanced
   maximumInterval: number;
   initialEaseFactor: number; // Corresponds to "Starting Ease"
@@ -55,6 +60,11 @@ const defaultSettings: SrsSettings = {
   minimumInterval: 1,
   leechThreshold: 8,
   leechAction: 'tagOnly',
+
+  // Burying
+  buryNewSiblings: true,
+  buryReviewSiblings: true,
+  buryInterdayLearningSiblings: true,
 
   // Advanced
   maximumInterval: 365,
