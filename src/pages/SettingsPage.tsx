@@ -294,7 +294,7 @@ const SettingsPage = () => {
                         <div className="space-y-0.5">
                           <FormLabel>Reschedule cards on change</FormLabel>
                           <FormDescription>
-                            Update the schedule for all cards based on these parameters when you save.
+                            Recalculates all card schedules. This can cause many cards to become due. Use sparingly and create a backup first.
                           </FormDescription>
                         </div>
                         <FormControl>
