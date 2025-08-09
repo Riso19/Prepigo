@@ -6,9 +6,30 @@ const DB_VERSION = 1;
 const SETTINGS_STORE = 'settings';
 
 export interface SrsSettings {
-  initialEaseFactor: number;
-  learningSteps: string; // Comma-separated days, e.g., "1, 3"
-  minEaseFactor: number;
+  // Daily Limits
+  newCardsPerDay: number;
+  maxReviewsPerDay: number;
+
+  // New Cards
+  learningSteps: string;
+  graduatingInterval: number;
+  easyInterval: number;
+  insertionOrder: 'sequential' | 'random';
+
+  // Lapses
+  relearningSteps: string;
+  minimumInterval: number;
+  leechThreshold: number;
+  leechAction: 'tagOnly' | 'suspend';
+
+  // Advanced
+  maximumInterval: number;
+  initialEaseFactor: number; // Corresponds to "Starting Ease"
+  easyBonus: number;
+  intervalModifier: number;
+  hardInterval: number;
+  newInterval: number;
+  minEaseFactor: number; // Not in the list, but part of original SM-2
 }
 
 interface SettingsDB extends DBSchema {
@@ -19,8 +40,29 @@ interface SettingsDB extends DBSchema {
 }
 
 const defaultSettings: SrsSettings = {
+  // Daily Limits
+  newCardsPerDay: 20,
+  maxReviewsPerDay: 200,
+
+  // New Cards
+  learningSteps: "10m 1d",
+  graduatingInterval: 7,
+  easyInterval: 10,
+  insertionOrder: 'sequential',
+
+  // Lapses
+  relearningSteps: "10m",
+  minimumInterval: 1,
+  leechThreshold: 8,
+  leechAction: 'tagOnly',
+
+  // Advanced
+  maximumInterval: 365,
   initialEaseFactor: 2.5,
-  learningSteps: "1, 6", // Default intervals: 1 day, then 6 days
+  easyBonus: 1.3,
+  intervalModifier: 1.0,
+  hardInterval: 1.2,
+  newInterval: 0.6,
   minEaseFactor: 1.3,
 };
 
@@ -42,7 +84,7 @@ const getSettingsDb = () => {
 const getSettingsFromDB = async (): Promise<SrsSettings | null> => {
   const db = await getSettingsDb();
   const settings = await db.get(SETTINGS_STORE, 'srsSettings');
-  return settings ? settings : null;
+  return settings ? { ...defaultSettings, ...settings } : null;
 };
 
 const saveSettingsToDB = async (settings: SrsSettings): Promise<void> => {
