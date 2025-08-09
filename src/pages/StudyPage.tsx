@@ -4,6 +4,8 @@ import { useDecks } from "@/contexts/DecksContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { findDeckById, getAllFlashcardsFromDeck, updateFlashcard } from "@/lib/deck-utils";
 import { sm2 } from "@/lib/srs";
+import { fsrs, ReviewRating } from "@/lib/fsrs";
+import { addReviewLog } from "@/lib/idb";
 import { FlashcardData } from "@/data/decks";
 import { showSuccess } from "@/utils/toast";
 import Flashcard from "@/components/Flashcard";
@@ -33,7 +35,7 @@ const StudyPage = () => {
     const newCards = due.filter(c => !c.interval || c.interval === 0);
     const reviewCards = due.filter(c => c.interval && c.interval > 0);
 
-    if (settings.insertionOrder === 'sequential') {
+    if (settings.insertionOrder === 'sequential' && settings.algorithm === 'sm2') {
       newCards.sort((a, b) => a.id.localeCompare(b.id));
     } else {
       newCards.sort(() => Math.random() - 0.5);
@@ -75,34 +77,64 @@ const StudyPage = () => {
     return [];
   }, []);
 
-  const handleRating = useCallback((rating: number) => {
+  const handleRating = useCallback(async (rating: ReviewRating) => {
     if (!currentCard) return;
 
-    const quality = rating === 1 ? 0 : rating + 1;
-    const srsData = {
-      repetitions: currentCard.repetitions || 0,
-      easeFactor: currentCard.easeFactor || settings.initialEaseFactor,
-      interval: currentCard.interval || 0,
-      lapses: currentCard.lapses || 0,
-      isSuspended: currentCard.isSuspended || false,
-      lastInterval: currentCard.lastInterval,
-    };
-    const newSrsData = sm2(srsData, quality, settings);
     const now = new Date();
-    const nextReviewDate = new Date(new Date().setDate(now.getDate() + newSrsData.interval));
-    const updatedCard: FlashcardData = { ...currentCard, ...newSrsData, nextReviewDate: nextReviewDate.toISOString() };
+    let updatedCard: FlashcardData;
+
+    if (settings.algorithm === 'fsrs') {
+      const lastReviewDate = (currentCard.nextReviewDate && currentCard.interval)
+        ? new Date(new Date(currentCard.nextReviewDate).getTime() - currentCard.interval * 24 * 60 * 60 * 1000)
+        : now;
+      
+      const elapsedDays = (now.getTime() - lastReviewDate.getTime()) / (1000 * 60 * 60 * 24);
+
+      const cardData = { stability: currentCard.stability, difficulty: currentCard.difficulty };
+      const newSrsData = fsrs(cardData, rating, elapsedDays, settings.fsrsParameters);
+      
+      const nextReviewDate = new Date(new Date().setDate(now.getDate() + newSrsData.interval));
+
+      updatedCard = {
+        ...currentCard,
+        stability: newSrsData.stability,
+        difficulty: newSrsData.difficulty,
+        interval: newSrsData.interval,
+        nextReviewDate: nextReviewDate.toISOString(),
+        repetitions: (currentCard.repetitions || 0) + 1,
+        lapses: rating === 1 ? (currentCard.lapses || 0) + 1 : currentCard.lapses,
+      };
+
+      await addReviewLog({ cardId: currentCard.id, reviewTime: new Date().toISOString(), rating });
+
+    } else { // SM-2 Logic
+      const quality = rating === 1 ? 0 : rating + 1;
+      const srsData = {
+        repetitions: currentCard.repetitions || 0,
+        easeFactor: currentCard.easeFactor || settings.initialEaseFactor,
+        interval: currentCard.interval || 0,
+        lapses: currentCard.lapses || 0,
+        isSuspended: currentCard.isSuspended || false,
+        lastInterval: currentCard.lastInterval,
+      };
+      const newSrsData = sm2(srsData, quality, settings);
+      const nextReviewDate = new Date(new Date().setDate(now.getDate() + newSrsData.interval));
+      updatedCard = { ...currentCard, ...newSrsData, nextReviewDate: nextReviewDate.toISOString() };
+    }
     
     const idsToComplete = new Set<string>([currentCard.id]);
-    const siblings = getSiblings(currentCard, allFlashcards);
-    siblings.forEach(sibling => {
-      const isNew = !sibling.interval || sibling.interval === 0;
-      const isReview = sibling.interval && sibling.interval >= settings.graduatingInterval;
-      const isInterdayLearning = sibling.interval && sibling.interval >= 1 && sibling.interval < settings.graduatingInterval;
+    if (settings.algorithm === 'sm2') {
+        const siblings = getSiblings(currentCard, allFlashcards);
+        siblings.forEach(sibling => {
+            const isNew = !sibling.interval || sibling.interval === 0;
+            const isReview = sibling.interval && sibling.interval >= settings.graduatingInterval;
+            const isInterdayLearning = sibling.interval && sibling.interval >= 1 && sibling.interval < settings.graduatingInterval;
 
-      if (isNew && settings.buryNewSiblings) idsToComplete.add(sibling.id);
-      if (isReview && settings.buryReviewSiblings) idsToComplete.add(sibling.id);
-      if (isInterdayLearning && settings.buryInterdayLearningSiblings) idsToComplete.add(sibling.id);
-    });
+            if (isNew && settings.buryNewSiblings) idsToComplete.add(sibling.id);
+            if (isReview && settings.buryReviewSiblings) idsToComplete.add(sibling.id);
+            if (isInterdayLearning && settings.buryInterdayLearningSiblings) idsToComplete.add(sibling.id);
+        });
+    }
 
     setDecks(prevDecks => updateFlashcard(prevDecks, updatedCard));
     setCompletedCardIds(prev => new Set([...prev, ...idsToComplete]));
