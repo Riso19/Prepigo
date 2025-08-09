@@ -14,6 +14,7 @@ const srsSchema = z.object({
   lapses: z.number().optional(),
   state: z.nativeEnum(State).optional(),
   last_review: z.string().optional(),
+  learning_steps: z.number().optional(), // Added for full ts-fsrs compatibility
   isSuspended: z.boolean().optional(),
 });
 
@@ -79,9 +80,10 @@ export const reviewLogSchema = z.object({
   stability: z.number(),
   difficulty: z.number(),
   elapsed_days: z.number(),
-  last_elapsed_days: z.number(),
+  last_elapsed_days: z.number(), // Added for full ts-fsrs compatibility
   scheduled_days: z.number(),
   review: z.string(),
+  learning_steps: z.number().optional(), // Added for full ts-fsrs compatibility
 });
 
 // --- Final Schemas for Types and Validation ---
