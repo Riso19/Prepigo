@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import initSqlJs from 'sql.js';
-import { DeckData, FlashcardData, BasicFlashcard, ClozeFlashcard } from '@/data/decks';
+import { DeckData, FlashcardData, BasicFlashcard, ClozeFlashcard, SrsData, Sm2State } from '@/data/decks';
 
 // Anki's field separator
 const ANKI_FIELD_SEPARATOR = '\x1f';
@@ -18,6 +18,64 @@ interface AnkiDeck {
   id: number;
   name: string;
 }
+
+const convertAnkiSrsData = (
+  cardValue: any[],
+  creationTimestamp: number
+): SrsData => {
+  const [_cardId, _noteId, _deckId, _ord, cardType, queue, due, ivl, factor, reps, lapses] = cardValue as [number, number, number, number, number, number, number, number, number, number, number];
+
+  const isSuspended = queue === -1;
+
+  let state: Sm2State['state'];
+  let dueDate: Date;
+  const now = new Date();
+
+  switch (cardType) {
+    case 0: // new
+      state = 'new';
+      dueDate = now;
+      break;
+    case 1: // learning
+      state = 'learning';
+      // Anki's learning `due` is a timestamp. Let's check if it's seconds or ms.
+      // If `due` is less than the timestamp for the year 2000 in ms, it's probably seconds.
+      dueDate = new Date(due < 946684800000 ? due * 1000 : due);
+      break;
+    case 2: // review
+      state = 'review';
+      // `due` is days since collection creation date
+      const creationDate = new Date(creationTimestamp * 1000);
+      creationDate.setHours(0, 0, 0, 0); // Start of the day
+      dueDate = new Date(creationDate);
+      dueDate.setDate(creationDate.getDate() + due);
+      break;
+    case 3: // relearning
+      state = 'relearning';
+      dueDate = new Date(due < 946684800000 ? due * 1000 : due);
+      break;
+    default:
+      state = 'new';
+      dueDate = now;
+      break;
+  }
+
+  const sm2: Sm2State = {
+    due: dueDate.toISOString(),
+    easinessFactor: Math.max(1.3, factor / 1000),
+    interval: ivl,
+    repetitions: reps,
+    lapses: lapses,
+    state: state,
+  };
+
+  return {
+    sm2,
+    isSuspended,
+    newCardOrder: cardType === 0 ? due : undefined,
+  };
+};
+
 
 // --- Main Importer Function ---
 export const importApkg = async (file: File): Promise<DeckData[]> => {
@@ -37,12 +95,13 @@ export const importApkg = async (file: File): Promise<DeckData[]> => {
   const db = new SQL.Database(dbFile);
 
   // 3. Extract data from the database
-  const colData = db.exec("SELECT models, decks FROM col")[0].values[0];
+  const colData = db.exec("SELECT models, decks, crt FROM col")[0].values[0];
   const models: { [id: string]: AnkiModel } = JSON.parse(colData[0] as string);
   const ankiDecks: { [id: string]: AnkiDeck } = JSON.parse(colData[1] as string);
+  const creationTimestamp = colData[2] as number;
   
   const notesData = db.exec("SELECT id, mid, flds FROM notes")[0]?.values || [];
-  const cardsData = db.exec("SELECT id, nid, did, ord FROM cards")[0]?.values || [];
+  const cardsData = db.exec("SELECT id, nid, did, ord, type, queue, due, ivl, factor, reps, lapses FROM cards")[0]?.values || [];
 
   // 4. Process media files into data URLs
   const mediaMap: { [key: string]: string } = {};
@@ -143,6 +202,7 @@ export const importApkg = async (file: File): Promise<DeckData[]> => {
     }
 
     if (flashcard) {
+      flashcard.srs = convertAnkiSrsData(cardValue, creationTimestamp);
       deck.flashcards.push(flashcard);
     }
   });
