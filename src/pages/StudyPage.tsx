@@ -225,7 +225,8 @@ const StudyPage = () => {
           nextSm2State.learning_step = 0;
           const learningSteps = parseSteps(settings.learningSteps);
           const nextDue = new Date();
-          nextDue.setMinutes(nextDue.getMinutes() + learningSteps[0]);
+          const firstStep = learningSteps.length > 0 ? learningSteps[0] : 1;
+          nextDue.setMinutes(nextDue.getMinutes() + firstStep);
           nextSm2State.due = nextDue.toISOString();
         }
       } else if (isReview) {
@@ -379,22 +380,31 @@ const StudyPage = () => {
             };
             if (rating === Rating.Again) {
               const relearningSteps = parseSteps(settings.relearningSteps);
-              return relearningSteps.length > 0 ? `${relearningSteps[0]}m` : `${settings.sm2MinimumInterval}d`;
+              const firstStepMinutes = relearningSteps.length > 0 ? relearningSteps[0] : 1;
+              return formatInterval(firstStepMinutes / 1440);
             }
             const result = sm2(qualityMap[rating], sm2Params, sm2State);
             return formatInterval(result.interval);
-        } else {
+        } else { // This is for 'new', 'learning', 'relearning' states
             const steps = cardState === 'relearning' ? parseSteps(settings.relearningSteps) : parseSteps(settings.learningSteps);
             const currentStep = sm2State.learning_step || 0;
-            if (rating === Rating.Again) return `${steps[0]}m`;
-            if (rating === Rating.Easy) return `${settings.sm2EasyInterval}d`;
-            if (rating === Rating.Good) {
-                const nextStep = currentStep + 1;
-                if (nextStep >= steps.length) {
-                  const graduationInterval = cardState === 'relearning' ? sm2State.interval : settings.sm2GraduatingInterval;
-                  return `${graduationInterval}d`;
+
+            if (rating === Rating.Again) {
+                const firstStepMinutes = steps.length > 0 ? steps[0] : 1;
+                return formatInterval(firstStepMinutes / 1440);
+            }
+            if (rating === Rating.Easy) {
+                return formatInterval(settings.sm2EasyInterval);
+            }
+            if (rating === Rating.Good || rating === Rating.Hard) {
+                const nextStepIndex = currentStep + 1;
+                if (nextStepIndex >= steps.length) {
+                    // Card graduates
+                    const graduationInterval = cardState === 'relearning' ? sm2State.interval : settings.sm2GraduatingInterval;
+                    return formatInterval(graduationInterval);
                 }
-                return `${steps[nextStep]}m`;
+                const nextStepMinutes = steps[nextStepIndex];
+                return formatInterval(nextStepMinutes / 1440);
             }
         }
     }
