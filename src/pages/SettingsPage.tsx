@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,8 +15,8 @@ import { showSuccess, showError, showLoading, dismissToast } from '@/utils/toast
 import { Separator } from '@/components/ui/separator';
 import { useRef, useState } from 'react';
 import { useDecks } from '@/contexts/DecksContext';
-import { DeckData, decksSchema } from '@/data/decks';
-import { clearDecksDB } from '@/lib/idb';
+import { DeckData, decksSchema, FlashcardData } from '@/data/decks';
+import { clearDecksDB, getReviewLogsForCard } from '@/lib/idb';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,6 +29,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { getAllFlashcardsFromDeck, updateFlashcard } from '@/lib/deck-utils';
+import { fsrs, createEmptyCard, generatorParameters, Card as FsrsCard, Rating } from 'ts-fsrs';
 
 const fsrsParametersSchema = z.object({
     request_retention: z.coerce.number().min(0.7, "Must be at least 0.7").max(0.99, "Must be less than 1.0"),
@@ -73,6 +75,7 @@ const SettingsPage = () => {
   const [isResetAlertOpen, setIsResetAlertOpen] = useState(false);
   const [isImportAlertOpen, setIsImportAlertOpen] = useState(false);
   const [importedDecks, setImportedDecks] = useState<DeckData[] | null>(null);
+  const [rescheduleOnSave, setRescheduleOnSave] = useState(false);
 
   const form = useForm<SrsSettings>({
     resolver: zodResolver(settingsSchema),
@@ -82,44 +85,66 @@ const SettingsPage = () => {
 
   const scheduler = form.watch('scheduler');
 
-  const onSubmit = (data: SrsSettings) => {
+  const onSubmit = async (data: SrsSettings) => {
     if (data.newCardInsertionOrder !== settings.newCardInsertionOrder) {
         const loadingToast = showLoading("Updating new card order...");
-        
         const updateOrderRecursive = (decksToUpdate: DeckData[]): DeckData[] => {
             return decksToUpdate.map(deck => {
                 const updatedFlashcards = deck.flashcards.map(fc => {
                     const isNew = !fc.srs?.sm2 || fc.srs.sm2.state === 'new';
                     if (isNew) {
                         const newOrder = data.newCardInsertionOrder === 'sequential' 
-                            ? Date.now() + Math.random() // Add jitter to avoid collisions
+                            ? Date.now() + Math.random()
                             : Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
-                        
-                        return {
-                            ...fc,
-                            srs: {
-                                ...fc.srs,
-                                newCardOrder: newOrder,
-                            }
-                        };
+                        return { ...fc, srs: { ...fc.srs, newCardOrder: newOrder } };
                     }
                     return fc;
                 });
-
                 const updatedSubDecks = deck.subDecks ? updateOrderRecursive(deck.subDecks) : [];
-
                 return { ...deck, flashcards: updatedFlashcards, subDecks: updatedSubDecks };
             });
         };
-        
         setDecks(prevDecks => updateOrderRecursive(prevDecks));
-        
         dismissToast(loadingToast);
         showSuccess("New card order updated.");
     }
 
     setSettings(data);
     showSuccess("Settings saved successfully!");
+
+    if (rescheduleOnSave && data.scheduler === 'fsrs') {
+      const loadingToast = showLoading("Rescheduling all cards...");
+      try {
+        const allFlashcards: FlashcardData[] = decks.flatMap(deck => getAllFlashcardsFromDeck(deck));
+        const fsrsInstance = fsrs(generatorParameters(data.fsrsParameters));
+        let currentDecks = decks;
+
+        for (const card of allFlashcards) {
+          const reviewLogs = await getReviewLogsForCard(card.id);
+          if (reviewLogs.length > 0) {
+            reviewLogs.sort((a, b) => new Date(a.review).getTime() - new Date(b.review).getTime());
+            let fsrsCard: FsrsCard = createEmptyCard(new Date(reviewLogs[0].review));
+            for (const log of reviewLogs) {
+              const rating = log.rating as Rating;
+              const schedulingResult = fsrsInstance.repeat(fsrsCard, new Date(log.review));
+              fsrsCard = schedulingResult[rating].card;
+            }
+            const updatedCard: FlashcardData = {
+              ...card,
+              srs: { ...card.srs, fsrs: { ...fsrsCard, due: fsrsCard.due.toISOString(), last_review: fsrsCard.last_review?.toISOString() } }
+            };
+            currentDecks = updateFlashcard(currentDecks, updatedCard);
+          }
+        }
+        setDecks(currentDecks);
+        dismissToast(loadingToast);
+        showSuccess("All cards have been rescheduled.");
+      } catch (error) {
+        console.error("Failed to reschedule cards:", error);
+        dismissToast(loadingToast);
+        showError("An error occurred during rescheduling.");
+      }
+    }
   };
 
   const handleExport = () => {
@@ -139,7 +164,6 @@ const SettingsPage = () => {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = (event) => {
         try {
@@ -265,6 +289,22 @@ const SettingsPage = () => {
                         </FormItem>
                       )} />
                     </CardContent>
+                    <CardFooter>
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm w-full">
+                        <div className="space-y-0.5">
+                          <FormLabel>Reschedule cards on change</FormLabel>
+                          <FormDescription>
+                            Update the schedule for all cards based on these parameters when you save.
+                          </FormDescription>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={rescheduleOnSave}
+                            onCheckedChange={setRescheduleOnSave}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    </CardFooter>
                   </Card>
                 )}
 

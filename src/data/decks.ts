@@ -16,6 +16,7 @@ const fsrsStateSchema = z.object({
   lapses: z.number(),
   state: z.nativeEnum(State),
   last_review: z.string().optional(),
+  learning_steps: z.number().optional(),
 });
 export type FsrsState = z.infer<typeof fsrsStateSchema>;
 
@@ -28,7 +29,7 @@ const sm2StateSchema = z.object({
   lapses: z.number().optional(),
   state: z.enum(['new', 'learning', 'review', 'relearning']).optional(),
   last_review: z.string().optional(),
-  learningStep: z.number().optional(),
+  learning_step: z.number().optional(),
 });
 export type Sm2State = z.infer<typeof sm2StateSchema>;
 
