@@ -7,6 +7,7 @@ const DB_VERSION = 1;
 const SETTINGS_STORE = 'settings';
 
 export interface SrsSettings {
+  scheduler: 'fsrs' | 'sm2';
   fsrsParameters: FSRSParameters;
   newCardsPerDay: number;
   maxReviewsPerDay: number;
@@ -25,6 +26,7 @@ interface SettingsDB extends DBSchema {
 }
 
 const defaultSettings: SrsSettings = {
+  scheduler: 'fsrs',
   fsrsParameters: generatorParameters(),
   newCardsPerDay: 20,
   maxReviewsPerDay: 200,

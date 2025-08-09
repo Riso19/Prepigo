@@ -36,6 +36,7 @@ const fsrsParametersSchema = z.object({
 });
 
 const settingsSchema = z.object({
+  scheduler: z.enum(['fsrs', 'sm2']),
   fsrsParameters: fsrsParametersSchema,
   newCardsPerDay: z.coerce.number().int().min(0, "Must be 0 or greater"),
   maxReviewsPerDay: z.coerce.number().int().min(0, "Must be 0 or greater"),
@@ -145,16 +146,51 @@ const SettingsPage = () => {
               <CardHeader>
                 <CardTitle className="text-2xl">Settings</CardTitle>
                 <CardDescription>
-                  Configure your study experience with the FSRS algorithm.
+                  Configure your study experience.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-8 pt-6">
                 
                 <Card>
                   <CardHeader>
+                    <CardTitle>Spaced Repetition Algorithm</CardTitle>
+                    <CardDescription>
+                      Choose the algorithm used for scheduling card reviews.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <FormField
+                      control={form.control}
+                      name="scheduler"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Scheduler</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select a scheduler" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="fsrs">FSRS (Recommended)</SelectItem>
+                              <SelectItem value="sm2">SM-2 (Legacy)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormDescription>
+                            FSRS is a modern, evidence-based algorithm. SM-2 is a classic, simpler alternative.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
                     <CardTitle>FSRS Parameters</CardTitle>
                     <CardDescription>
-                      Configure the FSRS algorithm. It's recommended to keep the defaults unless you know what you're doing.
+                      These settings only apply if FSRS is selected as the scheduler. It's recommended to keep the defaults unless you know what you're doing.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
