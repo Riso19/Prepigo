@@ -14,37 +14,7 @@ export interface FSRSData {
 export const defaultFSRSParameters: FSRSParameters = {
   request_retention: 0.9,
   maximum_interval: 36500,
-  w: [
-    // Default parameters for FSRS-4.5, with FSRS-6 additions for same-day reviews.
-    // A full FSRS-6 implementation would require updating all 21 parameters.
-    // w_0 to w_3: initial stability for ratings 1-4
-    0.4, 0.6, 2.4, 5.8, 
-    // w_4: initial difficulty
-    4.93, 
-    // w_5: difficulty change factor
-    0.94, 
-    // w_6: difficulty change factor
-    0.86, 
-    // w_7: (unused in this formula)
-    0.01, 
-    // w_8 to w_10: stability update factors for "Good"
-    1.49, 0.14, 0.94, 
-    // w_11 to w_13: stability update factors for "Hard"
-    2.18, 0.05, 0.34, 
-    // w_14: "Easy" bonus
-    1.26, 
-    // w_15, w_16: stability update factors for "Again"
-    0.29, 2.61,
-    // FSRS-6 same-day review parameters
-    // w_17
-    2.5,
-    // w_18
-    -0.5,
-    // w_19
-    0.2,
-    // w_20 (unused in current formulas but included for completeness)
-    0.1,
-  ],
+  w: [0.40255, 1.18385, 3.173, 15.69105, 7.1949, 0.5345, 1.4604, 0.0046, 1.54575, 0.1192, 1.01925, 1.9395, 0.11, 0.29605, 2.2698, 0.2315, 2.9898, 0.51655, 0.6621],
 };
 
 const constrain = (value: number, min: number, max: number) => {
@@ -56,9 +26,9 @@ const ivl_fn = (s: number, r: number): number => {
 };
 
 /**
- * The core FSRS scheduling function.
+ * The core FSRS-5 scheduling function.
  * @param cardData The current stability and difficulty of the card.
- * @param rating The user's review rating (1-4).
+ * @param rating The user's review rating (1-4), referred to as G.
  * @param elapsedDays The number of days since the last review.
  * @param params The FSRS parameters to use.
  * @returns The new stability, difficulty, and next interval in days.
@@ -71,26 +41,28 @@ export const fsrs = (
 ): { stability: number; difficulty: number; interval: number } => {
   const { w, request_retention, maximum_interval } = params;
   const isNewCard = !cardData.stability || !cardData.difficulty;
+  const G = rating;
 
   let s = cardData.stability || 0;
   let d = cardData.difficulty || 0;
 
   if (isNewCard) {
-    // Initialize stability and difficulty for a new card
-    s = w[rating - 1];
-    d = constrain(w[4] - (rating - 3) * w[5], 1, 10);
+    // Initial stability (from FSRS-4.5)
+    s = w[G - 1];
+    // Initial difficulty (FSRS-5 formula)
+    d = w[4] - Math.exp(w[5]) * (G - 1) + 1;
   } else {
     if (elapsedDays < 1) {
-      // FSRS-6 same-day review logic
-      // Difficulty (d) does not change in same-day reviews.
-      const G = rating;
-      s = s * Math.exp(w[17] * (G - 3 + w[18])) * Math.pow(s, -w[19]);
+      // Same-day review stability update (FSRS-5 formula)
+      s = s * Math.exp(w[17] * (G - 3 + w[18]));
+      // Difficulty does not change on same-day reviews
     } else {
-      // FSRS-4.5 logic for reviews after one or more days
-      const r = Math.pow(1 + elapsedDays / (9 * s), -1); // Retrievability
-      d = constrain(d - w[6] * (rating - 3), 1, 10);
+      // Subsequent-day review
+      // Retrievability (from FSRS-4.5)
+      const r = Math.pow(1 + elapsedDays / (9 * s), -1);
 
-      switch (rating) {
+      // Stability update (from FSRS-4.5)
+      switch (G) {
         case 1: // Again
           s = w[15] * Math.pow(d, -w[16]);
           break;
@@ -104,10 +76,18 @@ export const fsrs = (
           s = s * (1 + Math.exp(w[8]) * (11 - d) * Math.pow(s, -w[9]) * (Math.exp((1 - r) * w[10]) - 1)) * w[14];
           break;
       }
+
+      // Difficulty update (FSRS-5 formula with Linear Damping and Mean Reversion)
+      const deltaD = -w[6] * (G - 3);
+      const d_prime = d + deltaD * ((10 - d) / 9);
+      const d0_4 = w[4] - Math.exp(w[5]) * (4 - 1) + 1; // D₀(4)
+      const d_double_prime = w[7] * d0_4 + (1 - w[7]) * d_prime;
+      d = d_double_prime;
     }
   }
 
   s = constrain(s, 0.1, maximum_interval);
+  d = constrain(d, 1, 10);
   const interval = constrain(ivl_fn(s, request_retention), 1, maximum_interval);
 
   return { stability: s, difficulty: d, interval };
