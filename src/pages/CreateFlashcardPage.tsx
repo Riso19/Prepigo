@@ -81,12 +81,13 @@ const CreateFlashcardPage = () => {
     navigate("/");
   };
 
-  const handleSaveImageOcclusion = (imageUrl: string, occlusions: Occlusion[]) => {
+  const handleSaveImageOcclusion = (imageUrl: string, occlusions: Occlusion[], description: string) => {
     if (!deckId) return;
     let currentDecks = decks;
+    const groupId = Date.now();
     occlusions.forEach(occ => {
       const newCard: ImageOcclusionFlashcard = {
-        id: `f${Date.now()}-${occ.id}`,
+        id: `f${groupId}-${occ.id}`,
         type: "imageOcclusion",
         imageUrl,
         occlusions,
@@ -187,10 +188,6 @@ const CreateFlashcardPage = () => {
             {cardType === 'imageOcclusion' && (
               <div className="pt-4 space-y-4">
                 <ImageOcclusionEditor onSave={handleSaveImageOcclusion} />
-                <div className="space-y-2">
-                  <Label>Extra Info (Optional)</Label>
-                  <HtmlEditor value={description} onChange={setDescription} placeholder="Add a hint or extra context..."/>
-                </div>
               </div>
             )}
           </CardContent>

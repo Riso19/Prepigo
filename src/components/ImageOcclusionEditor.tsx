@@ -5,15 +5,20 @@ import { Label } from '@/components/ui/label';
 import { Occlusion } from '@/data/decks';
 import { showError, showLoading, showSuccess, dismissToast } from '@/utils/toast';
 import { X, Upload, Link as LinkIcon, Loader2 } from 'lucide-react';
+import HtmlEditor from './HtmlEditor';
 
 interface ImageOcclusionEditorProps {
-  onSave: (imageUrl: string, occlusions: Occlusion[]) => void;
+  onSave: (imageUrl: string, occlusions: Occlusion[], description: string) => void;
+  initialImageUrl?: string;
+  initialOcclusions?: Occlusion[];
+  initialDescription?: string;
 }
 
-const ImageOcclusionEditor = ({ onSave }: ImageOcclusionEditorProps) => {
+const ImageOcclusionEditor = ({ onSave, initialImageUrl, initialOcclusions, initialDescription }: ImageOcclusionEditorProps) => {
   const [image, setImage] = useState<string | null>(null);
   const [imgDimensions, setImgDimensions] = useState<{ width: number; height: number } | null>(null);
   const [occlusions, setOcclusions] = useState<Occlusion[]>([]);
+  const [description, setDescription] = useState('');
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(null);
   const [imageUrlInput, setImageUrlInput] = useState('');
@@ -21,6 +26,12 @@ const ImageOcclusionEditor = ({ onSave }: ImageOcclusionEditorProps) => {
   
   const svgRef = useRef<SVGSVGElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    if (initialImageUrl) setImage(initialImageUrl);
+    if (initialOcclusions) setOcclusions(initialOcclusions);
+    if (initialDescription) setDescription(initialDescription);
+  }, [initialImageUrl, initialOcclusions, initialDescription]);
 
   useEffect(() => {
     if (image && imgRef.current) {
@@ -49,7 +60,6 @@ const ImageOcclusionEditor = ({ onSave }: ImageOcclusionEditorProps) => {
       setIsLoading(true);
       const loadingToast = showLoading("Loading image...");
       try {
-        // Use a reliable, image-focused CORS proxy to fetch the image as a blob
         const proxyUrl = 'https://images.weserv.nl/?url=';
         const response = await fetch(proxyUrl + encodeURIComponent(url));
         if (!response.ok) {
@@ -57,7 +67,6 @@ const ImageOcclusionEditor = ({ onSave }: ImageOcclusionEditorProps) => {
         }
         const blob = await response.blob();
         
-        // Use FileReader to convert the blob to a base64 data URL
         const reader = new FileReader();
         reader.onloadend = () => {
           setImage(reader.result as string);
@@ -154,7 +163,7 @@ const ImageOcclusionEditor = ({ onSave }: ImageOcclusionEditorProps) => {
 
   const handleSaveClick = () => {
     if (image && occlusions.length > 0) {
-      onSave(image, occlusions.filter(o => o.id !== -1));
+      onSave(image, occlusions.filter(o => o.id !== -1), description);
     }
   };
 
@@ -197,13 +206,9 @@ const ImageOcclusionEditor = ({ onSave }: ImageOcclusionEditorProps) => {
               )}
             </div>
           </div>
-          <div className="flex justify-end">
-            <Button onClick={handleSaveClick} disabled={occlusions.filter(o => o.id !== -1).length === 0}>
-              Save Flashcards ({occlusions.filter(o => o.id !== -1).length} created)
-            </Button>
-          </div>
           <div className="space-y-2">
             <h4 className="font-semibold">Occlusions:</h4>
+            {occlusions.filter(o => o.id !== -1).length === 0 && <p className="text-sm text-muted-foreground">Draw rectangles on the image to create occlusions.</p>}
             {occlusions.filter(o => o.id !== -1).map((occ, index) => (
               <div key={occ.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
                 <span>Occlusion {index + 1}</span>
@@ -212,6 +217,15 @@ const ImageOcclusionEditor = ({ onSave }: ImageOcclusionEditorProps) => {
                 </Button>
               </div>
             ))}
+          </div>
+          <div className="space-y-2">
+            <Label>Extra Info (Optional)</Label>
+            <HtmlEditor value={description} onChange={setDescription} placeholder="Add a hint or extra context..."/>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={handleSaveClick} disabled={occlusions.filter(o => o.id !== -1).length === 0}>
+              Save Flashcards ({occlusions.filter(o => o.id !== -1).length} created)
+            </Button>
           </div>
         </>
       )}
