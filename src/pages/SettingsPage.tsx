@@ -33,6 +33,7 @@ import { getAllFlashcardsFromDeck, updateFlashcard } from '@/lib/deck-utils';
 import { fsrs, createEmptyCard, generatorParameters, Card as FsrsCard, Rating } from 'ts-fsrs';
 import { toast } from 'sonner';
 import { importApkg } from '@/lib/apkg-importer';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const fsrsParametersSchema = z.object({
     request_retention: z.coerce.number().min(0.7, "Must be at least 0.7").max(0.99, "Must be less than 1.0"),
@@ -76,7 +77,8 @@ const SettingsPage = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isResetAlertOpen, setIsResetAlertOpen] = useState(false);
   const [isImportAlertOpen, setIsImportAlertOpen] = useState(false);
-  const [importedDecks, setImportedDecks] = useState<DeckData[] | null>(null);
+  const [fileToImport, setFileToImport] = useState<File | null>(null);
+  const [includeScheduling, setIncludeScheduling] = useState(true);
   const [rescheduleOnSave, setRescheduleOnSave] = useState(false);
 
   const form = useForm<SrsSettings>({
@@ -169,60 +171,50 @@ const SettingsPage = () => {
     showSuccess("Data exported successfully!");
   };
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const resetInput = () => {
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    };
-
-    if (file.name.endsWith('.json')) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const content = event.target?.result;
-          const parsedData = JSON.parse(content as string);
-          const validation = decksSchema.safeParse(parsedData);
-          if (!validation.success) {
-            console.error(validation.error);
-            showError("Invalid file format. Please select a valid backup file.");
-            return;
-          }
-          setImportedDecks(validation.data);
-          setIsImportAlertOpen(true);
-        } catch (error) {
-          showError("Failed to read or parse the file.");
-        } finally {
-          resetInput();
-        }
-      };
-      reader.readAsText(file);
-    } else if (file.name.endsWith('.apkg')) {
-      const toastId = toast.loading("Importing .apkg file... This may take a moment.");
-      try {
-        const importedData = await importApkg(file);
-        setImportedDecks(importedData);
-        setIsImportAlertOpen(true);
-        toast.success("File processed. Please confirm the import.", { id: toastId });
-      } catch (error) {
-        console.error("APKG Import Error:", error);
-        toast.error(`Failed to import .apkg file: ${(error as Error).message}`, { id: toastId });
-      } finally {
-        resetInput();
-      }
-    } else {
+    if (!file.name.endsWith('.json') && !file.name.endsWith('.apkg')) {
       showError("Unsupported file type. Please select a .json or .apkg file.");
-      resetInput();
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
     }
+
+    setFileToImport(file);
+    setIsImportAlertOpen(true);
   };
 
-  const confirmImport = () => {
-    if (importedDecks) {
-        setDecks(importedDecks);
-        showSuccess("Data imported successfully! Your decks have been replaced.");
-        setIsImportAlertOpen(false);
-        setImportedDecks(null);
+  const confirmImport = async () => {
+    if (!fileToImport) return;
+
+    const toastId = toast.loading("Importing file...");
+    try {
+      let importedData: DeckData[] | null = null;
+
+      if (fileToImport.name.endsWith('.json')) {
+        const content = await fileToImport.text();
+        const parsedData = JSON.parse(content);
+        const validation = decksSchema.safeParse(parsedData);
+        if (!validation.success) throw new Error("Invalid JSON backup file format.");
+        importedData = validation.data;
+      } else if (fileToImport.name.endsWith('.apkg')) {
+        importedData = await importApkg(fileToImport, includeScheduling);
+      }
+
+      if (importedData) {
+        setDecks(importedData);
+        toast.success("Data imported successfully!", { id: toastId });
+      } else {
+        throw new Error("Failed to process file.");
+      }
+    } catch (error) {
+      console.error("Import Error:", error);
+      toast.error(`Import failed: ${(error as Error).message}`, { id: toastId });
+    } finally {
+      setIsImportAlertOpen(false);
+      setFileToImport(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -656,8 +648,28 @@ const SettingsPage = () => {
 
       <AlertDialog open={isImportAlertOpen} onOpenChange={setIsImportAlertOpen}>
         <AlertDialogContent>
-          <AlertDialogHeader><AlertDialogTitle>Import Data?</AlertDialogTitle><AlertDialogDescription>This will overwrite all your current decks and flashcards. This action cannot be undone.</AlertDialogDescription></AlertDialogHeader>
-          <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={confirmImport}>Import</AlertDialogAction></AlertDialogFooter>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Import Data?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will overwrite all your current decks and flashcards. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {fileToImport?.name.endsWith('.apkg') && (
+            <div className="flex items-center space-x-2 pt-2">
+              <Checkbox
+                id="include-scheduling"
+                checked={includeScheduling}
+                onCheckedChange={(checked) => setIncludeScheduling(!!checked)}
+              />
+              <Label htmlFor="include-scheduling" className="cursor-pointer">
+                Include scheduling information
+              </Label>
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setFileToImport(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmImport}>Import</AlertDialogAction>
+          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 

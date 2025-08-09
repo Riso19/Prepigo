@@ -78,7 +78,7 @@ const convertAnkiSrsData = (
 
 
 // --- Main Importer Function ---
-export const importApkg = async (file: File): Promise<DeckData[]> => {
+export const importApkg = async (file: File, includeScheduling: boolean): Promise<DeckData[]> => {
   const zip = await JSZip.loadAsync(file);
 
   // 1. Find and load the SQLite database
@@ -202,7 +202,9 @@ export const importApkg = async (file: File): Promise<DeckData[]> => {
     }
 
     if (flashcard) {
-      flashcard.srs = convertAnkiSrsData(cardValue, creationTimestamp);
+      if (includeScheduling) {
+        flashcard.srs = convertAnkiSrsData(cardValue, creationTimestamp);
+      }
       deck.flashcards.push(flashcard);
     }
   });
