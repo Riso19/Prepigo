@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { getAllFlashcardsFromDeck, updateFlashcard } from '@/lib/deck-utils';
+import { getAllFlashcardsFromDeck, updateFlashcard, mergeDecks } from '@/lib/deck-utils';
 import { fsrs, createEmptyCard, generatorParameters, Card as FsrsCard, Rating } from 'ts-fsrs';
 import { toast } from 'sonner';
 import { importAnkiFile } from '@/lib/anki-importer';
@@ -81,6 +81,7 @@ const SettingsPage = () => {
   const [isImportAlertOpen, setIsImportAlertOpen] = useState(false);
   const [fileToImport, setFileToImport] = useState<File | null>(null);
   const [includeScheduling, setIncludeScheduling] = useState(true);
+  const [replaceOnImport, setReplaceOnImport] = useState(false);
   const [rescheduleOnSave, setRescheduleOnSave] = useState(false);
 
   const form = useForm<SrsSettings>({
@@ -229,7 +230,11 @@ const SettingsPage = () => {
 
       if (importedDecks) {
         onProgress({ message: 'Saving decks to database...', value: 98 });
-        setDecks(importedDecks);
+        if (replaceOnImport) {
+          setDecks(importedDecks);
+        } else {
+          setDecks(prevDecks => mergeDecks(prevDecks, importedDecks!));
+        }
         if (importedMedia && importedMedia.size > 0) {
             await saveMediaToDB(importedMedia);
         }
@@ -243,6 +248,7 @@ const SettingsPage = () => {
     } finally {
       setFileToImport(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
+      setReplaceOnImport(false);
     }
   };
 
@@ -678,23 +684,35 @@ const SettingsPage = () => {
       <AlertDialog open={isImportAlertOpen} onOpenChange={setIsImportAlertOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Import Data?</AlertDialogTitle>
+            <AlertDialogTitle>Import Data</AlertDialogTitle>
             <AlertDialogDescription>
-              This will overwrite all your current decks and flashcards. This action cannot be undone.
+              You can merge the imported decks with your existing ones, or replace everything. Merging will add new decks and cards, but will not overwrite existing ones with the same name or ID.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {(fileToImport?.name.endsWith('.apkg') || fileToImport?.name.endsWith('.anki2') || fileToImport?.name.endsWith('.anki21')) && (
-            <div className="flex items-center space-x-2 pt-2">
+          <div className="space-y-4 pt-2">
+            <div className="flex items-center space-x-2">
               <Checkbox
-                id="include-scheduling"
-                checked={includeScheduling}
-                onCheckedChange={(checked) => setIncludeScheduling(!!checked)}
+                id="replace-on-import"
+                checked={replaceOnImport}
+                onCheckedChange={(checked) => setReplaceOnImport(!!checked)}
               />
-              <Label htmlFor="include-scheduling" className="cursor-pointer">
-                Import learning progress
+              <Label htmlFor="replace-on-import" className="cursor-pointer font-semibold text-destructive">
+                Replace all existing data with this import
               </Label>
             </div>
-          )}
+            {(fileToImport?.name.endsWith('.apkg') || fileToImport?.name.endsWith('.anki2') || fileToImport?.name.endsWith('.anki21')) && (
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="include-scheduling"
+                  checked={includeScheduling}
+                  onCheckedChange={(checked) => setIncludeScheduling(!!checked)}
+                />
+                <Label htmlFor="include-scheduling" className="cursor-pointer">
+                  Import learning progress
+                </Label>
+              </div>
+            )}
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setFileToImport(null)}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={confirmImport}>Import</AlertDialogAction>

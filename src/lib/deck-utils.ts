@@ -147,3 +147,37 @@ export const tagLeech = (decks: DeckData[], flashcardId: string): DeckData[] => 
     return deck;
   });
 };
+
+// Immutably merge new decks into existing decks
+export const mergeDecks = (existingDecks: DeckData[], newDecks: DeckData[]): DeckData[] => {
+  const deckMap = new Map<string, DeckData>();
+
+  // Add all existing decks to the map
+  for (const deck of existingDecks) {
+    deckMap.set(deck.name, { ...deck });
+  }
+
+  // Merge new decks
+  for (const newDeck of newDecks) {
+    const existingDeck = deckMap.get(newDeck.name);
+    if (existingDeck) {
+      // Merge flashcards
+      const existingFlashcardIds = new Set(existingDeck.flashcards.map(fc => fc.id));
+      const flashcardsToMerge = newDeck.flashcards.filter(fc => !existingFlashcardIds.has(fc.id));
+      
+      // Merge sub-decks
+      const mergedSubDecks = mergeDecks(existingDeck.subDecks || [], newDeck.subDecks || []);
+
+      deckMap.set(newDeck.name, {
+        ...existingDeck,
+        flashcards: [...existingDeck.flashcards, ...flashcardsToMerge],
+        subDecks: mergedSubDecks,
+      });
+    } else {
+      // Add new deck
+      deckMap.set(newDeck.name, newDeck);
+    }
+  }
+
+  return Array.from(deckMap.values());
+};
