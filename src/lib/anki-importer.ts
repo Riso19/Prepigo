@@ -121,9 +121,28 @@ export const importAnkiFile = async (file: File, includeScheduling: boolean): Pr
   }
 
   // 3. Extract data from the database
-  const colData = db.exec("SELECT models, decks, crt FROM col")[0].values[0];
-  const models: { [id: string]: AnkiModel } = JSON.parse(colData[0] as string);
-  const ankiDecks: { [id: string]: AnkiDeck } = JSON.parse(colData[1] as string);
+  const colResult = db.exec("SELECT models, decks, crt FROM col");
+  if (!colResult || colResult.length === 0 || !colResult[0].values || colResult[0].values.length === 0) {
+    throw new Error("Could not find collection data in the database. The file may be empty or corrupt.");
+  }
+  const colData = colResult[0].values[0];
+
+  let models: { [id: string]: AnkiModel };
+  try {
+    models = JSON.parse(colData[0] as string);
+  } catch (e) {
+    console.error("Failed to parse 'models' JSON from the database.", e);
+    throw new Error("Could not parse the 'models' data from the Anki database. The file may be corrupt or from an unsupported Anki version.");
+  }
+
+  let ankiDecks: { [id: string]: AnkiDeck };
+  try {
+    ankiDecks = JSON.parse(colData[1] as string);
+  } catch (e) {
+    console.error("Failed to parse 'decks' JSON from the database.", e);
+    throw new Error("Could not parse the 'decks' data from the Anki database. The file may be corrupt or from an unsupported Anki version.");
+  }
+  
   const creationTimestamp = colData[2] as number;
   
   const notesData = db.exec("SELECT id, mid, flds, tags FROM notes")[0]?.values || [];
