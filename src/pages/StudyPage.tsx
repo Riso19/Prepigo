@@ -21,35 +21,92 @@ const StudyPage = () => {
   const navigate = useNavigate();
 
   const deck = useMemo(() => (deckId ? findDeckById(decks, deckId) : null), [decks, deckId]);
-  const allFlashcards = useMemo(() => (deck ? getAllFlashcardsFromDeck(deck) : []), [deck]);
-
+  
   const [completedCardIds, setCompletedCardIds] = useState<Set<string>>(new Set());
   const [isFlipped, setIsFlipped] = useState(false);
 
   const sessionQueue = useMemo(() => {
-    const now = new Date().toISOString();
-    const due = allFlashcards
-      .filter(card => !card.isSuspended)
-      .filter(card => !card.nextReviewDate || card.nextReviewDate <= now);
+    if (!deck) return [];
 
-    const newCards = due.filter(c => !c.interval || c.interval === 0);
-    const reviewCards = due.filter(c => c.interval && c.interval > 0);
-
-    if (settings.insertionOrder === 'sequential' && settings.algorithm === 'sm2') {
-      newCards.sort((a, b) => a.id.localeCompare(b.id));
-    } else {
-      newCards.sort(() => Math.random() - 0.5);
-    }
-    reviewCards.sort(() => Math.random() - 0.5);
-
-    const limitedNew = newCards.slice(0, settings.newCardsPerDay);
-    const limitedReviews = reviewCards.slice(0, settings.maxReviewsPerDay);
+    const now = new Date();
+    const allCards = getAllFlashcardsFromDeck(deck);
     
-    return [...limitedReviews, ...limitedNew];
-  }, [allFlashcards, settings]);
+    const dueCards = allCards
+      .filter(card => !card.isSuspended)
+      .filter(card => !card.nextReviewDate || new Date(card.nextReviewDate) <= now);
+
+    // 1. Classify Cards
+    const newCards = dueCards.filter(c => !c.interval || c.interval === 0);
+    const reviewCards = dueCards.filter(c => c.interval && c.interval > 0);
+
+    // 2. Gather New Cards
+    let gatheredNew: FlashcardData[] = [];
+    switch (settings.newCardGatherOrder) {
+      case 'ascending':
+        gatheredNew = newCards.sort((a, b) => a.id.localeCompare(b.id));
+        break;
+      case 'descending':
+        gatheredNew = newCards.sort((a, b) => b.id.localeCompare(a.id));
+        break;
+      case 'randomCards':
+        gatheredNew = newCards.sort(() => Math.random() - 0.5);
+        break;
+      case 'deck':
+      default:
+        // Simplified 'deck' order: ascending by ID, which is close to creation order.
+        gatheredNew = newCards.sort((a, b) => a.id.localeCompare(b.id));
+        break;
+    }
+    
+    // 3. Sort and Limit New Cards
+    let newQueue = gatheredNew.slice(0, settings.newCardsPerDay);
+    switch (settings.newCardSortOrder) {
+        case 'random':
+            newQueue.sort(() => Math.random() - 0.5);
+            break;
+        // Other sort orders are more complex and will behave as 'gathered' for now.
+        case 'gathered':
+        case 'typeThenGathered':
+        default:
+            // No change needed, already in gathered order.
+            break;
+    }
+
+    // 4. Sort and Limit Review Cards
+    let reviewQueue = reviewCards;
+    switch (settings.reviewSortOrder) {
+        case 'dueDateRandom':
+        default:
+            reviewQueue.sort((a, b) => {
+                const dateA = new Date(a.nextReviewDate || 0).getTime();
+                const dateB = new Date(b.nextReviewDate || 0).getTime();
+                return dateA - dateB || (Math.random() - 0.5);
+            });
+            break;
+    }
+    reviewQueue = reviewQueue.slice(0, settings.maxReviewsPerDay);
+
+    // 5. Combine Queues
+    let finalQueue: FlashcardData[] = [];
+    switch (settings.newReviewOrder) {
+        case 'after':
+            finalQueue = [...reviewQueue, ...newQueue];
+            break;
+        case 'before':
+            finalQueue = [...newQueue, ...reviewQueue];
+            break;
+        case 'mix':
+        default:
+            finalQueue = [...reviewQueue, ...newQueue].sort(() => Math.random() - 0.5);
+            break;
+    }
+
+    return finalQueue;
+  }, [deck, settings]);
 
   useEffect(() => {
     setCompletedCardIds(new Set());
+    setIsFlipped(false);
   }, [deckId]);
 
   const remainingCards = useMemo(() => {
@@ -82,6 +139,7 @@ const StudyPage = () => {
 
     const now = new Date();
     let updatedCard: FlashcardData;
+    const allFlashcards = deck ? getAllFlashcardsFromDeck(deck) : [];
 
     if (settings.algorithm === 'fsrs') {
       let elapsedDays = 0;
@@ -140,7 +198,7 @@ const StudyPage = () => {
     setDecks(prevDecks => updateFlashcard(prevDecks, updatedCard));
     setCompletedCardIds(prev => new Set([...prev, ...idsToComplete]));
     setIsFlipped(false);
-  }, [currentCard, setDecks, settings, getSiblings, allFlashcards]);
+  }, [currentCard, setDecks, settings, getSiblings, deck]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -171,7 +229,7 @@ const StudyPage = () => {
     );
   }
 
-  if (allFlashcards.length === 0) {
+  if (getAllFlashcardsFromDeck(deck).length === 0) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center text-center p-4">
         <h2 className="text-2xl font-bold mb-4">This deck is empty!</h2>

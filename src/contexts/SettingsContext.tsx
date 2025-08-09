@@ -19,7 +19,7 @@ export interface SrsSettings {
   learningSteps: string;
   graduatingInterval: number;
   easyInterval: number;
-  insertionOrder: 'sequential' | 'random';
+  insertionOrder: 'sequential' | 'random'; // This is now part of display order, but let's keep for SM-2 compatibility
 
   // Lapses (SM-2)
   relearningSteps: string;
@@ -40,6 +40,13 @@ export interface SrsSettings {
   hardInterval: number;
   newInterval: number;
   minEaseFactor: number;
+
+  // Display Order
+  newCardGatherOrder: 'deck' | 'ascending' | 'descending' | 'randomNotes' | 'randomCards';
+  newCardSortOrder: 'gathered' | 'typeThenGathered' | 'typeThenRandom' | 'randomNote' | 'random';
+  newReviewOrder: 'mix' | 'after' | 'before';
+  interdayLearningReviewOrder: 'mix' | 'after' | 'before';
+  reviewSortOrder: 'dueDateRandom' | 'dueDateDeck' | 'overdue';
 }
 
 interface SettingsDB extends DBSchema {
@@ -83,6 +90,13 @@ const defaultSettings: SrsSettings = {
   hardInterval: 1.2,
   newInterval: 0.6,
   minEaseFactor: 1.3,
+
+  // Display Order Defaults
+  newCardGatherOrder: 'deck',
+  newCardSortOrder: 'typeThenGathered',
+  newReviewOrder: 'mix',
+  interdayLearningReviewOrder: 'mix',
+  reviewSortOrder: 'dueDateRandom',
 };
 
 // --- Database Functions ---
