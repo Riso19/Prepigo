@@ -49,21 +49,22 @@ export const flashcardDataSchema = z.union([
 ]);
 
 // --- Deck Schema (Recursive) ---
-// Use an exported interface to define the recursive shape
-export interface DeckData {
-  id: string;
-  name: string;
-  flashcards: FlashcardData[];
-  subDecks?: DeckData[];
-}
-
-// The schema now implements the interface, with z.lazy for the recursive part
-export const deckDataSchema: z.ZodType<DeckData> = z.lazy(() => z.object({
+// Define a base schema for a deck's non-recursive properties.
+const baseDeckSchema = z.object({
   id: z.string(),
   name: z.string(),
   flashcards: z.array(flashcardDataSchema),
-  subDecks: z.array(deckDataSchema).optional(),
-}));
+});
+
+// Define and export the recursive DeckData type.
+export type DeckData = z.infer<typeof baseDeckSchema> & {
+  subDecks?: DeckData[];
+};
+
+// Now, create the schema that validates the recursive type.
+export const deckDataSchema: z.ZodType<DeckData> = baseDeckSchema.extend({
+  subDecks: z.lazy(() => z.array(deckDataSchema)).optional(),
+});
 
 // --- Final Schemas for Types and Validation ---
 export type BasicFlashcard = z.infer<typeof basicFlashcardSchema>;
