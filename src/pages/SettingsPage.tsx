@@ -297,10 +297,74 @@ const SettingsPage = () => {
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Display & Burying</CardTitle>
-                    <CardDescription>Control how cards are ordered and hidden during study.</CardDescription>
+                    <CardTitle>Display Order</CardTitle>
+                    <CardDescription>Control how cards are gathered, sorted, and mixed during study.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
+                    <FormField control={form.control} name="newCardGatherOrder" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>New card gather order</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="deck">Deck</SelectItem>
+                            <SelectItem value="ascending">Ascending position</SelectItem>
+                            <SelectItem value="descending">Descending position</SelectItem>
+                            <SelectItem value="randomNotes">Random notes</SelectItem>
+                            <SelectItem value="randomCards">Random cards</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>How new cards are collected from your decks.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="newCardSortOrder" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>New card sort order</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="gathered">Order gathered</SelectItem>
+                            <SelectItem value="typeThenGathered">Card type, then order gathered</SelectItem>
+                            <SelectItem value="typeThenRandom">Card type, then random</SelectItem>
+                            <SelectItem value="randomNote">Random note, then card type</SelectItem>
+                            <SelectItem value="random">Random</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>How gathered new cards are sorted before showing.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="newReviewOrder" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>New/review order</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="mix">Mix with reviews</SelectItem>
+                            <SelectItem value="after">Show after reviews</SelectItem>
+                            <SelectItem value="before">Show before reviews</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>When to show new cards in relation to reviews.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="interdayLearningReviewOrder" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Interday learning/review order</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="mix">Mix with reviews</SelectItem>
+                            <SelectItem value="after">Show after reviews</SelectItem>
+                            <SelectItem value="before">Show before reviews</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>When to show learning cards that cross a day boundary.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
                     <FormField control={form.control} name="reviewSortOrder" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Review sort order</FormLabel>
@@ -316,6 +380,15 @@ const SettingsPage = () => {
                         <FormMessage />
                       </FormItem>
                     )} />
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Burying</CardTitle>
+                    <CardDescription>Control how sibling cards are hidden during study.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
                     <FormField control={form.control} name="buryNewSiblings" render={({ field }) => (
                         <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
                           <div className="space-y-0.5">
