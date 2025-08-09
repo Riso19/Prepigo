@@ -28,6 +28,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 
 const fsrsParametersSchema = z.object({
     request_retention: z.coerce.number().min(0.7, "Must be at least 0.7").max(0.99, "Must be less than 1.0"),
@@ -42,6 +43,10 @@ const settingsSchema = z.object({
   sm2MinEasinessFactor: z.coerce.number().min(1.3, "Must be at least 1.3"),
   sm2FirstInterval: z.coerce.number().int().min(1, "Must be at least 1 day"),
   sm2SecondInterval: z.coerce.number().int().min(1, "Must be at least 1 day"),
+  learningSteps: z.string().regex(/^(\d+\s*)*\d+$/, "Must be space-separated numbers"),
+  relearningSteps: z.string().regex(/^(\d+\s*)*\d+$/, "Must be space-separated numbers"),
+  leechThreshold: z.coerce.number().int().min(1, "Must be at least 1"),
+  leechAction: z.enum(['tag', 'suspend']),
   newCardsPerDay: z.coerce.number().int().min(0, "Must be 0 or greater"),
   maxReviewsPerDay: z.coerce.number().int().min(0, "Must be 0 or greater"),
   newCardGatherOrder: z.enum(['deck', 'ascending', 'descending', 'randomNotes', 'randomCards']),
@@ -49,6 +54,8 @@ const settingsSchema = z.object({
   newReviewOrder: z.enum(['mix', 'after', 'before']),
   interdayLearningReviewOrder: z.enum(['mix', 'after', 'before']),
   reviewSortOrder: z.enum(['dueDateRandom', 'dueDateDeck', 'overdue']),
+  buryNewSiblings: z.boolean(),
+  buryReviewSiblings: z.boolean(),
 });
 
 const SettingsPage = () => {
@@ -160,9 +167,6 @@ const SettingsPage = () => {
                 <Card>
                   <CardHeader>
                     <CardTitle>Spaced Repetition Algorithm</CardTitle>
-                    <CardDescription>
-                      Choose the algorithm used for scheduling card reviews.
-                    </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <FormField
@@ -222,48 +226,60 @@ const SettingsPage = () => {
                 )}
 
                 {scheduler === 'sm2' && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>SM-2 Parameters</CardTitle>
-                      <CardDescription>
-                        Customize the behavior of the classic SM-2 algorithm.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <FormField control={form.control} name="sm2InitialEasinessFactor" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Initial Easiness Factor</FormLabel>
-                          <FormControl><Input type="number" step="0.1" {...field} /></FormControl>
-                          <FormDescription>Starting E-Factor for new cards.</FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                      <FormField control={form.control} name="sm2MinEasinessFactor" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Minimum Easiness Factor</FormLabel>
-                          <FormControl><Input type="number" step="0.1" {...field} /></FormControl>
-                          <FormDescription>The lowest possible E-Factor.</FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                      <FormField control={form.control} name="sm2FirstInterval" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>First Interval (days)</FormLabel>
-                          <FormControl><Input type="number" {...field} /></FormControl>
-                          <FormDescription>Interval after the first correct answer.</FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                      <FormField control={form.control} name="sm2SecondInterval" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Second Interval (days)</FormLabel>
-                          <FormControl><Input type="number" {...field} /></FormControl>
-                          <FormDescription>Interval after the second correct answer.</FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                    </CardContent>
-                  </Card>
+                  <>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>SM-2: New Cards</CardTitle>
+                      </CardHeader>
+                      <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <FormField control={form.control} name="learningSteps" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Learning Steps (minutes)</FormLabel>
+                            <FormControl><Input {...field} /></FormControl>
+                            <FormDescription>Space-separated list of intervals.</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>SM-2: Lapses</CardTitle>
+                      </CardHeader>
+                      <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <FormField control={form.control} name="relearningSteps" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Relearning Steps (minutes)</FormLabel>
+                            <FormControl><Input {...field} /></FormControl>
+                            <FormDescription>Steps for cards you forget.</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="leechThreshold" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Leech Threshold</FormLabel>
+                            <FormControl><Input type="number" {...field} /></FormControl>
+                            <FormDescription>Number of lapses to mark as leech.</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="leechAction" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Leech Action</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                              <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                              <SelectContent>
+                                <SelectItem value="tag">Tag Only</SelectItem>
+                                <SelectItem value="suspend">Suspend Card</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormDescription>Action when a card becomes a leech.</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      </CardContent>
+                    </Card>
+                  </>
                 )}
 
                 <Card>
@@ -280,74 +296,10 @@ const SettingsPage = () => {
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Display Order</CardTitle>
-                    <CardDescription>Control how new and review cards are ordered during study.</CardDescription>
+                    <CardTitle>Display & Burying</CardTitle>
+                    <CardDescription>Control how cards are ordered and hidden during study.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
-                    <FormField control={form.control} name="newCardGatherOrder" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>New card gather order</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            <SelectItem value="deck">Deck</SelectItem>
-                            <SelectItem value="ascending">Ascending position</SelectItem>
-                            <SelectItem value="descending">Descending position</SelectItem>
-                            <SelectItem value="randomNotes">Random notes</SelectItem>
-                            <SelectItem value="randomCards">Random cards</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormDescription>Controls the order in which new cards are gathered from your decks.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="newCardSortOrder" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>New card sort order</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            <SelectItem value="typeThenGathered">Card type, then order gathered</SelectItem>
-                            <SelectItem value="gathered">Order gathered</SelectItem>
-                            <SelectItem value="typeThenRandom">Card type, then random</SelectItem>
-                            <SelectItem value="randomNote">Random note, then card type</SelectItem>
-                            <SelectItem value="random">Random</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormDescription>The order new cards are shown in after being gathered.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="newReviewOrder" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>New/review order</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            <SelectItem value="mix">Mix with reviews</SelectItem>
-                            <SelectItem value="after">Show after reviews</SelectItem>
-                            <SelectItem value="before">Show before reviews</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormDescription>When to show new cards in relation to review cards.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                     <FormField control={form.control} name="interdayLearningReviewOrder" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Interday learning/review order</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            <SelectItem value="mix">Mix with reviews</SelectItem>
-                            <SelectItem value="after">Show after reviews</SelectItem>
-                            <SelectItem value="before">Show before reviews</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormDescription>When to show (re)learning cards that cross a day boundary.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
                     <FormField control={form.control} name="reviewSortOrder" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Review sort order</FormLabel>
@@ -363,6 +315,26 @@ const SettingsPage = () => {
                         <FormMessage />
                       </FormItem>
                     )} />
+                    <FormField control={form.control} name="buryNewSiblings" render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                          <div className="space-y-0.5">
+                            <FormLabel>Bury new siblings</FormLabel>
+                            <FormDescription>Hide other new cards from the same note until the next day.</FormDescription>
+                          </div>
+                          <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField control={form.control} name="buryReviewSiblings" render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                          <div className="space-y-0.5">
+                            <FormLabel>Bury review siblings</FormLabel>
+                            <FormDescription>Hide other review cards from the same note until the next day.</FormDescription>
+                          </div>
+                          <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                        </FormItem>
+                      )}
+                    />
                   </CardContent>
                 </Card>
 

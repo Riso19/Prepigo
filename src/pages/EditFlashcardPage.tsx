@@ -76,14 +76,13 @@ const EditFlashcardPage = () => {
   const handleSaveImageOcclusion = (newImageUrl: string, newOcclusions: Occlusion[], newDescription: string) => {
     if (!originalDeckId || !originalCard || originalCard.type !== 'imageOcclusion') return;
 
-    const originalImageUrl = originalCard.imageUrl;
-    const originalOcclusionsRef = originalCard.occlusions;
+    const originalNoteId = originalCard.noteId;
 
     let cardsToDelete: string[] = [];
     const findCardsToDelete = (d: DeckData[]) => {
         d.forEach(deck => {
             deck.flashcards.forEach(fc => {
-                if (fc.type === 'imageOcclusion' && fc.imageUrl === originalImageUrl && fc.occlusions === originalOcclusionsRef) {
+                if (fc.noteId === originalNoteId) {
                     cardsToDelete.push(fc.id);
                 }
             });
@@ -98,10 +97,11 @@ const EditFlashcardPage = () => {
         updatedDecks = deleteFlashcard(updatedDecks, id);
     });
 
-    const newGroupId = Date.now();
+    const newNoteId = `n${Date.now()}`;
     newOcclusions.forEach(occ => {
         const newCard: ImageOcclusionFlashcard = {
-            id: `f${newGroupId}-${occ.id}`,
+            id: `f${newNoteId}-${occ.id}`,
+            noteId: newNoteId,
             type: "imageOcclusion",
             imageUrl: newImageUrl,
             occlusions: newOcclusions,

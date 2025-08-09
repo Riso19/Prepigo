@@ -65,10 +65,11 @@ const CreateFlashcardPage = () => {
 
   const handleSaveBasic = () => {
     if (!deckId || !question || !answer) return;
-    const newCard: BasicFlashcard = { id: `f${Date.now()}`, type: "basic", question, answer };
+    const noteId = `n${Date.now()}`;
+    const newCard: BasicFlashcard = { id: `f${Date.now()}`, noteId, type: "basic", question, answer };
     setDecks(decks => addFlashcardToDeck(decks, deckId, newCard));
     if (createReverse) {
-      const reverseCard: BasicFlashcard = { id: `f${Date.now() + 1}`, type: "basic", question: answer, answer: question };
+      const reverseCard: BasicFlashcard = { id: `f${Date.now() + 1}`, noteId, type: "basic", question: answer, answer: question };
       setDecks(decks => addFlashcardToDeck(decks, deckId, reverseCard));
     }
     navigate("/");
@@ -76,7 +77,7 @@ const CreateFlashcardPage = () => {
 
   const handleSaveCloze = () => {
     if (!deckId || !clozeText) return;
-    const newCard: ClozeFlashcard = { id: `f${Date.now()}`, type: "cloze", text: clozeText, description };
+    const newCard: ClozeFlashcard = { id: `f${Date.now()}`, noteId: `n${Date.now()}`, type: "cloze", text: clozeText, description };
     setDecks(decks => addFlashcardToDeck(decks, deckId, newCard));
     navigate("/");
   };
@@ -84,10 +85,11 @@ const CreateFlashcardPage = () => {
   const handleSaveImageOcclusion = (imageUrl: string, occlusions: Occlusion[], description: string) => {
     if (!deckId) return;
     let currentDecks = decks;
-    const groupId = Date.now();
+    const noteId = `n${Date.now()}`;
     occlusions.forEach(occ => {
       const newCard: ImageOcclusionFlashcard = {
-        id: `f${groupId}-${occ.id}`,
+        id: `f${noteId}-${occ.id}`,
+        noteId,
         type: "imageOcclusion",
         imageUrl,
         occlusions,

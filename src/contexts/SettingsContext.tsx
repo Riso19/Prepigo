@@ -9,10 +9,16 @@ const SETTINGS_STORE = 'settings';
 export interface SrsSettings {
   scheduler: 'fsrs' | 'sm2';
   fsrsParameters: FSRSParameters;
+  // SM-2 specific
   sm2InitialEasinessFactor: number;
   sm2MinEasinessFactor: number;
   sm2FirstInterval: number;
   sm2SecondInterval: number;
+  learningSteps: string;
+  relearningSteps: string;
+  leechThreshold: number;
+  leechAction: 'tag' | 'suspend';
+  // General
   newCardsPerDay: number;
   maxReviewsPerDay: number;
   newCardGatherOrder: 'deck' | 'ascending' | 'descending' | 'randomNotes' | 'randomCards';
@@ -20,6 +26,8 @@ export interface SrsSettings {
   newReviewOrder: 'mix' | 'after' | 'before';
   interdayLearningReviewOrder: 'mix' | 'after' | 'before';
   reviewSortOrder: 'dueDateRandom' | 'dueDateDeck' | 'overdue';
+  buryNewSiblings: boolean;
+  buryReviewSiblings: boolean;
 }
 
 interface SettingsDB extends DBSchema {
@@ -36,6 +44,10 @@ const defaultSettings: SrsSettings = {
   sm2MinEasinessFactor: 1.3,
   sm2FirstInterval: 1,
   sm2SecondInterval: 6,
+  learningSteps: "1 10", // in minutes, space-separated
+  relearningSteps: "10", // in minutes, space-separated
+  leechThreshold: 8,
+  leechAction: 'tag',
   newCardsPerDay: 20,
   maxReviewsPerDay: 200,
   newCardGatherOrder: 'deck',
@@ -43,6 +55,8 @@ const defaultSettings: SrsSettings = {
   newReviewOrder: 'mix',
   interdayLearningReviewOrder: 'mix',
   reviewSortOrder: 'dueDateRandom',
+  buryNewSiblings: false,
+  buryReviewSiblings: false,
 };
 
 // --- Database Functions ---

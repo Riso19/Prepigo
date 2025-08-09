@@ -25,6 +25,8 @@ const sm2StateSchema = z.object({
   easinessFactor: z.number(),
   interval: z.number(),
   repetitions: z.number(),
+  lapses: z.number().optional(),
+  state: z.enum(['new', 'learning', 'review', 'relearning']).optional(),
   last_review: z.string().optional(),
 });
 export type Sm2State = z.infer<typeof sm2StateSchema>;
@@ -41,6 +43,8 @@ export type SrsData = z.infer<typeof srsDataSchema>;
 // --- Flashcard Schemas ---
 const baseFlashcardSchema = z.object({
   id: z.string(),
+  noteId: z.string().optional(),
+  tags: z.array(z.string()).optional(),
   srs: srsDataSchema.optional(),
 });
 
@@ -124,23 +128,23 @@ export const decks: DeckData[] = [
     id: "d1",
     name: "Cardiology",
     flashcards: [
-      { id: "f1", type: "basic", question: "What is the medical term for a heart attack?", answer: "Myocardial Infarction" },
-      { id: "f6", type: "basic", question: "What does ECG stand for?", answer: "Electrocardiogram" },
+      { id: "f1", noteId: "n1", type: "basic", question: "What is the medical term for a heart attack?", answer: "Myocardial Infarction" },
+      { id: "f6", noteId: "n2", type: "basic", question: "What does ECG stand for?", answer: "Electrocardiogram" },
     ],
     subDecks: [
       {
         id: "sd1-1",
         name: "Anatomy of the Heart",
         flashcards: [
-          { id: "f7", type: "basic", question: "How many chambers does the human heart have?", answer: "Four" },
-          { id: "f8", type: "basic", question: "What is the main artery leaving the heart?", answer: "Aorta" },
+          { id: "f7", noteId: "n3", type: "basic", question: "How many chambers does the human heart have?", answer: "Four" },
+          { id: "f8", noteId: "n4", type: "basic", question: "What is the main artery leaving the heart?", answer: "Aorta" },
         ],
         subDecks: [
             {
                 id: "sd1-1-1",
                 name: "Heart Valves",
                 flashcards: [
-                    { id: "f9", type: "basic", question: "Name the four valves of the heart.", answer: "Tricuspid, Pulmonary, Mitral, Aortic" },
+                    { id: "f9", noteId: "n5", type: "basic", question: "Name the four valves of the heart.", answer: "Tricuspid, Pulmonary, Mitral, Aortic" },
                 ],
             }
         ]
@@ -151,7 +155,7 @@ export const decks: DeckData[] = [
     id: "d2",
     name: "Neurology",
     flashcards: [
-      { id: "f4", type: "basic", question: "What part of the brain is responsible for balance and coordination?", answer: "The Cerebellum" },
+      { id: "f4", noteId: "n6", type: "basic", question: "What part of the brain is responsible for balance and coordination?", answer: "The Cerebellum" },
     ],
     subDecks: [],
   },
@@ -159,9 +163,9 @@ export const decks: DeckData[] = [
     id: "d3",
     name: "General Medicine",
     flashcards: [
-      { id: "f2", type: "basic", question: "Which bone is the longest in the human body?", answer: "The Femur (thigh bone)" },
-      { id: "f3", type: "basic", question: "What are the four main blood types?", answer: "A, B, AB, and O" },
-      { id: "f5", type: "basic", question: "What is the function of the kidneys?", answer: "To filter blood and produce urine" },
+      { id: "f2", noteId: "n7", type: "basic", question: "Which bone is the longest in the human body?", answer: "The Femur (thigh bone)" },
+      { id: "f3", noteId: "n8", type: "basic", question: "What are the four main blood types?", answer: "A, B, AB, and O" },
+      { id: "f5", noteId: "n9", type: "basic", question: "What is the function of the kidneys?", answer: "To filter blood and produce urine" },
     ],
   },
 ];
