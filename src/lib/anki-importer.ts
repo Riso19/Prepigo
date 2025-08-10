@@ -104,7 +104,6 @@ export const importAnkiFile = async (
         const decoder = new TextDecoder("utf-8", { fatal: false });
         let mediaString = decoder.decode(mediaBytes);
 
-        // Sanitize string: trim whitespace, remove BOM, and remove illegal control characters.
         mediaString = mediaString.trim().replace(/^\uFEFF/, '');
         mediaString = mediaString.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
 
@@ -113,13 +112,10 @@ export const importAnkiFile = async (
             mediaJSON = JSON.parse(mediaString);
         } catch (e) {
             console.warn("Could not parse media JSON file. Attempting to recover mappings with regex.", e);
-            // Fallback to regex parsing for corrupted JSON
             const regex = /"(\d+)":\s*"([^"]+)"/g;
             let match;
             while ((match = regex.exec(mediaString)) !== null) {
-                const key = match[1];
-                const value = match[2];
-                mediaJSON[key] = value;
+                mediaJSON[match[1]] = match[2];
             }
         }
 
@@ -185,61 +181,74 @@ export const importAnkiFile = async (
     const fieldMap: { [key: string]: string } = {};
     model.flds.forEach(fld => { fieldMap[fld.name] = fields[fld.ord] ?? ''; });
 
-    if (model.name.toLowerCase().includes('image occlusion')) {
-        const imageField = fieldMap['Image'] || '';
-        const masksField = fieldMap['Masks'] || '';
-        const headerField = fieldMap['Header'] || '';
-        const extraField = fieldMap['Extra'] || '';
+    let isIOE = model.name.toLowerCase().includes('image occlusion');
+    let parsedAsIOE = false;
 
-        const imageUrlMatch = imageField.match(/src="([^"]+)"/);
-        const imageUrl = imageUrlMatch ? imageUrlMatch[1] : null;
-        const occlusions = parseOcclusionsFromSvg(masksField);
+    if (isIOE) {
+        let imageFieldName: string | null = null;
+        let masksFieldName: string | null = null;
+        let headerFieldName: string | null = null;
+        let extraFieldName: string | null = null;
 
-        if (imageUrl && occlusions.length > 0) {
-            const questionOcclusion = occlusions[ord];
-            if (questionOcclusion) {
-                let description = headerField;
-                if (extraField) {
-                    description += (description ? '<hr>' : '') + extraField;
+        for (const fld of model.flds) {
+            const fieldContent = fieldMap[fld.name];
+            if (fieldContent && fieldContent.includes('<img') && !imageFieldName) imageFieldName = fld.name;
+            else if (fieldContent && fieldContent.includes('<svg') && fieldContent.includes('<rect') && !masksFieldName) masksFieldName = fld.name;
+            else if (fld.name.toLowerCase().includes('header') && !headerFieldName) headerFieldName = fld.name;
+            else if (fld.name.toLowerCase().includes('extra') && !extraFieldName) extraFieldName = fld.name;
+        }
+
+        if (imageFieldName && masksFieldName) {
+            const imageField = fieldMap[imageFieldName] || '';
+            const masksField = fieldMap[masksFieldName] || '';
+            const headerField = headerFieldName ? fieldMap[headerFieldName] : '';
+            const extraField = extraFieldName ? fieldMap[extraFieldName] : '';
+
+            const imageUrlMatch = imageField.match(/src="([^"]+)"/);
+            const rawImageUrl = imageUrlMatch ? imageUrlMatch[1] : null;
+            const occlusions = parseOcclusionsFromSvg(masksField);
+
+            if (rawImageUrl && occlusions.length > 0) {
+                const questionOcclusion = occlusions[ord];
+                if (questionOcclusion) {
+                    let description = headerField;
+                    if (extraField) description += (description ? '<hr>' : '') + extraField;
+                    
+                    flashcard = {
+                        id: `anki-c-${_id}`,
+                        noteId: `anki-n-${noteId}`,
+                        type: 'imageOcclusion',
+                        imageUrl: `media://${rawImageUrl}`,
+                        occlusions: occlusions,
+                        questionOcclusionId: questionOcclusion.id,
+                        description: replaceMediaSrc(description),
+                    } as ImageOcclusionFlashcard;
+                    parsedAsIOE = true;
                 }
-                flashcard = {
-                    id: `anki-c-${_id}`,
-                    noteId: `anki-n-${noteId}`,
-                    type: 'imageOcclusion',
-                    imageUrl: imageUrl,
-                    occlusions: occlusions,
-                    questionOcclusionId: questionOcclusion.id,
-                    description: replaceMediaSrc(description),
-                } as ImageOcclusionFlashcard;
             }
-        } 
-        
-        if (!flashcard) {
-            // Fallback to basic card if parsing fails
+        }
+    }
+    
+    if (!parsedAsIOE) {
+        if (model.type === 1 || template.qfmt.includes('{{cloze:')) {
+            flashcard = {
+                id: `anki-c-${_id}`, noteId: `anki-n-${noteId}`, type: 'cloze',
+                text: replaceMediaSrc(fieldMap[model.flds[0].name] ?? ''),
+                description: replaceMediaSrc(fieldMap[model.flds[1]?.name] ?? ''),
+            } as ClozeFlashcard;
+        } else {
+            let question = template.qfmt;
+            let answer = template.afmt;
+            for (const key in fieldMap) {
+                question = question.replace(new RegExp(`{{${key}}}`, 'g'), fieldMap[key]);
+                answer = answer.replace(new RegExp(`{{${key}}}`, 'g'), fieldMap[key]);
+            }
+            answer = answer.replace(/{{FrontSide}}/g, question);
             flashcard = {
                 id: `anki-c-${_id}`, noteId: `anki-n-${noteId}`, type: 'basic',
-                question: replaceMediaSrc(headerField + imageField),
-                answer: replaceMediaSrc(extraField),
+                question: replaceMediaSrc(question), answer: replaceMediaSrc(answer),
             } as BasicFlashcard;
         }
-    } else if (model.type === 1 || template.qfmt.includes('{{cloze:')) {
-      flashcard = {
-        id: `anki-c-${_id}`, noteId: `anki-n-${noteId}`, type: 'cloze',
-        text: replaceMediaSrc(fieldMap[model.flds[0].name] ?? ''),
-        description: replaceMediaSrc(fieldMap[model.flds[1]?.name] ?? ''),
-      } as ClozeFlashcard;
-    } else {
-      let question = template.qfmt;
-      let answer = template.afmt;
-      for (const key in fieldMap) {
-        question = question.replace(new RegExp(`{{${key}}}`, 'g'), fieldMap[key]);
-        answer = answer.replace(new RegExp(`{{${key}}}`, 'g'), fieldMap[key]);
-      }
-      answer = answer.replace(/{{FrontSide}}/g, question);
-      flashcard = {
-        id: `anki-c-${_id}`, noteId: `anki-n-${noteId}`, type: 'basic',
-        question: replaceMediaSrc(question), answer: replaceMediaSrc(answer),
-      } as BasicFlashcard;
     }
 
     if (flashcard) {
