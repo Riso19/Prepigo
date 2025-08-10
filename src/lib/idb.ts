@@ -122,6 +122,11 @@ export const clearReviewLogsDB = async (): Promise<void> => {
   await db.clear(REVIEW_LOGS_STORE);
 };
 
+export const getAllReviewLogsFromDB = async (): Promise<ReviewLog[]> => {
+    const db = await getDb();
+    return db.getAll(REVIEW_LOGS_STORE);
+};
+
 // --- MCQ Review Log Functions ---
 
 export const addMcqReviewLog = async (log: McqReviewLog): Promise<void> => {

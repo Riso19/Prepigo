@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { AddDeckDialog } from "./AddDeckDialog";
 import { DndContext, DragEndEvent, useDroppable } from "@dnd-kit/core";
 import { moveDeck, buildSessionQueue } from "@/lib/deck-utils";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useSettings } from "@/contexts/SettingsContext";
 
 const RootDroppable = () => {
@@ -60,6 +60,9 @@ const DeckManager = () => {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <CardTitle className="text-2xl">My Decks</CardTitle>
             <div className="flex items-center gap-2">
+              <Button asChild variant="outline">
+                <Link to="/custom-study">Custom Study</Link>
+              </Button>
               {dueCount > 0 && (
                 <Button onClick={() => navigate('/study/all')} className="relative">
                   Study Now

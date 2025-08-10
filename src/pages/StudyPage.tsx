@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import { useDecks } from "@/contexts/DecksContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { findDeckById, updateFlashcard, getEffectiveSrsSettings, buildSessionQueue } from "@/lib/deck-utils";
@@ -27,6 +27,7 @@ const parseSteps = (steps: string): number[] => {
 
 const StudyPage = () => {
   const { deckId } = useParams<{ deckId: string }>();
+  const location = useLocation();
   const { decks, setDecks, introductionsToday, addIntroducedCard } = useDecks();
   const { settings: globalSettings } = useSettings();
   const navigate = useNavigate();
@@ -39,6 +40,10 @@ const StudyPage = () => {
   const [buriedNoteIds, setBuriedNoteIds] = useState<Set<string>>(new Set());
   
   const [fsrsOutcomes, setFsrsOutcomes] = useState<RecordLog | null>(null);
+
+  const [isCustomSession, setIsCustomSession] = useState(false);
+  const [isSrsEnabled, setIsSrsEnabled] = useState(true);
+  const [customSessionTitle, setCustomSessionTitle] = useState('');
   
   const fsrsInstance = useMemo(() => {
     const settings = deck ? getEffectiveSrsSettings(decks, deck.id, globalSettings) : globalSettings;
@@ -59,26 +64,40 @@ const StudyPage = () => {
   }, [sessionQueue, currentCardIndex, buriedNoteIds]);
 
   useEffect(() => {
-    if (!deck && deckId !== 'all') return;
-
-    const decksToStudy = deckId === 'all' ? decks : (deck ? [deck] : []);
-    if (decksToStudy.length > 0) {
-        const queue = buildSessionQueue(decksToStudy, decks, globalSettings, introductionsToday);
-        setSessionQueue(queue);
+    if (deckId === 'custom' && location.state) {
+        const { queue, srsEnabled, title } = location.state;
+        setIsCustomSession(true);
+        setSessionQueue(queue || []);
+        setIsSrsEnabled(srsEnabled);
+        setCustomSessionTitle(title || 'Custom Study');
+    } else {
+        setIsCustomSession(false);
+        setIsSrsEnabled(true);
+        if (!deck && deckId !== 'all') return;
+        const decksToStudy = deckId === 'all' ? decks : (deck ? [deck] : []);
+        if (decksToStudy.length > 0) {
+            const queue = buildSessionQueue(decksToStudy, decks, globalSettings, introductionsToday);
+            setSessionQueue(queue);
+        }
     }
     
     setCurrentCardIndex(0);
     setBuriedNoteIds(new Set());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deckId]);
+  }, [deckId, location.state, deck, decks, globalSettings, introductionsToday]);
 
   const handleRating = useCallback(async (rating: Rating) => {
     if (!currentCard) return;
     
-    const settings = getEffectiveSrsSettings(decks, deckId || 'all', globalSettings);
     const actualCardIndex = sessionQueue.findIndex(c => c.id === currentCard.id);
     if (actualCardIndex === -1) return;
 
+    if (!isSrsEnabled) {
+        setIsFlipped(false);
+        setCurrentCardIndex(actualCardIndex + 1);
+        return;
+    }
+
+    const settings = getEffectiveSrsSettings(decks, deckId || 'all', globalSettings);
     const wasNew = (currentCard.srs?.fsrs?.reps === 0 || !currentCard.srs?.fsrs) || (currentCard.srs?.sm2?.repetitions === 0 || !currentCard.srs?.sm2);
     let updatedCard: FlashcardData = currentCard;
 
@@ -229,10 +248,10 @@ const StudyPage = () => {
 
     setIsFlipped(false);
     setCurrentCardIndex(actualCardIndex + 1);
-  }, [currentCard, sessionQueue, decks, deckId, globalSettings, setDecks, fsrsOutcomes, fsrsInstance, addIntroducedCard]);
+  }, [currentCard, sessionQueue, decks, deckId, globalSettings, setDecks, fsrsOutcomes, fsrsInstance, addIntroducedCard, isSrsEnabled]);
 
   useEffect(() => {
-    if (isFlipped && currentCard) {
+    if (isFlipped && currentCard && isSrsEnabled) {
       const settings = getEffectiveSrsSettings(decks, deckId || 'all', globalSettings);
       if (settings.scheduler === 'fsrs' || settings.scheduler === 'fsrs6') {
         const srsData = settings.scheduler === 'fsrs6' ? currentCard.srs?.fsrs6 : currentCard.srs?.fsrs;
@@ -258,7 +277,7 @@ const StudyPage = () => {
     } else {
       setFsrsOutcomes(null);
     }
-  }, [isFlipped, currentCard, decks, deckId, globalSettings, fsrsInstance]);
+  }, [isFlipped, currentCard, decks, deckId, globalSettings, fsrsInstance, isSrsEnabled]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -268,6 +287,10 @@ const StudyPage = () => {
         return;
       }
       if (isFlipped) {
+        if (!isSrsEnabled) {
+            handleRating(Rating.Good); // Just advances to next card
+            return;
+        }
         switch (event.key) {
           case '1': handleRating(Rating.Again); break;
           case '2': handleRating(Rating.Hard); break;
@@ -278,11 +301,11 @@ const StudyPage = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isFlipped, handleRating]);
+  }, [isFlipped, handleRating, isSrsEnabled]);
 
-  const pageTitle = deckId === 'all' ? "Studying All Due Cards" : `Studying: ${deck?.name}`;
+  const pageTitle = isCustomSession ? customSessionTitle : (deckId === 'all' ? "Studying All Due Cards" : `Studying: ${deck?.name}`);
 
-  if (!deck && deckId !== 'all') {
+  if (!isCustomSession && !deck && deckId !== 'all') {
     return <div className="min-h-screen flex flex-col items-center justify-center text-center p-4"><h2 className="text-2xl font-bold mb-4">Deck not found</h2><Button asChild><Link to="/"><Home className="mr-2 h-4 w-4" /> Go back to My Decks</Link></Button></div>;
   }
   if (sessionQueue.length === 0 && currentCardIndex === 0) {
@@ -366,6 +389,34 @@ const StudyPage = () => {
     return '';
   };
 
+  const renderFooter = () => {
+    if (!isSrsEnabled) {
+        return (
+            <div className="w-full max-w-2xl mx-auto p-4">
+                {isFlipped ? (
+                    <Button onClick={() => handleRating(Rating.Good)} className="w-full h-16 text-lg">Next Card</Button>
+                ) : (
+                    <Button onClick={() => setIsFlipped(true)} className="w-full h-16 text-lg relative">Show Answer<span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">Space</span></Button>
+                )}
+            </div>
+        );
+    }
+    return (
+        <div className="w-full max-w-2xl mx-auto p-4">
+          {isFlipped ? (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full">
+              <Button onClick={() => handleRating(Rating.Again)} className="relative bg-red-500 hover:bg-red-600 text-white font-bold h-16 text-base flex flex-col"><span>Again</span><span className="text-xs font-normal opacity-80">{getIntervalText(Rating.Again)}</span><span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">1</span></Button>
+              <Button onClick={() => handleRating(Rating.Hard)} className="relative bg-orange-400 hover:bg-orange-500 text-white font-bold h-16 text-base flex flex-col"><span>Hard</span><span className="text-xs font-normal opacity-80">{getIntervalText(Rating.Hard)}</span><span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">2</span></Button>
+              <Button onClick={() => handleRating(Rating.Good)} className="relative bg-green-500 hover:bg-green-600 text-white font-bold h-16 text-base flex flex-col"><span>Good</span><span className="text-xs font-normal opacity-80">{getIntervalText(Rating.Good)}</span><span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">3</span></Button>
+              <Button onClick={() => handleRating(Rating.Easy)} className="relative bg-blue-500 hover:bg-blue-600 text-white font-bold h-16 text-base flex flex-col"><span>Easy</span><span className="text-xs font-normal opacity-80">{getIntervalText(Rating.Easy)}</span><span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">4</span></Button>
+            </div>
+          ) : (
+            <Button onClick={() => setIsFlipped(true)} className="w-full h-16 text-lg relative">Show Answer<span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">Space</span></Button>
+          )}
+        </div>
+    );
+  }
+
   return (
     <div className="min-h-screen w-full bg-secondary/50 flex flex-col">
       <div className="flex-grow w-full pb-32"> {/* Padding bottom to clear sticky footer */}
@@ -390,18 +441,7 @@ const StudyPage = () => {
       </div>
 
       <footer className="sticky bottom-0 w-full bg-secondary/95 backdrop-blur-sm border-t z-20">
-        <div className="w-full max-w-2xl mx-auto p-4">
-          {isFlipped ? (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full">
-              <Button onClick={() => handleRating(Rating.Again)} className="relative bg-red-500 hover:bg-red-600 text-white font-bold h-16 text-base flex flex-col"><span>Again</span><span className="text-xs font-normal opacity-80">{getIntervalText(Rating.Again)}</span><span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">1</span></Button>
-              <Button onClick={() => handleRating(Rating.Hard)} className="relative bg-orange-400 hover:bg-orange-500 text-white font-bold h-16 text-base flex flex-col"><span>Hard</span><span className="text-xs font-normal opacity-80">{getIntervalText(Rating.Hard)}</span><span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">2</span></Button>
-              <Button onClick={() => handleRating(Rating.Good)} className="relative bg-green-500 hover:bg-green-600 text-white font-bold h-16 text-base flex flex-col"><span>Good</span><span className="text-xs font-normal opacity-80">{getIntervalText(Rating.Good)}</span><span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">3</span></Button>
-              <Button onClick={() => handleRating(Rating.Easy)} className="relative bg-blue-500 hover:bg-blue-600 text-white font-bold h-16 text-base flex flex-col"><span>Easy</span><span className="text-xs font-normal opacity-80">{getIntervalText(Rating.Easy)}</span><span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">4</span></Button>
-            </div>
-          ) : (
-            <Button onClick={() => setIsFlipped(true)} className="w-full h-16 text-lg relative">Show Answer<span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">Space</span></Button>
-          )}
-        </div>
+        {renderFooter()}
       </footer>
     </div>
   );
