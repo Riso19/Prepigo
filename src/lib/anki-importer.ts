@@ -352,13 +352,17 @@ export const importAnkiFile = async (
   onProgress({ message: 'Finalizing decks...', value: 95 });
   const rootDecks: DeckData[] = [];
   const allDecks = Array.from(deckDataMap.values());
+
+  // Create a map from full deck name to deck object for efficient lookup
+  const nameToDeckMap = new Map<string, DeckData>();
+  allDecks.forEach(d => nameToDeckMap.set(d.name, d));
+
   allDecks.forEach(deck => {
     const parts = deck.name.split('::');
     if (parts.length > 1) {
       const parentName = parts.slice(0, -1).join('::');
-      const parentDeck = allDecks.find(d => d.name === parentName);
+      const parentDeck = nameToDeckMap.get(parentName);
       if (parentDeck) {
-        deck.name = parts[parts.length - 1];
         parentDeck.subDecks!.push(deck);
       } else {
         rootDecks.push(deck);
@@ -367,6 +371,18 @@ export const importAnkiFile = async (
       rootDecks.push(deck);
     }
   });
+
+  // Now shorten the names of all sub-decks recursively
+  const shortenDeckNames = (decks: DeckData[]) => {
+      decks.forEach(deck => {
+          const parts = deck.name.split('::');
+          deck.name = parts[parts.length - 1];
+          if (deck.subDecks) {
+              shortenDeckNames(deck.subDecks);
+          }
+      });
+  };
+  shortenDeckNames(rootDecks);
 
   onProgress({ message: 'Import complete!', value: 100 });
   return { decks: rootDecks, media: mediaToStore };
