@@ -10,8 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { fsrs, createEmptyCard, Card as FsrsCard, Rating } from "ts-fsrs";
-import { fsrsMedConfig } from "../config/fsrs-med-config";
 import { addMcqReviewLog, McqReviewLog } from "@/lib/idb";
+import { useSettings } from "@/contexts/SettingsContext";
 
 const shuffle = <T,>(array: T[]): T[] => {
   const newArray = [...array];
@@ -26,6 +26,7 @@ const PracticeMcqPage = () => {
   const { bankId } = useParams<{ bankId: string }>();
   const { questionBanks, setQuestionBanks } = useQuestionBanks();
   const navigate = useNavigate();
+  const { settings } = useSettings();
 
   const [sessionQueue, setSessionQueue] = useState<McqData[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -34,7 +35,7 @@ const PracticeMcqPage = () => {
   const [sessionStats, setSessionStats] = useState({ correct: 0, incorrect: 0 });
   const [isFinished, setIsFinished] = useState(false);
 
-  const fsrsInstance = useMemo(() => fsrs(fsrsMedConfig), []);
+  const fsrsInstance = useMemo(() => fsrs(settings.mcqFsrsParameters), [settings.mcqFsrsParameters]);
 
   const bank = useMemo(() => (bankId && bankId !== 'all' ? findQuestionBankById(questionBanks, bankId) : null), [questionBanks, bankId]);
   const currentQuestion = useMemo(() => sessionQueue[currentQuestionIndex], [sessionQueue, currentQuestionIndex]);

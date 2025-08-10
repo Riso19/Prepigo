@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { PlusCircle } from "lucide-react";
+import { PlusCircle, Settings } from "lucide-react";
 import { useQuestionBanks } from "@/contexts/QuestionBankContext";
 import QuestionBankItem from "@/components/QuestionBankItem";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -8,6 +8,8 @@ import { AddQuestionBankDialog } from "./AddQuestionBankDialog";
 import { DndContext, DragEndEvent, useDroppable } from "@dnd-kit/core";
 import { moveQuestionBank } from "@/lib/question-bank-utils";
 import { Link } from "react-router-dom";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { McqSettingsForm } from "./McqSettingsForm";
 
 const RootDroppable = () => {
   const { setNodeRef, isOver } = useDroppable({
@@ -29,6 +31,7 @@ const RootDroppable = () => {
 const QuestionBankManager = () => {
   const { questionBanks, setQuestionBanks } = useQuestionBanks();
   const [isAddBankOpen, setIsAddBankOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -53,6 +56,20 @@ const QuestionBankManager = () => {
               <Button onClick={() => setIsAddBankOpen(true)}>
                 <PlusCircle className="mr-2 h-4 w-4" /> Add New Bank
               </Button>
+              <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="ghost" size="icon">
+                    <Settings className="h-5 w-5" />
+                    <span className="sr-only">MCQ Settings</span>
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[600px]">
+                  <DialogHeader>
+                    <DialogTitle>MCQ Spaced Repetition Settings</DialogTitle>
+                  </DialogHeader>
+                  <McqSettingsForm setDialogOpen={setIsSettingsOpen} />
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
         </CardHeader>

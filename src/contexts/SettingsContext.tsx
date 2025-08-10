@@ -16,6 +16,7 @@ const fsrsParametersSchema = z.object({
 export const srsSettingsSchema = z.object({
   scheduler: z.enum(['fsrs', 'sm2']),
   fsrsParameters: fsrsParametersSchema,
+  mcqFsrsParameters: fsrsParametersSchema,
   sm2StartingEase: z.coerce.number().min(1.3, "Must be at least 1.3"),
   sm2MinEasinessFactor: z.coerce.number().min(1.3, "Must be at least 1.3"),
   sm2EasyBonus: z.coerce.number().min(1, "Must be at least 1.0"),
@@ -60,6 +61,11 @@ const defaultSettings: SrsSettings = {
   scheduler: 'fsrs',
   fsrsParameters: {
     ...defaultFsrsParams,
+    w: [...defaultFsrsParams.w],
+  },
+  mcqFsrsParameters: {
+    request_retention: 0.82,
+    maximum_interval: 365,
     w: [...defaultFsrsParams.w],
   },
   sm2StartingEase: 2.5,
