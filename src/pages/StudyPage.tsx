@@ -2,9 +2,9 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useDecks } from "@/contexts/DecksContext";
 import { useSettings } from "@/contexts/SettingsContext";
-import { findDeckById, getAllFlashcardsFromDeck, updateFlashcard, getEffectiveSrsSettings } from "@/lib/deck-utils";
+import { findDeckById, updateFlashcard, getEffectiveSrsSettings } from "@/lib/deck-utils";
 import { addReviewLog } from "@/lib/idb";
-import { FlashcardData, ReviewLog, Sm2State } from "@/data/decks";
+import { DeckData, FlashcardData, ReviewLog, Sm2State } from "@/data/decks";
 import Flashcard from "@/components/Flashcard";
 import ClozePlayer from "@/components/ClozePlayer";
 import ImageOcclusionPlayer from "@/components/ImageOcclusionPlayer";
@@ -39,11 +39,6 @@ const StudyPage = () => {
   const { settings: globalSettings } = useSettings();
   const navigate = useNavigate();
 
-  const settings = useMemo(() => {
-    if (!deckId) return globalSettings;
-    return getEffectiveSrsSettings(decks, deckId, globalSettings);
-  }, [deckId, decks, globalSettings]);
-
   const deck = useMemo(() => (deckId ? findDeckById(decks, deckId) : null), [decks, deckId]);
   
   const [isFlipped, setIsFlipped] = useState(false);
@@ -52,7 +47,11 @@ const StudyPage = () => {
   const [buriedNoteIds, setBuriedNoteIds] = useState<Set<string>>(new Set());
   
   const [fsrsOutcomes, setFsrsOutcomes] = useState<RecordLog | null>(null);
-  const fsrsInstance = useMemo(() => fsrs(generatorParameters(settings.fsrsParameters)), [settings.fsrsParameters]);
+  const fsrsInstance = useMemo(() => {
+    if (!deck) return fsrs(generatorParameters());
+    const settings = getEffectiveSrsSettings(decks, deck.id, globalSettings);
+    return fsrs(generatorParameters(settings.fsrsParameters));
+  }, [deck, decks, globalSettings]);
 
   const currentCard = useMemo(() => {
     for (let i = currentCardIndex; i < sessionQueue.length; i++) {
@@ -67,109 +66,132 @@ const StudyPage = () => {
   useEffect(() => {
     if (!deck) return;
 
-    const allCards = getAllFlashcardsFromDeck(deck);
     const now = new Date();
 
-    if (settings.scheduler === 'fsrs') {
-      const dueCards = allCards.filter(card => {
-        if (card.srs?.isSuspended) return false;
-        const fsrsState = card.srs?.fsrs;
-        if (!fsrsState) return true; // New card
-        return new Date(fsrsState.due) <= now;
-      });
+    // Card state helper functions
+    const isNew = (card: FlashcardData, s: SrsSettings) => {
+      if (card.srs?.isSuspended) return false;
+      if (s.scheduler === 'fsrs') return !card.srs?.fsrs || card.srs.fsrs.state === State.New;
+      return !card.srs?.sm2 || card.srs.sm2.state === 'new';
+    };
+    const isDue = (card: FlashcardData) => {
+      if (card.srs?.isSuspended) return false;
+      const s = getEffectiveSrsSettings(decks, deckId!, globalSettings);
+      if (s.scheduler === 'fsrs') return card.srs?.fsrs && new Date(card.srs.fsrs.due) <= now;
+      return card.srs?.sm2 && new Date(card.srs.sm2.due) <= now;
+    };
+    const isLearning = (card: FlashcardData) => {
+      if (!isDue(card)) return false;
+      const s = getEffectiveSrsSettings(decks, deckId!, globalSettings);
+      if (s.scheduler === 'fsrs') return card.srs?.fsrs?.state === State.Learning || card.srs?.fsrs?.state === State.Relearning;
+      const sm2State = card.srs?.sm2;
+      return sm2State?.state === 'learning' || sm2State?.state === 'relearning';
+    };
+    const isInterdayLearning = (card: FlashcardData) => {
+      if (!isLearning(card)) return false;
+      const s = getEffectiveSrsSettings(decks, deckId!, globalSettings);
+      if (s.scheduler === 'fsrs') return true; // All FSRS learning cards count towards review limit
+      const sm2State = card.srs!.sm2!;
+      const steps = sm2State.state === 'learning' ? parseSteps(s.learningSteps) : parseSteps(s.relearningSteps);
+      const stepIndex = sm2State.learning_step || 0;
+      return stepIndex >= steps.length || steps[stepIndex] >= 1440;
+    };
+    const isIntradayLearning = (card: FlashcardData) => {
+      if (!isLearning(card)) return false;
+      const s = getEffectiveSrsSettings(decks, deckId!, globalSettings);
+      if (s.scheduler === 'fsrs') return false; // All FSRS learning is interday for limit purposes
+      return !isInterdayLearning(card);
+    };
+    const isReview = (card: FlashcardData) => {
+      if (!isDue(card)) return false;
+      const s = getEffectiveSrsSettings(decks, deckId!, globalSettings);
+      if (s.scheduler === 'fsrs') return card.srs?.fsrs?.state === State.Review;
+      return card.srs?.sm2?.state === 'review';
+    };
 
-      const dueReviews = dueCards.filter(c => c.srs?.fsrs && c.srs.fsrs.state !== State.New);
-      const dueNew = dueCards.filter(c => !c.srs?.fsrs || c.srs.fsrs.state === State.New);
+    // Recursive gathering function
+    const gatherCardsForSession = (rootDeck: DeckData) => {
+      const sessionNew: FlashcardData[] = [];
+      const sessionReviews: FlashcardData[] = []; // Interday learning + reviews
+      const sessionLearning: FlashcardData[] = []; // Intraday learning
 
-      const sessionReviews = shuffle(dueReviews).slice(0, settings.maxReviewsPerDay);
-      const sessionNew = shuffle(dueNew).slice(0, settings.newCardsPerDay);
+      const recursiveGather = (currentDeck: DeckData, newBudget: number, reviewBudget: number) => {
+        const settings = getEffectiveSrsSettings(decks, currentDeck.id, globalSettings);
+        let newTakenOnThisBranch = 0;
+        let reviewsTakenOnThisBranch = 0;
 
-      setSessionQueue(shuffle([...sessionReviews, ...sessionNew]));
-    } else {
-      // SM-2 Queue Generation
-      const intradayLearning: FlashcardData[] = [];
-      const interdayLearning: FlashcardData[] = [];
-      const reviews: FlashcardData[] = [];
-      const newCards: FlashcardData[] = [];
+        const cards = currentDeck.flashcards.filter(c => !c.srs?.isSuspended);
+        const localNew = cards.filter(c => isNew(c, settings));
+        const localReviews = cards.filter(c => isReview(c));
+        const localInterday = cards.filter(c => isInterdayLearning(c));
+        const localIntraday = cards.filter(c => isIntradayLearning(c));
 
-      allCards.forEach(card => {
-        if (card.srs?.isSuspended) return;
-        const sm2State = card.srs?.sm2;
-        if (!sm2State || sm2State.state === 'new') {
-          newCards.push(card);
-        } else if (new Date(sm2State.due) <= now) {
-          if (sm2State.state === 'review') {
-            reviews.push(card);
-          } else if (sm2State.state === 'learning' || sm2State.state === 'relearning') {
-            const steps = sm2State.state === 'learning' ? parseSteps(settings.learningSteps) : parseSteps(settings.relearningSteps);
-            const stepIndex = sm2State.learning_step || 0;
-            if (stepIndex < steps.length && steps[stepIndex] < 1440) {
-              intradayLearning.push(card);
-            } else {
-              interdayLearning.push(card);
+        sessionLearning.push(...localIntraday);
+
+        const potentialReviews = [...localInterday, ...localReviews];
+        const reviewsToTake = Math.min(potentialReviews.length, reviewBudget);
+        if (reviewsToTake > 0) {
+          sessionReviews.push(...potentialReviews.slice(0, reviewsToTake));
+          reviewsTakenOnThisBranch += reviewsToTake;
+        }
+
+        const newToTake = Math.min(localNew.length, newBudget);
+        if (newToTake > 0) {
+          sessionNew.push(...localNew.slice(0, newToTake));
+          newTakenOnThisBranch += newToTake;
+        }
+
+        if (currentDeck.subDecks) {
+          for (const subDeck of currentDeck.subDecks) {
+            const remainingNew = newBudget - newTakenOnThisBranch;
+            const remainingReview = reviewBudget - reviewsTakenOnThisBranch;
+            if (remainingNew > 0 || remainingReview > 0) {
+              const { newTaken, reviewsTaken } = recursiveGather(subDeck, remainingNew, remainingReview);
+              newTakenOnThisBranch += newTaken;
+              reviewsTakenOnThisBranch += reviewsTaken;
             }
           }
         }
-      });
+        return { newTaken: newTakenOnThisBranch, reviewsTaken: reviewsTakenOnThisBranch };
+      };
 
-      let gatheredNew = newCards;
-      if (settings.newCardGatherOrder === 'ascending') gatheredNew.sort((a, b) => (a.srs?.newCardOrder || 0) - (b.srs?.newCardOrder || 0));
-      if (settings.newCardGatherOrder === 'descending') gatheredNew.sort((a, b) => (b.srs?.newCardOrder || 0) - (a.srs?.newCardOrder || 0));
-      if (settings.newCardGatherOrder === 'randomCards') gatheredNew = shuffle(gatheredNew);
-      gatheredNew = gatheredNew.slice(0, settings.newCardsPerDay);
+      const topLevelSettings = getEffectiveSrsSettings(decks, rootDeck.id, globalSettings);
+      recursiveGather(rootDeck, topLevelSettings.newCardsPerDay, topLevelSettings.maxReviewsPerDay);
+      return { newCards: sessionNew, reviewCards: sessionReviews, learningCards: sessionLearning };
+    };
 
-      let sortedNew = gatheredNew;
-      if (settings.newCardSortOrder === 'random') sortedNew = shuffle(sortedNew);
+    const { newCards, reviewCards, learningCards } = gatherCardsForSession(deck);
+    const settings = getEffectiveSrsSettings(decks, deck.id, globalSettings);
 
-      let sortedReviews = reviews;
-      if (settings.reviewSortOrder === 'dueDateRandom') sortedReviews.sort((a, b) => new Date(a.srs!.sm2!.due).getTime() - new Date(b.srs!.sm2!.due).getTime());
+    let gatheredNew = newCards;
+    if (settings.newCardGatherOrder === 'ascending') gatheredNew.sort((a, b) => (a.srs?.newCardOrder || 0) - (b.srs?.newCardOrder || 0));
+    if (settings.newCardGatherOrder === 'descending') gatheredNew.sort((a, b) => (b.srs?.newCardOrder || 0) - (a.srs?.newCardOrder || 0));
+    if (settings.newCardGatherOrder === 'randomCards' || settings.newCardGatherOrder === 'randomNotes') gatheredNew = shuffle(gatheredNew);
+
+    let sortedNew = gatheredNew;
+    if (settings.newCardSortOrder === 'random') sortedNew = shuffle(sortedNew);
+
+    let sortedReviews = reviewCards;
+    if (settings.reviewSortOrder === 'dueDateRandom') {
+      sortedReviews.sort((a, b) => new Date(a.srs!.fsrs?.due || a.srs!.sm2!.due).getTime() - new Date(b.srs!.fsrs?.due || b.srs!.sm2!.due).getTime());
       sortedReviews = shuffle(sortedReviews);
-      sortedReviews = sortedReviews.slice(0, settings.maxReviewsPerDay);
-
-      const learningCombined = [...intradayLearning, ...interdayLearning].sort((a, b) => new Date(a.srs!.sm2!.due).getTime() - new Date(b.srs!.sm2!.due).getTime());
-      
-      const reviewsAndInterday = settings.interdayLearningReviewOrder === 'mix' ? shuffle([...sortedReviews, ...interdayLearning]) :
-                                 settings.interdayLearningReviewOrder === 'after' ? [...sortedReviews, ...interdayLearning] :
-                                 [...interdayLearning, ...sortedReviews];
-
-      const finalWithNew = settings.newReviewOrder === 'mix' ? shuffle([...reviewsAndInterday, ...sortedNew]) :
-                           settings.newReviewOrder === 'after' ? [...reviewsAndInterday, ...sortedNew] :
-                           [...sortedNew, ...reviewsAndInterday];
-
-      const combinedQueue = [...learningCombined, ...finalWithNew];
-      setSessionQueue(combinedQueue);
     }
 
+    const learningCombined = learningCards.sort((a, b) => new Date(a.srs!.fsrs?.due || a.srs!.sm2!.due).getTime() - new Date(b.srs!.fsrs?.due || b.srs!.sm2!.due).getTime());
+
+    const finalWithNew = settings.newReviewOrder === 'mix' ? shuffle([...sortedReviews, ...sortedNew]) :
+                         settings.newReviewOrder === 'after' ? [...sortedReviews, ...sortedNew] :
+                         [...sortedNew, ...sortedReviews];
+
+    setSessionQueue([...learningCombined, ...finalWithNew]);
     setCurrentCardIndex(0);
     setBuriedNoteIds(new Set());
-  }, [deck, settings]);
-
-  useEffect(() => {
-    if (isFlipped && currentCard && settings.scheduler === 'fsrs') {
-      const card: Card = currentCard.srs?.fsrs
-        ? {
-            due: new Date(currentCard.srs.fsrs.due),
-            stability: currentCard.srs.fsrs.stability,
-            difficulty: currentCard.srs.fsrs.difficulty,
-            elapsed_days: currentCard.srs.fsrs.elapsed_days,
-            scheduled_days: currentCard.srs.fsrs.scheduled_days,
-            reps: currentCard.srs.fsrs.reps,
-            lapses: currentCard.srs.fsrs.lapses,
-            state: currentCard.srs.fsrs.state,
-            last_review: currentCard.srs.fsrs.last_review ? new Date(currentCard.srs.fsrs.last_review) : undefined,
-            learning_steps: currentCard.srs.fsrs.learning_steps ?? 0,
-          }
-        : createEmptyCard(new Date());
-      const outcomes = fsrsInstance.repeat(card, new Date());
-      setFsrsOutcomes(outcomes);
-    } else {
-      setFsrsOutcomes(null);
-    }
-  }, [isFlipped, currentCard, settings.scheduler, fsrsInstance]);
+  }, [deck, decks, globalSettings]);
 
   const handleRating = useCallback(async (rating: Rating) => {
     if (!currentCard) return;
-
+    
+    const settings = getEffectiveSrsSettings(decks, deckId!, globalSettings);
     const actualCardIndex = sessionQueue.findIndex(c => c.id === currentCard.id);
     if (actualCardIndex === -1) return;
 
@@ -316,7 +338,35 @@ const StudyPage = () => {
 
     setIsFlipped(false);
     setCurrentCardIndex(actualCardIndex + 1);
-  }, [currentCard, sessionQueue, settings, setDecks, fsrsOutcomes, fsrsInstance]);
+  }, [currentCard, sessionQueue, decks, deckId, globalSettings, setDecks, fsrsOutcomes, fsrsInstance]);
+
+  useEffect(() => {
+    if (isFlipped && currentCard) {
+      const settings = getEffectiveSrsSettings(decks, deckId!, globalSettings);
+      if (settings.scheduler === 'fsrs') {
+        const card: Card = currentCard.srs?.fsrs
+          ? {
+              due: new Date(currentCard.srs.fsrs.due),
+              stability: currentCard.srs.fsrs.stability,
+              difficulty: currentCard.srs.fsrs.difficulty,
+              elapsed_days: currentCard.srs.fsrs.elapsed_days,
+              scheduled_days: currentCard.srs.fsrs.scheduled_days,
+              reps: currentCard.srs.fsrs.reps,
+              lapses: currentCard.srs.fsrs.lapses,
+              state: currentCard.srs.fsrs.state,
+              last_review: currentCard.srs.fsrs.last_review ? new Date(currentCard.srs.fsrs.last_review) : undefined,
+              learning_steps: currentCard.srs.fsrs.learning_steps ?? 0,
+            }
+          : createEmptyCard(new Date());
+        const outcomes = fsrsInstance.repeat(card, new Date());
+        setFsrsOutcomes(outcomes);
+      } else {
+        setFsrsOutcomes(null);
+      }
+    } else {
+      setFsrsOutcomes(null);
+    }
+  }, [isFlipped, currentCard, decks, deckId, globalSettings, fsrsInstance]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -368,6 +418,7 @@ const StudyPage = () => {
   };
 
   const getIntervalText = (rating: Rating) => {
+    const settings = getEffectiveSrsSettings(decks, deckId!, globalSettings);
     if (settings.scheduler === 'fsrs' && fsrsOutcomes) {
       const nextDueDate = fsrsOutcomes[rating].card.due;
       const now = new Date();
