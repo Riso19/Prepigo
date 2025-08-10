@@ -1,4 +1,4 @@
-import { QuestionBankData } from "@/data/questionBanks";
+import { QuestionBankData, McqData } from "@/data/questionBanks";
 
 // Recursively find a question bank by its ID
 export const findQuestionBankById = (banks: QuestionBankData[], id: string): QuestionBankData | null => {
@@ -79,4 +79,30 @@ export const moveQuestionBank = (banks: QuestionBankData[], activeId: string, ov
   }
 
   return banksCopy;
+};
+
+// Immutably add an MCQ to a parent bank
+export const addMcqToBank = (banks: QuestionBankData[], parentId: string, newMcq: McqData): QuestionBankData[] => {
+    return banks.map(bank => {
+        if (bank.id === parentId) {
+            return { ...bank, mcqs: [...bank.mcqs, newMcq] };
+        }
+        if (bank.subBanks) {
+            return { ...bank, subBanks: addMcqToBank(bank.subBanks, parentId, newMcq) };
+        }
+        return bank;
+    });
+}
+
+// Get all unique tags from all question banks
+export const getAllTagsFromQuestionBanks = (banks: QuestionBankData[]): string[] => {
+    const allTags = new Set<string>();
+    const collectTags = (bank: QuestionBankData) => {
+        bank.mcqs.forEach(mcq => {
+            mcq.tags?.forEach(tag => allTags.add(tag));
+        });
+        bank.subBanks?.forEach(collectTags);
+    };
+    banks.forEach(collectTags);
+    return Array.from(allTags).sort((a, b) => a.localeCompare(b));
 };

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { QuestionBankData } from "@/data/questionBanks";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "./ui/button";
@@ -81,9 +82,11 @@ const QuestionBankItem = ({ bank }: { bank: QuestionBankData }) => {
                   <Settings className="mr-2 h-4 w-4" />
                   Manage MCQs
                 </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add MCQ
+                <DropdownMenuItem asChild>
+                  <Link to={`/question-bank/${bank.id}/add`}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add MCQ
+                  </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setIsAddSubBankOpen(true)}>
                   <Folder className="mr-2 h-4 w-4" />
