@@ -278,7 +278,8 @@ const SettingsPage = () => {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="fsrs">FSRS (Recommended)</SelectItem>
+                              <SelectItem value="fsrs">FSRS-4.5 (Recommended)</SelectItem>
+                              <SelectItem value="fsrs6">FSRS-6 (Experimental)</SelectItem>
                               <SelectItem value="sm2">SM-2 (Legacy)</SelectItem>
                             </SelectContent>
                           </Select>
@@ -295,9 +296,9 @@ const SettingsPage = () => {
                 {scheduler === 'fsrs' && (
                   <Card>
                     <CardHeader>
-                      <CardTitle>FSRS Parameters</CardTitle>
+                      <CardTitle>FSRS-4.5 Parameters</CardTitle>
                       <CardDescription>
-                        These settings only apply if FSRS is selected as the scheduler. It's recommended to keep the defaults unless you know what you're doing.
+                        These settings only apply if FSRS-4.5 is selected as the scheduler. It's recommended to keep the defaults unless you know what you're doing.
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -334,6 +335,35 @@ const SettingsPage = () => {
                         </FormControl>
                       </FormItem>
                     </CardFooter>
+                  </Card>
+                )}
+
+                {scheduler === 'fsrs6' && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>FSRS-6 Parameters (Experimental)</CardTitle>
+                      <CardDescription>
+                        This is an experimental scheduler based on the latest FSRS research. The default parameters are placeholders and not yet optimized.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <FormField control={form.control} name="fsrs6Parameters.request_retention" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Requested Retention</FormLabel>
+                          <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+                          <FormDescription>The probability of recalling a card you want to aim for.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="fsrs6Parameters.maximum_interval" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Maximum Interval (days)</FormLabel>
+                          <FormControl><Input type="number" {...field} /></FormControl>
+                          <FormDescription>The longest possible interval between reviews.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    </CardContent>
                   </Card>
                 )}
 

@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { fsrs, createEmptyCard, Card as FsrsCard, Rating } from "ts-fsrs";
+import { fsrs6, Card as Fsrs6Card, generatorParameters as fsrs6GeneratorParameters } from "@/lib/fsrs6";
 import { addMcqReviewLog, McqReviewLog } from "@/lib/idb";
 import { useSettings } from "@/contexts/SettingsContext";
 
@@ -48,7 +49,12 @@ const PracticeMcqPage = () => {
   const [isFinished, setIsFinished] = useState(false);
   const [dueTimeStrings, setDueTimeStrings] = useState<Record<string, string> | null>(null);
 
-  const fsrsInstance = useMemo(() => fsrs(settings.mcqFsrsParameters), [settings.mcqFsrsParameters]);
+  const fsrsInstance = useMemo(() => {
+    if (settings.scheduler === 'fsrs6') {
+      return fsrs6(fsrs6GeneratorParameters(settings.mcqFsrs6Parameters));
+    }
+    return fsrs(settings.mcqFsrsParameters);
+  }, [settings.scheduler, settings.mcqFsrsParameters, settings.mcqFsrs6Parameters]);
 
   const bank = useMemo(() => (bankId && bankId !== 'all' ? findQuestionBankById(questionBanks, bankId) : null), [questionBanks, bankId]);
   const currentQuestion = useMemo(() => sessionQueue[currentQuestionIndex], [sessionQueue, currentQuestionIndex]);
@@ -65,18 +71,19 @@ const PracticeMcqPage = () => {
 
   useEffect(() => {
     if (isSubmitted && currentQuestion) {
-        const card: FsrsCard = currentQuestion.srs?.fsrs
+        const srsData = settings.scheduler === 'fsrs6' ? currentQuestion.srs?.fsrs6 : currentQuestion.srs?.fsrs;
+        const card: FsrsCard | Fsrs6Card = srsData
             ? {
-                due: new Date(currentQuestion.srs.fsrs.due),
-                stability: currentQuestion.srs.fsrs.stability,
-                difficulty: currentQuestion.srs.fsrs.difficulty,
-                elapsed_days: currentQuestion.srs.fsrs.elapsed_days,
-                scheduled_days: currentQuestion.srs.fsrs.scheduled_days,
-                reps: currentQuestion.srs.fsrs.reps,
-                lapses: currentQuestion.srs.fsrs.lapses,
-                state: currentQuestion.srs.fsrs.state,
-                last_review: currentQuestion.srs.fsrs.last_review ? new Date(currentQuestion.srs.fsrs.last_review) : undefined,
-                learning_steps: currentQuestion.srs.fsrs.learning_steps ?? 0,
+                due: new Date(srsData.due),
+                stability: srsData.stability,
+                difficulty: srsData.difficulty,
+                elapsed_days: srsData.elapsed_days,
+                scheduled_days: srsData.scheduled_days,
+                reps: srsData.reps,
+                lapses: srsData.lapses,
+                state: srsData.state,
+                last_review: srsData.last_review ? new Date(srsData.last_review) : undefined,
+                learning_steps: srsData.learning_steps ?? 0,
             }
             : createEmptyCard(new Date());
 
@@ -95,7 +102,7 @@ const PracticeMcqPage = () => {
     } else {
         setDueTimeStrings(null);
     }
-  }, [isSubmitted, currentQuestion, fsrsInstance]);
+  }, [isSubmitted, currentQuestion, fsrsInstance, settings.scheduler]);
 
   const handleSelectAndSubmit = useCallback((optionId: string) => {
     if (isSubmitted) return;
@@ -114,18 +121,19 @@ const PracticeMcqPage = () => {
   const handleGradeAndProceed = useCallback(async (rating: Rating) => {
     if (!currentQuestion) return;
 
-    const card: FsrsCard = currentQuestion.srs?.fsrs
+    const srsData = settings.scheduler === 'fsrs6' ? currentQuestion.srs?.fsrs6 : currentQuestion.srs?.fsrs;
+    const card: FsrsCard | Fsrs6Card = srsData
       ? {
-          due: new Date(currentQuestion.srs.fsrs.due),
-          stability: currentQuestion.srs.fsrs.stability,
-          difficulty: currentQuestion.srs.fsrs.difficulty,
-          elapsed_days: currentQuestion.srs.fsrs.elapsed_days,
-          scheduled_days: currentQuestion.srs.fsrs.scheduled_days,
-          reps: currentQuestion.srs.fsrs.reps,
-          lapses: currentQuestion.srs.fsrs.lapses,
-          state: currentQuestion.srs.fsrs.state,
-          last_review: currentQuestion.srs.fsrs.last_review ? new Date(currentQuestion.srs.fsrs.last_review) : undefined,
-          learning_steps: currentQuestion.srs.fsrs.learning_steps ?? 0,
+          due: new Date(srsData.due),
+          stability: srsData.stability,
+          difficulty: srsData.difficulty,
+          elapsed_days: srsData.elapsed_days,
+          scheduled_days: srsData.scheduled_days,
+          reps: srsData.reps,
+          lapses: srsData.lapses,
+          state: srsData.state,
+          last_review: srsData.last_review ? new Date(srsData.last_review) : undefined,
+          learning_steps: srsData.learning_steps ?? 0,
         }
       : createEmptyCard(new Date());
 
@@ -146,15 +154,17 @@ const PracticeMcqPage = () => {
     };
     await addMcqReviewLog(logToSave);
 
+    const updatedSrsData = {
+        ...nextState.card,
+        due: nextState.card.due.toISOString(),
+        last_review: nextState.card.last_review?.toISOString(),
+    };
+
     const updatedMcq: McqData = {
       ...currentQuestion,
       srs: {
         ...currentQuestion.srs,
-        fsrs: {
-          ...nextState.card,
-          due: nextState.card.due.toISOString(),
-          last_review: nextState.card.last_review?.toISOString(),
-        },
+        ...(settings.scheduler === 'fsrs6' ? { fsrs6: updatedSrsData } : { fsrs: updatedSrsData }),
       },
     };
     setQuestionBanks(prevBanks => updateMcq(prevBanks, updatedMcq));
@@ -166,7 +176,7 @@ const PracticeMcqPage = () => {
     } else {
       setIsFinished(true);
     }
-  }, [currentQuestion, currentQuestionIndex, sessionQueue.length, fsrsInstance, setQuestionBanks]);
+  }, [currentQuestion, currentQuestionIndex, sessionQueue.length, fsrsInstance, setQuestionBanks, settings.scheduler]);
 
   const handleRestart = useCallback(() => {
     setSessionQueue(shuffle(sessionQueue));

@@ -5,13 +5,13 @@ import { cn } from "@/lib/utils";
 
 type CardStatus = "New" | "Learning" | "Relearning" | "Young" | "Mature" | "Suspended";
 
-export const getCardStatus = (card: FlashcardData, scheduler: 'fsrs' | 'sm2'): CardStatus => {
+export const getCardStatus = (card: FlashcardData, scheduler: 'fsrs' | 'sm2' | 'fsrs6'): CardStatus => {
     if (card.srs?.isSuspended) {
         return "Suspended";
     }
 
-    if (scheduler === 'fsrs') {
-        const srsState = card.srs?.fsrs;
+    if (scheduler === 'fsrs' || scheduler === 'fsrs6') {
+        const srsState = scheduler === 'fsrs6' ? card.srs?.fsrs6 : card.srs?.fsrs;
         if (!srsState || srsState.state === State.New) return "New";
         if (srsState.state === State.Learning) return "Learning";
         if (srsState.state === State.Relearning) return "Relearning";
@@ -32,7 +32,7 @@ export const getCardStatus = (card: FlashcardData, scheduler: 'fsrs' | 'sm2'): C
 
 interface FlashcardStatusProps {
   card: FlashcardData;
-  scheduler: 'fsrs' | 'sm2';
+  scheduler: 'fsrs' | 'sm2' | 'fsrs6';
 }
 
 export const FlashcardStatus = ({ card, scheduler }: FlashcardStatusProps) => {

@@ -13,10 +13,18 @@ const fsrsParametersSchema = z.object({
     w: z.array(z.number()),
 });
 
+const fsrs6ParametersSchema = z.object({
+    request_retention: z.coerce.number().min(0.7, "Must be at least 0.7").max(0.99, "Must be less than 1.0"),
+    maximum_interval: z.coerce.number().int().min(1, "Must be at least 1 day"),
+    w: z.array(z.number()).length(21),
+});
+
 export const srsSettingsSchema = z.object({
-  scheduler: z.enum(['fsrs', 'sm2']),
+  scheduler: z.enum(['fsrs', 'sm2', 'fsrs6']),
   fsrsParameters: fsrsParametersSchema,
   mcqFsrsParameters: fsrsParametersSchema,
+  fsrs6Parameters: fsrs6ParametersSchema,
+  mcqFsrs6Parameters: fsrs6ParametersSchema,
   sm2StartingEase: z.coerce.number().min(1.3, "Must be at least 1.3"),
   sm2MinEasinessFactor: z.coerce.number().min(1.3, "Must be at least 1.3"),
   sm2EasyBonus: z.coerce.number().min(1, "Must be at least 1.0"),
@@ -56,6 +64,11 @@ interface SettingsDB extends DBSchema {
 }
 
 const defaultFsrsParams = generatorParameters();
+const defaultFsrs6Weights: number[] = [
+    0.2120, 1.2931, 2.3065, 8.2956, 6.4133, 0.8334, 3.0194, 0.0010, 
+    1.8722, 0.1666, 0.7960, 1.4835, 0.0614, 1.4, 0.5, 0.2, 0.9, 
+    0.2, 0.5, 0.2, 1.5
+];
 
 const defaultSettings: SrsSettings = {
   scheduler: 'fsrs',
@@ -67,6 +80,16 @@ const defaultSettings: SrsSettings = {
     request_retention: 0.82,
     maximum_interval: 365,
     w: [...defaultFsrsParams.w],
+  },
+  fsrs6Parameters: {
+    request_retention: 0.9,
+    maximum_interval: 36500,
+    w: defaultFsrs6Weights,
+  },
+  mcqFsrs6Parameters: {
+    request_retention: 0.82,
+    maximum_interval: 365,
+    w: defaultFsrs6Weights,
   },
   sm2StartingEase: 2.5,
   sm2MinEasinessFactor: 1.3,

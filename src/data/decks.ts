@@ -37,6 +37,7 @@ export type Sm2State = z.infer<typeof sm2StateSchema>;
 // Container for all SRS data for a single card
 export const srsDataSchema = z.object({
   fsrs: fsrsStateSchema.optional(),
+  fsrs6: fsrsStateSchema.optional(),
   sm2: sm2StateSchema.optional(),
   isSuspended: z.boolean().optional(),
   newCardOrder: z.number().optional(),
