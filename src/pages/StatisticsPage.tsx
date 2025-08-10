@@ -365,8 +365,12 @@ const StatisticsPage = () => {
             <CardHeader><CardTitle>Due & Overdue</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
-                <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><CalendarDays className="h-4 w-4 text-green-500" />Due Today</span><span className="font-bold">{dueStats?.total.dueToday}</span></div>
-                <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><AlertTriangle className="h-4 w-4 text-red-500" />Overdue</span><span className="font-bold">{dueStats?.total.overdue}</span></div>
+                <div className="text-sm font-medium">Flashcards</div>
+                <div className="flex items-center justify-between pl-4"><span className="flex items-center gap-2 text-muted-foreground"><CalendarDays className="h-4 w-4 text-green-500" />Due Today</span><span className="font-bold">{dueStats?.flashcards.dueToday}</span></div>
+                <div className="flex items-center justify-between pl-4"><span className="flex items-center gap-2 text-muted-foreground"><AlertTriangle className="h-4 w-4 text-red-500" />Overdue</span><span className="font-bold">{dueStats?.flashcards.overdue}</span></div>
+                <div className="text-sm font-medium pt-2">MCQs</div>
+                <div className="flex items-center justify-between pl-4"><span className="flex items-center gap-2 text-muted-foreground"><CalendarDays className="h-4 w-4 text-green-500" />Due Today</span><span className="font-bold">{dueStats?.mcqs.dueToday}</span></div>
+                <div className="flex items-center justify-between pl-4"><span className="flex items-center gap-2 text-muted-foreground"><AlertTriangle className="h-4 w-4 text-red-500" />Overdue</span><span className="font-bold">{dueStats?.mcqs.overdue}</span></div>
               </>}
             </CardContent>
           </Card>
