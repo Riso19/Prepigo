@@ -16,6 +16,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { State } from 'ts-fsrs';
 import { FlashcardData, ReviewLog } from '@/data/decks';
 import { McqData } from '@/data/questionBanks';
+import { PerformanceAnalytics } from '@/components/PerformanceAnalytics';
 
 const StatisticsPage = () => {
   const { decks } = useDecks();
@@ -125,26 +126,6 @@ const StatisticsPage = () => {
       mcqs: calculateMetrics(logs.mcqLogs),
     };
   }, [logs]);
-
-  const masteryStats = useMemo(() => {
-    const flashcards = { unseen: 0, inProgress: 0, mastered: 0 };
-    collectionStats.allFlashcards.forEach(card => {
-      const status = getItemStatus(card, settings.scheduler);
-      if (status === 'New') flashcards.unseen++;
-      else if (status === 'Mature') flashcards.mastered++;
-      else if (status !== 'Suspended') flashcards.inProgress++;
-    });
-
-    const mcqs = { unseen: 0, inProgress: 0, mastered: 0 };
-    collectionStats.allMcqs.forEach(mcq => {
-      const status = getItemStatus(mcq, settings.scheduler === 'sm2' ? 'fsrs' : settings.scheduler);
-      if (status === 'New') mcqs.unseen++;
-      else if (status === 'Mature') mcqs.mastered++;
-      else if (status !== 'Suspended') mcqs.inProgress++;
-    });
-
-    return { flashcards, mcqs };
-  }, [collectionStats, settings.scheduler]);
 
   const maturityData = useMemo(() => {
     const flashcardStatusCounts: Record<ItemStatus, number> = { New: 0, Learning: 0, Relearning: 0, Young: 0, Mature: 0, Suspended: 0 };
@@ -323,22 +304,6 @@ const StatisticsPage = () => {
             </CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle>Flashcard Mastery</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><BookOpen className="h-4 w-4" />Unseen</span><span className="font-bold">{masteryStats.flashcards.unseen}</span></div>
-              <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Loader className="h-4 w-4" />In Progress</span><span className="font-bold">{masteryStats.flashcards.inProgress}</span></div>
-              <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><CheckCircle className="h-4 w-4" />Mastered</span><span className="font-bold">{masteryStats.flashcards.mastered}</span></div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader><CardTitle>MCQ Mastery</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><BookOpen className="h-4 w-4" />Unseen</span><span className="font-bold">{masteryStats.mcqs.unseen}</span></div>
-              <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Loader className="h-4 w-4" />In Progress</span><span className="font-bold">{masteryStats.mcqs.inProgress}</span></div>
-              <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><CheckCircle className="h-4 w-4" />Mastered</span><span className="font-bold">{masteryStats.mcqs.mastered}</span></div>
-            </CardContent>
-          </Card>
-          <Card>
             <CardHeader><CardTitle>Flashcard Time Metrics</CardTitle></CardHeader>
             <CardContent className="space-y-4">
                 {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
@@ -357,6 +322,9 @@ const StatisticsPage = () => {
             </CardContent>
           </Card>
         </div>
+
+        <h2 className="text-xl sm:text-2xl font-bold mt-8 mb-4">Performance Analytics</h2>
+        <PerformanceAnalytics />
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mt-6">
           <Card className="lg:col-span-2">
