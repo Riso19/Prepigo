@@ -11,6 +11,7 @@ import ImageOcclusionPlayer from "@/components/ImageOcclusionPlayer";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Home } from "lucide-react";
 import { fsrs, Card, State, Rating, RecordLog, generatorParameters, createEmptyCard } from "ts-fsrs";
+import { fsrs6, Card as Fsrs6Card, generatorParameters as fsrs6GeneratorParameters } from "@/lib/fsrs6";
 import { sm2, Sm2Quality } from "@/lib/sm2";
 
 const parseSteps = (steps: string): number[] => {
@@ -38,8 +39,12 @@ const StudyPage = () => {
   const [buriedNoteIds, setBuriedNoteIds] = useState<Set<string>>(new Set());
   
   const [fsrsOutcomes, setFsrsOutcomes] = useState<RecordLog | null>(null);
+  
   const fsrsInstance = useMemo(() => {
     const settings = deck ? getEffectiveSrsSettings(decks, deck.id, globalSettings) : globalSettings;
+    if (settings.scheduler === 'fsrs6') {
+        return fsrs6(fsrs6GeneratorParameters(settings.fsrs6Parameters));
+    }
     return fsrs(generatorParameters(settings.fsrsParameters));
   }, [deck, decks, globalSettings]);
 
@@ -77,10 +82,10 @@ const StudyPage = () => {
     const wasNew = (currentCard.srs?.fsrs?.reps === 0 || !currentCard.srs?.fsrs) || (currentCard.srs?.sm2?.repetitions === 0 || !currentCard.srs?.sm2);
     let updatedCard: FlashcardData = currentCard;
 
-    if (settings.scheduler === 'fsrs') {
+    if (settings.scheduler === 'fsrs' || settings.scheduler === 'fsrs6') {
       if (!fsrsOutcomes) return;
-      const nextFsrsState = fsrsOutcomes[rating].card;
-      const logEntry = fsrsOutcomes[rating].log;
+      const nextState = fsrsOutcomes[rating];
+      const logEntry = nextState.log;
 
       const logToSave: ReviewLog = {
         cardId: currentCard.id,
@@ -96,15 +101,17 @@ const StudyPage = () => {
       };
       await addReviewLog(logToSave);
 
+      const updatedSrsData = {
+          ...nextState.card,
+          due: nextState.card.due.toISOString(),
+          last_review: nextState.card.last_review?.toISOString(),
+      };
+
       updatedCard = { 
         ...currentCard, 
         srs: { 
           ...currentCard.srs, 
-          fsrs: { 
-            ...nextFsrsState, 
-            due: nextFsrsState.due.toISOString(), 
-            last_review: nextFsrsState.last_review?.toISOString() 
-          } 
+          ...(settings.scheduler === 'fsrs6' ? { fsrs6: updatedSrsData } : { fsrs: updatedSrsData }),
         } 
       };
     } else { // SM-2 Logic
@@ -227,19 +234,20 @@ const StudyPage = () => {
   useEffect(() => {
     if (isFlipped && currentCard) {
       const settings = getEffectiveSrsSettings(decks, deckId || 'all', globalSettings);
-      if (settings.scheduler === 'fsrs') {
-        const card: Card = currentCard.srs?.fsrs
+      if (settings.scheduler === 'fsrs' || settings.scheduler === 'fsrs6') {
+        const srsData = settings.scheduler === 'fsrs6' ? currentCard.srs?.fsrs6 : currentCard.srs?.fsrs;
+        const card: Card | Fsrs6Card = srsData
           ? {
-              due: new Date(currentCard.srs.fsrs.due),
-              stability: currentCard.srs.fsrs.stability,
-              difficulty: currentCard.srs.fsrs.difficulty,
-              elapsed_days: currentCard.srs.fsrs.elapsed_days,
-              scheduled_days: currentCard.srs.fsrs.scheduled_days,
-              reps: currentCard.srs.fsrs.reps,
-              lapses: currentCard.srs.fsrs.lapses,
-              state: currentCard.srs.fsrs.state,
-              last_review: currentCard.srs.fsrs.last_review ? new Date(currentCard.srs.fsrs.last_review) : undefined,
-              learning_steps: currentCard.srs.fsrs.learning_steps ?? 0,
+              due: new Date(srsData.due),
+              stability: srsData.stability,
+              difficulty: srsData.difficulty,
+              elapsed_days: srsData.elapsed_days,
+              scheduled_days: srsData.scheduled_days,
+              reps: srsData.reps,
+              lapses: srsData.lapses,
+              state: srsData.state,
+              last_review: srsData.last_review ? new Date(srsData.last_review) : undefined,
+              learning_steps: srsData.learning_steps ?? 0,
             }
           : createEmptyCard(new Date());
         const outcomes = fsrsInstance.repeat(card, new Date());
@@ -305,7 +313,7 @@ const StudyPage = () => {
 
   const getIntervalText = (rating: Rating) => {
     const settings = getEffectiveSrsSettings(decks, deckId || 'all', globalSettings);
-    if (settings.scheduler === 'fsrs' && fsrsOutcomes) {
+    if ((settings.scheduler === 'fsrs' || settings.scheduler === 'fsrs6') && fsrsOutcomes) {
       const nextDueDate = fsrsOutcomes[rating].card.due;
       const now = new Date();
       const diffDays = (nextDueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
