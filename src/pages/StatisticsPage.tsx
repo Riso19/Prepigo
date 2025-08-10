@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useDecks } from '@/contexts/DecksContext';
 import { useQuestionBanks } from '@/contexts/QuestionBankContext';
 import Header from '@/components/Header';
-import { CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, CartesianGrid, LabelList, LineChart, Line } from 'recharts';
 import { getAllFlashcardsFromDeck } from '@/lib/card-utils';
 import { getAllMcqsFromBank } from '@/lib/question-bank-utils';
@@ -11,14 +11,14 @@ import { useSettings } from '@/contexts/SettingsContext';
 import { useQuery } from '@tanstack/react-query';
 import { getAllReviewLogsFromDB, getAllMcqReviewLogsFromDB, McqReviewLog } from '@/lib/idb';
 import { format, subDays, startOfDay, isSameDay, differenceInDays } from 'date-fns';
-import { Loader2, TrendingUp, CalendarDays, Flame, BookOpen, Clock, Zap, HelpCircle, AlertTriangle, BrainCircuit, ShieldAlert, BarChartBig, Lightbulb, Activity } from 'lucide-react';
+import { Loader2, TrendingUp, CalendarDays, Flame, BookOpen, Clock, Zap, HelpCircle, AlertTriangle, BrainCircuit, ShieldAlert, BarChartBig, Lightbulb, Activity, ChevronsRight, ChevronsLeft, Hourglass, Repeat2 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { State } from 'ts-fsrs';
 import { DeckData, FlashcardData, ReviewLog } from '@/data/decks';
 import { McqData, QuestionBankData } from '@/data/questionBanks';
 import { PerformanceAnalytics } from '@/components/PerformanceAnalytics';
 import { PerformanceGraph } from '@/components/PerformanceGraph';
-import { calculateAccuracy, calculateDueStats, calculateIntervalGrowth, calculateRetentionDistribution, calculateForecast, calculateAverageRetention, calculateAtRiskItems, calculateCumulativeStabilityGrowth, calculateSuspectedGuesses, calculateLearningCurve, calculateForgettingCurve, calculateStabilityOverTime, calculateMemoryDecayVelocity } from '@/lib/analytics-utils';
+import { calculateAccuracy, calculateDueStats, calculateIntervalGrowth, calculateRetentionDistribution, calculateForecast, calculateAverageRetention, calculateAtRiskItems, calculateCumulativeStabilityGrowth, calculateSuspectedGuesses, calculateLearningCurve, calculateForgettingCurve, calculateStabilityOverTime, calculateMemoryDecayVelocity, calculateAverageKnowledgeHalfLife, calculateDifficultyDelta, calculateOverlearningRatio } from '@/lib/analytics-utils';
 import { ForgettingCurveChart } from '@/components/ForgettingCurveChart';
 import { StabilityTrendChart } from '@/components/StabilityTrendChart';
 import { AnimatedCard } from '@/components/AnimatedCard';
@@ -249,12 +249,18 @@ const StatisticsPage = () => {
             atRisk: calculateAtRiskItems(collectionStats.allFlashcards, settings),
             stabilityGrowth: calculateCumulativeStabilityGrowth(logs.cardLogs),
             guesses: calculateSuspectedGuesses(logs.cardLogs),
+            halfLife: calculateAverageKnowledgeHalfLife(collectionStats.allFlashcards, settings),
+            difficultyDelta: calculateDifficultyDelta(logs.cardLogs),
+            overlearning: calculateOverlearningRatio(logs.cardLogs, settings),
         },
         mcqs: {
             avgRetention: calculateAverageRetention(collectionStats.allMcqs, mcqSettings),
             atRisk: calculateAtRiskItems(collectionStats.allMcqs, mcqSettings),
             stabilityGrowth: calculateCumulativeStabilityGrowth(logs.mcqLogs),
             guesses: calculateSuspectedGuesses(logs.mcqLogs),
+            halfLife: calculateAverageKnowledgeHalfLife(collectionStats.allMcqs, mcqSettings),
+            difficultyDelta: calculateDifficultyDelta(logs.mcqLogs),
+            overlearning: calculateOverlearningRatio(logs.mcqLogs, mcqSettings),
         },
     };
   }, [logs, collectionStats, settings]);
@@ -462,38 +468,40 @@ const StatisticsPage = () => {
         <h2 className="text-xl sm:text-2xl font-bold mt-8 mb-4">Advanced Memory Stats</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
             <AnimatedCard delay={1.0}>
-                <CardHeader><CardTitle>Avg. Predicted Retention</CardTitle></CardHeader>
+                <CardHeader><CardTitle>Knowledge Half-Life</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
                     {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
-                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><BrainCircuit className="h-4 w-4" />Flashcards</span><span className="font-bold">{advancedStats?.flashcards.avgRetention?.toFixed(2) ?? 'N/A'}%</span></div>
-                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><BrainCircuit className="h-4 w-4" />MCQs</span><span className="font-bold">{advancedStats?.mcqs.avgRetention?.toFixed(2) ?? 'N/A'}%</span></div>
+                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Hourglass className="h-4 w-4" />Flashcards</span><span className="font-bold">{advancedStats?.flashcards.halfLife?.toFixed(1) ?? 'N/A'} days</span></div>
+                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Hourglass className="h-4 w-4" />MCQs</span><span className="font-bold">{advancedStats?.mcqs.halfLife?.toFixed(1) ?? 'N/A'} days</span></div>
                     </>}
                 </CardContent>
             </AnimatedCard>
             <AnimatedCard delay={1.1}>
-                <CardHeader><CardTitle>At-Risk Items</CardTitle></CardHeader>
+                <CardHeader><CardTitle>Storage vs. Retrieval</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
                     {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
-                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><ShieldAlert className="h-4 w-4" />Flashcards</span><span className="font-bold">{advancedStats?.flashcards.atRisk ?? 'N/A'}</span></div>
-                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><ShieldAlert className="h-4 w-4" />MCQs</span><span className="font-bold">{advancedStats?.mcqs.atRisk ?? 'N/A'}</span></div>
+                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><ChevronsRight className="h-4 w-4" />Retrieval (FC)</span><span className="font-bold">{advancedStats?.flashcards.avgRetention?.toFixed(1) ?? 'N/A'}%</span></div>
+                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><ChevronsLeft className="h-4 w-4" />Storage (FC)</span><span className="font-bold">{advancedStats?.flashcards.stabilityGrowth?.toFixed(1) ?? 'N/A'}d</span></div>
+                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><ChevronsRight className="h-4 w-4" />Retrieval (MCQ)</span><span className="font-bold">{advancedStats?.mcqs.avgRetention?.toFixed(1) ?? 'N/A'}%</span></div>
+                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><ChevronsLeft className="h-4 w-4" />Storage (MCQ)</span><span className="font-bold">{advancedStats?.mcqs.stabilityGrowth?.toFixed(1) ?? 'N/A'}d</span></div>
                     </>}
                 </CardContent>
             </AnimatedCard>
             <AnimatedCard delay={1.2}>
-                <CardHeader><CardTitle>Stability Growth</CardTitle></CardHeader>
+                <CardHeader><CardTitle>Difficulty Delta</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
                     {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
-                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><BarChartBig className="h-4 w-4" />Flashcards</span><span className="font-bold">{Math.round(advancedStats?.flashcards.stabilityGrowth ?? 0)}</span></div>
-                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><BarChartBig className="h-4 w-4" />MCQs</span><span className="font-bold">{Math.round(advancedStats?.mcqs.stabilityGrowth ?? 0)}</span></div>
+                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><TrendingUp className="h-4 w-4" />Flashcards</span><span className="font-bold">{advancedStats?.flashcards.difficultyDelta?.toFixed(3)}</span></div>
+                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><TrendingUp className="h-4 w-4" />MCQs</span><span className="font-bold">{advancedStats?.mcqs.difficultyDelta?.toFixed(3)}</span></div>
                     </>}
                 </CardContent>
             </AnimatedCard>
             <AnimatedCard delay={1.3}>
-                <CardHeader><CardTitle>Suspected Guesses</CardTitle></CardHeader>
+                <CardHeader><CardTitle>Overlearning Ratio</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
                     {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
-                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Lightbulb className="h-4 w-4" />Flashcards</span><span className="font-bold">{advancedStats?.flashcards.guesses}</span></div>
-                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Lightbulb className="h-4 w-4" />MCQs</span><span className="font-bold">{advancedStats?.mcqs.guesses}</span></div>
+                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Repeat2 className="h-4 w-4" />Flashcards</span><span className="font-bold">{advancedStats?.flashcards.overlearning?.toFixed(1) ?? 'N/A'}%</span></div>
+                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Repeat2 className="h-4 w-4" />MCQs</span><span className="font-bold">{advancedStats?.mcqs.overlearning?.toFixed(1) ?? 'N/A'}%</span></div>
                     </>}
                 </CardContent>
             </AnimatedCard>

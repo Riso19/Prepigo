@@ -361,3 +361,70 @@ export const calculateMemoryDecayVelocity = (stabilityTrend: { date: string; avg
   const avgVelocity = velocities.reduce((sum, v) => sum + v, 0) / velocities.length;
   return avgVelocity;
 };
+
+export const calculateAverageKnowledgeHalfLife = (items: (FlashcardData | McqData)[], settings: SrsSettings) => {
+    const scheduler = settings.scheduler;
+    if (scheduler === 'sm2') return null;
+
+    const reviewedItems = items.filter(item => {
+        const srsData = scheduler === 'fsrs6' ? item.srs?.fsrs6 : item.srs?.fsrs;
+        return srsData && srsData.state === State.Review;
+    });
+
+    if (reviewedItems.length === 0) return 0;
+
+    const totalHalfLife = reviewedItems.reduce((sum, item) => {
+        const srsData = scheduler === 'fsrs6' ? item.srs!.fsrs6! : item.srs!.fsrs!;
+        // Half-life formula for FSRS is S * ln(2)
+        return sum + (srsData.stability * Math.log(2));
+    }, 0);
+
+    return totalHalfLife / reviewedItems.length;
+};
+
+export const calculateDifficultyDelta = (logs: (ReviewLog | McqReviewLog)[]) => {
+    const logsByItem = new Map<string, (ReviewLog | McqReviewLog)[]>();
+    logs.forEach(log => {
+        const id = 'cardId' in log ? log.cardId : (log as McqReviewLog).mcqId;
+        if (!logsByItem.has(id)) logsByItem.set(id, []);
+        logsByItem.get(id)!.push(log);
+    });
+
+    let totalDelta = 0;
+    let count = 0;
+
+    logsByItem.forEach(itemLogs => {
+        itemLogs.sort((a, b) => new Date(a.review).getTime() - new Date(b.review).getTime());
+        for (let i = 0; i < itemLogs.length - 1; i++) {
+            const currentLog = itemLogs[i];
+            const nextLog = itemLogs[i+1];
+            // The 'difficulty' in nextLog is the result of the review in currentLog
+            const delta = nextLog.difficulty - currentLog.difficulty;
+            totalDelta += delta;
+            count++;
+        }
+    });
+
+    return count > 0 ? totalDelta / count : 0;
+};
+
+export const calculateOverlearningRatio = (logs: (ReviewLog | McqReviewLog)[], settings: SrsSettings) => {
+    const scheduler = settings.scheduler;
+    if (scheduler === 'sm2' || logs.length === 0) return null;
+
+    const w = scheduler === 'fsrs6' ? settings.fsrs6Parameters.w : settings.fsrsParameters.w;
+    const factor = Math.pow(0.9, -1 / w[20]) - 1;
+    const retrievability = (t: number, s: number): number => Math.pow(1 + factor * t / s, -w[20]);
+
+    let overlearningReviews = 0;
+    logs.forEach(log => {
+        if (log.state === State.Review) {
+            const r = retrievability(log.elapsed_days, log.stability);
+            if (r > 0.95) {
+                overlearningReviews++;
+            }
+        }
+    });
+
+    return (overlearningReviews / logs.length) * 100;
+};
