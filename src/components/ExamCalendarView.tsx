@@ -53,8 +53,8 @@ export const ExamCalendarView = ({ exam }: ExamCalendarViewProps) => {
 
     if (!dayData || dayData.cardIds.length === 0) {
       return (
-        <div className="h-full w-full flex items-center justify-center">
-          {date.getDate()}
+        <div className="relative h-full w-full flex items-center justify-center">
+          <span>{date.getDate()}</span>
         </div>
       );
     }
@@ -63,19 +63,13 @@ export const ExamCalendarView = ({ exam }: ExamCalendarViewProps) => {
     const progress = dayData.cardIds.length > 0 ? (dayData.completedCardIds.length / dayData.cardIds.length) * 100 : 0;
 
     return (
-      <div className="h-full w-full flex flex-col items-center justify-center relative p-1 text-center">
-        <div className="absolute top-0.5 right-1 text-xs opacity-70">{date.getDate()}</div>
-        <div className="flex flex-col items-center justify-center flex-grow pt-2">
-            <span className="text-sm font-bold leading-tight">
-                {dayData.completedCardIds.length}/{dayData.cardIds.length}
-            </span>
-            <span className="text-[10px] text-muted-foreground leading-tight">cards</span>
-        </div>
-        <div className="w-[80%] h-1 bg-muted rounded-full absolute bottom-1">
-            <div
-                className={cn("h-1 rounded-full", isCompleted ? "bg-green-500" : "bg-blue-500")}
-                style={{ width: `${progress}%` }}
-            />
+      <div className="relative h-full w-full flex flex-col items-center justify-center p-1 text-center">
+        <span>{date.getDate()}</span>
+        <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-[70%] h-1.5 bg-muted rounded-full overflow-hidden">
+          <div
+            className={cn("h-full", isCompleted ? "bg-green-500" : "bg-blue-500")}
+            style={{ width: `${progress}%` }}
+          />
         </div>
       </div>
     );
