@@ -44,16 +44,19 @@ const PracticeMcqPage = () => {
     }
   }, [bankId, bank, questionBanks]);
 
-  const handleSubmit = useCallback(() => {
-    if (!selectedOptionId) return;
+  const handleSelectAndSubmit = useCallback((optionId: string) => {
+    if (isSubmitted) return;
+
+    setSelectedOptionId(optionId);
+
     const correctOption = currentQuestion.options.find(opt => opt.isCorrect);
-    if (selectedOptionId === correctOption?.id) {
+    if (optionId === correctOption?.id) {
       setSessionStats(prev => ({ ...prev, correct: prev.correct + 1 }));
     } else {
       setSessionStats(prev => ({ ...prev, incorrect: prev.incorrect + 1 }));
     }
     setIsSubmitted(true);
-  }, [selectedOptionId, currentQuestion]);
+  }, [isSubmitted, currentQuestion]);
 
   const handleGradeAndProceed = useCallback((grade: number) => {
     // TODO: Implement FSRS logic here using the grade
@@ -97,13 +100,8 @@ const PracticeMcqPage = () => {
         if (currentQuestion && !isNaN(keyNumber) && keyNumber > 0 && keyNumber <= currentQuestion.options.length) {
           const optionIndex = keyNumber - 1;
           const optionId = currentQuestion.options[optionIndex].id;
-          setSelectedOptionId(optionId);
+          handleSelectAndSubmit(optionId);
           event.preventDefault();
-        }
-
-        if (selectedOptionId && (event.key === 'Enter' || event.key === ' ')) {
-          event.preventDefault();
-          handleSubmit();
         }
       }
     };
@@ -112,7 +110,7 @@ const PracticeMcqPage = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isSubmitted, selectedOptionId, currentQuestion, handleSubmit, handleGradeAndProceed]);
+  }, [isSubmitted, currentQuestion, handleSelectAndSubmit, handleGradeAndProceed]);
 
   const pageTitle = bankId === 'all' ? "Practicing All MCQs" : `Practicing: ${bank?.name}`;
 
@@ -176,7 +174,7 @@ const PracticeMcqPage = () => {
               mcq={currentQuestion}
               selectedOptionId={selectedOptionId}
               isSubmitted={isSubmitted}
-              onOptionSelect={setSelectedOptionId}
+              onOptionSelect={handleSelectAndSubmit}
             />
           </main>
         </div>
@@ -204,10 +202,9 @@ const PracticeMcqPage = () => {
               ))}
             </div>
           ) : (
-            <Button onClick={handleSubmit} disabled={!selectedOptionId} className="w-full h-14 text-base relative">
-              Check Answer
-              <span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">Enter</span>
-            </Button>
+            <div className="flex items-center justify-center h-14 text-base text-muted-foreground">
+              Select an answer to continue
+            </div>
           )}
         </div>
       </footer>
