@@ -22,6 +22,18 @@ const shuffle = <T,>(array: T[]): T[] => {
   return newArray;
 };
 
+const formatInterval = (interval: number): string => {
+    if (interval < 1 / (24 * 60)) return `<1m`;
+    if (interval < 1) return `${Math.round(interval * 24 * 60)}m`;
+    if (interval < 30) return `${Math.round(interval)}d`;
+    if (interval < 365) {
+        const months = interval / 30;
+        return `${Number.isInteger(months) ? months : months.toFixed(1)}mo`;
+    }
+    const years = interval / 365;
+    return `${Number.isInteger(years) ? years : years.toFixed(1)}y`;
+};
+
 const PracticeMcqPage = () => {
   const { bankId } = useParams<{ bankId: string }>();
   const { questionBanks, setQuestionBanks } = useQuestionBanks();
@@ -34,6 +46,7 @@ const PracticeMcqPage = () => {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [sessionStats, setSessionStats] = useState({ correct: 0, incorrect: 0 });
   const [isFinished, setIsFinished] = useState(false);
+  const [dueTimeStrings, setDueTimeStrings] = useState<Record<string, string> | null>(null);
 
   const fsrsInstance = useMemo(() => fsrs(settings.mcqFsrsParameters), [settings.mcqFsrsParameters]);
 
@@ -50,6 +63,40 @@ const PracticeMcqPage = () => {
     }
   }, [bankId, bank, questionBanks]);
 
+  useEffect(() => {
+    if (isSubmitted && currentQuestion) {
+        const card: FsrsCard = currentQuestion.srs?.fsrs
+            ? {
+                due: new Date(currentQuestion.srs.fsrs.due),
+                stability: currentQuestion.srs.fsrs.stability,
+                difficulty: currentQuestion.srs.fsrs.difficulty,
+                elapsed_days: currentQuestion.srs.fsrs.elapsed_days,
+                scheduled_days: currentQuestion.srs.fsrs.scheduled_days,
+                reps: currentQuestion.srs.fsrs.reps,
+                lapses: currentQuestion.srs.fsrs.lapses,
+                state: currentQuestion.srs.fsrs.state,
+                last_review: currentQuestion.srs.fsrs.last_review ? new Date(currentQuestion.srs.fsrs.last_review) : undefined,
+                learning_steps: currentQuestion.srs.fsrs.learning_steps ?? 0,
+            }
+            : createEmptyCard(new Date());
+
+        const outcomes = fsrsInstance.repeat(card, new Date());
+        const now = new Date();
+        const newDueStrings: Record<string, string> = {};
+
+        const ratings = [Rating.Again, Rating.Hard, Rating.Good, Rating.Easy];
+        ratings.forEach(rating => {
+            const nextDueDate = outcomes[rating].card.due;
+            const diffDays = (nextDueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+            newDueStrings[rating] = formatInterval(diffDays);
+        });
+        
+        setDueTimeStrings(newDueStrings);
+    } else {
+        setDueTimeStrings(null);
+    }
+  }, [isSubmitted, currentQuestion, fsrsInstance]);
+
   const handleSelectAndSubmit = useCallback((optionId: string) => {
     if (isSubmitted) return;
 
@@ -64,18 +111,8 @@ const PracticeMcqPage = () => {
     setIsSubmitted(true);
   }, [isSubmitted, currentQuestion]);
 
-  const handleGradeAndProceed = useCallback(async (grade: number) => {
+  const handleGradeAndProceed = useCallback(async (rating: Rating) => {
     if (!currentQuestion) return;
-
-    const ratingMap: { [key: number]: Rating } = {
-      1: Rating.Again,
-      2: Rating.Hard,
-      3: Rating.Good,
-      4: Rating.Easy,
-      5: Rating.Easy, // Map 5 to Easy as well
-    };
-    const rating = ratingMap[grade];
-    if (rating === undefined) return;
 
     const card: FsrsCard = currentQuestion.srs?.fsrs
       ? {
@@ -150,10 +187,13 @@ const PracticeMcqPage = () => {
       }
 
       if (isSubmitted) {
-        const grade = parseInt(event.key, 10);
-        if (!isNaN(grade) && grade >= 1 && grade <= 5) {
-          event.preventDefault();
-          handleGradeAndProceed(grade);
+        const ratingMap: { [key: string]: Rating } = {
+            '1': Rating.Again, '2': Rating.Hard, '3': Rating.Good, '4': Rating.Easy, '5': Rating.Easy,
+        };
+        const rating = ratingMap[event.key];
+        if (rating !== undefined) {
+            event.preventDefault();
+            handleGradeAndProceed(rating);
         }
       } else {
         const keyNumber = parseInt(event.key, 10);
@@ -211,11 +251,11 @@ const PracticeMcqPage = () => {
   }
 
   const gradingButtons = [
-    { label: "Wrong", tooltip: "Knew you were wrong or guessed wrong", grade: 1, icon: X, color: "bg-red-500 hover:bg-red-600" },
-    { label: "Unsure", tooltip: "Correct but unsure, or guessed right", grade: 2, icon: HelpCircle, color: "bg-yellow-500 hover:bg-yellow-600" },
-    { label: "Slow", tooltip: "Correct, but took effort to recall", grade: 3, icon: Clock, color: "bg-blue-500 hover:bg-blue-600" },
-    { label: "Confident", tooltip: "Quick, certain recall", grade: 4, icon: Check, color: "bg-green-500 hover:bg-green-600" },
-    { label: "Easy", tooltip: "Trivial, effortless recall", grade: 5, icon: Sparkles, color: "bg-sky-400 hover:bg-sky-500" },
+    { label: "Wrong", tooltip: "Knew you were wrong or guessed wrong", grade: 1, rating: Rating.Again, icon: X, color: "bg-red-500 hover:bg-red-600" },
+    { label: "Unsure", tooltip: "Correct but unsure, or guessed right", grade: 2, rating: Rating.Hard, icon: HelpCircle, color: "bg-yellow-500 hover:bg-yellow-600" },
+    { label: "Slow", tooltip: "Correct, but took effort to recall", grade: 3, rating: Rating.Good, icon: Clock, color: "bg-blue-500 hover:bg-blue-600" },
+    { label: "Confident", tooltip: "Quick, certain recall", grade: 4, rating: Rating.Easy, icon: Check, color: "bg-green-500 hover:bg-green-600" },
+    { label: "Easy", tooltip: "Trivial, effortless recall", grade: 5, rating: Rating.Easy, icon: Sparkles, color: "bg-sky-400 hover:bg-sky-500" },
   ];
 
   return (
@@ -243,15 +283,16 @@ const PracticeMcqPage = () => {
         <div className="w-full max-w-2xl mx-auto p-4">
           {isSubmitted ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 md:gap-3">
-              {gradingButtons.map(({ label, tooltip, grade, icon: Icon, color }) => (
+              {gradingButtons.map(({ label, tooltip, grade, rating, icon: Icon, color }) => (
                 <Tooltip key={grade}>
                   <TooltipTrigger asChild>
                     <Button
-                      onClick={() => handleGradeAndProceed(grade)}
-                      className={`h-14 text-sm flex-col gap-1 text-white font-bold relative ${color}`}
+                      onClick={() => handleGradeAndProceed(rating)}
+                      className={`h-16 text-sm flex-col gap-1 text-white font-bold relative ${color}`}
                     >
                       <Icon className="h-4 w-4" />
                       <span>{label}</span>
+                      {dueTimeStrings && <span className="text-xs font-normal opacity-80">{dueTimeStrings[rating]}</span>}
                       <span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">{grade}</span>
                     </Button>
                   </TooltipTrigger>
@@ -262,7 +303,7 @@ const PracticeMcqPage = () => {
               ))}
             </div>
           ) : (
-            <div className="h-14" />
+            <div className="h-16" />
           )}
         </div>
       </footer>
