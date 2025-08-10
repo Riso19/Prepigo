@@ -1,8 +1,10 @@
-import { useRef, useState, useEffect, useCallback, KeyboardEvent } from 'react';
+import { useRef, useState, useEffect, useCallback, KeyboardEvent, ChangeEvent } from 'react';
 import { Button } from '@/components/ui/button';
-import { Bold, Italic, Subscript, Superscript } from 'lucide-react';
+import { Bold, Italic, Subscript, Superscript, Image as ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useResolvedHtml, unresolveMediaHtml } from '@/hooks/use-resolved-html';
+import { saveSingleMediaToDB } from '@/lib/idb';
+import { toast } from 'sonner';
 
 interface HtmlEditorProps {
   value: string;
@@ -12,6 +14,7 @@ interface HtmlEditorProps {
 
 const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
   const editorRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isBold, setIsBold] = useState(false);
   const [isItalic, setIsItalic] = useState(false);
   const [isSubscript, setIsSubscript] = useState(false);
@@ -71,6 +74,35 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
     }
   };
 
+  const handleImageButtonClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleImageUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const toastId = toast.loading('Uploading image...');
+    try {
+      const fileName = `media-${Date.now()}-${file.name}`;
+      await saveSingleMediaToDB(fileName, file);
+
+      const imgTag = `<img src="media://${fileName}" alt="${file.name}">`;
+      
+      editorRef.current?.focus();
+      document.execCommand('insertHTML', false, imgTag);
+      
+      handleInput();
+
+      toast.success('Image added successfully!', { id: toastId });
+    } catch (error) {
+      console.error('Failed to upload image', error);
+      toast.error('Failed to add image.', { id: toastId });
+    } finally {
+      if (e.target) e.target.value = '';
+    }
+  };
+
   const activeClass = "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100";
 
   return (
@@ -116,6 +148,14 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
         >
           <Superscript className="h-4 w-4" />
         </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onMouseDown={(e) => { e.preventDefault(); handleImageButtonClick(); }}
+          title="Add Image"
+        >
+          <ImageIcon className="h-4 w-4" />
+        </Button>
       </div>
       <div
         ref={editorRef}
@@ -127,6 +167,13 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
         onMouseUp={updateToolbar}
         onKeyUp={updateToolbar}
         onFocus={updateToolbar}
+      />
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleImageUpload}
+        className="hidden"
+        accept="image/*"
       />
     </div>
   );
