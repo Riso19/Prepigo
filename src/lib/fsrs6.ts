@@ -10,21 +10,10 @@ export interface FSRS6Parameters {
 }
 
 // Default parameters for FSRS-6.
-// WARNING: This list is incomplete as the provided context was cut off.
-// The last 8 parameters (w[13] to w[20]) are placeholders based on FSRS-4.5 defaults.
-// The user should provide the complete list for accurate scheduling.
 const defaultWeights: number[] = [
-    0.2120, 1.2931, 2.3065, 8.2956, 6.4133, 0.8334, 3.0194, 0.0010, 
-    1.8722, 0.1666, 0.7960, 1.4835, 0.0614, 
-    // Placeholders for missing weights, using FSRS-4.5 defaults as a base
-    1.4,    // w[13] (S'f related)
-    0.5,    // w[14] (S'f related)
-    0.2,    // w[15] (S'r related) - Not used in FSRS-4.5 S'r
-    0.9,    // w[16] (S'r related) - Not used in FSRS-4.5 S'r
-    0.2,    // w[17] (same-day S' related)
-    0.5,    // w[18] (same-day S' related)
-    0.2,    // w[19] (same-day S' related)
-    1.5     // w[20] (retrievability related)
+    0.212, 1.2931, 2.3065, 8.2956, 6.4133, 0.8334, 3.0194, 0.001, 
+    1.8722, 0.1666, 0.796, 1.4835, 0.0614, 0.2629, 1.6483, 0.6014, 
+    1.8729, 0.5425, 0.0912, 0.0658, 0.1542
 ];
 
 export const generatorParameters = (props?: Partial<FSRS6Parameters>): FSRS6Parameters => {
