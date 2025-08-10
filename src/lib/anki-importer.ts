@@ -311,14 +311,22 @@ export const importAnkiFile = async (
         } else {
             let question = template.qfmt;
             let answer = template.afmt;
+
+            // Remove the FrontSide reference from the answer template
+            // to prevent duplicating the question.
+            answer = answer.replace(/{{FrontSide}}/g, '');
+            // Also remove the horizontal rule that Anki often adds.
+            answer = answer.replace(/<hr id=answer>/g, '');
+
             for (const key in fieldMap) {
-                question = question.replace(new RegExp(`{{${key}}}`, 'g'), fieldMap[key]);
-                answer = answer.replace(new RegExp(`{{${key}}}`, 'g'), fieldMap[key]);
+                const fieldContent = fieldMap[key] || '';
+                question = question.replace(new RegExp(`{{${key}}}`, 'g'), fieldContent);
+                answer = answer.replace(new RegExp(`{{${key}}}`, 'g'), fieldContent);
             }
-            answer = answer.replace(/{{FrontSide}}/g, question);
+            
             flashcard = {
                 id: `anki-c-${_id}`, noteId: `anki-n-${noteId}`, type: 'basic',
-                question: replaceMediaSrc(question), answer: replaceMediaSrc(answer),
+                question: replaceMediaSrc(question), answer: replaceMediaSrc(answer.trim()),
             } as BasicFlashcard;
         }
     }
