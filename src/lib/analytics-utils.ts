@@ -30,6 +30,7 @@ export const calculateDueStats = (items: (FlashcardData | McqData)[], settings: 
   const today = startOfDay(now);
   let dueToday = 0;
   let overdue = 0;
+  let weightedOverdueLoad = 0;
 
   items.forEach(item => {
     if (item.srs?.isSuspended) return;
@@ -51,12 +52,15 @@ export const calculateDueStats = (items: (FlashcardData | McqData)[], settings: 
           dueToday++;
         } else {
           overdue++;
+          if ('difficulty' in srsData) {
+            weightedOverdueLoad += srsData.difficulty;
+          }
         }
       }
     }
   });
 
-  return { dueToday, overdue };
+  return { dueToday, overdue, weightedOverdueLoad };
 };
 
 export const calculateIntervalGrowth = (logs: (ReviewLog | McqReviewLog)[]) => {
@@ -478,4 +482,65 @@ export const calculateDailySummary = (logs: (ReviewLog | McqReviewLog)[]) => {
       avgDifficulty: data.difficultyCount > 0 ? (data.totalDifficulty / data.difficultyCount) * 100 : 0, // as percentage
     }))
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+};
+
+export const calculateTopicForgettingRate = (
+  items: (FlashcardData | McqData)[],
+  logs: (ReviewLog | McqReviewLog)[]
+) => {
+  const tagStats: Record<string, { lapses: number; reviews: number }> = {};
+  const itemMap = new Map(items.map(item => [item.id, item]));
+
+  logs.forEach(log => {
+    const id = 'cardId' in log ? log.cardId : (log as McqReviewLog).mcqId;
+    const item = itemMap.get(id);
+    if (item?.tags) {
+      item.tags.forEach(tag => {
+        if (!tagStats[tag]) tagStats[tag] = { lapses: 0, reviews: 0 };
+        tagStats[tag].reviews++;
+        if (log.rating === Rating.Again) {
+          tagStats[tag].lapses++;
+        }
+      });
+    }
+  });
+
+  return Object.entries(tagStats)
+    .map(([tag, stats]) => ({
+      name: tag,
+      forgetRate: stats.reviews > 0 ? (stats.lapses / stats.reviews) * 100 : 0,
+      reviews: stats.reviews,
+    }))
+    .filter(t => t.reviews >= 5) // Only show tags with enough data
+    .sort((a, b) => b.forgetRate - a.forgetRate);
+};
+
+export const calculateDifficultyWeightedMastery = (
+  items: (FlashcardData | McqData)[],
+  settings: SrsSettings
+) => {
+  const scheduler = settings.scheduler;
+  if (scheduler === 'sm2') return null;
+
+  const w = scheduler === 'fsrs6' ? settings.fsrs6Parameters.w : settings.fsrsParameters.w;
+  const factor = Math.pow(0.9, -1 / w[20]) - 1;
+  const retrievability = (t: number, s: number): number => Math.pow(1 + factor * t / s, -w[20]);
+  const now = new Date();
+
+  let totalMasteryScore = 0;
+  let fsrsItemCount = 0;
+
+  items.forEach(item => {
+    const srsData = scheduler === 'fsrs6' ? item.srs?.fsrs6 : item.srs?.fsrs;
+    if (srsData && srsData.state !== State.New && srsData.last_review) {
+      fsrsItemCount++;
+      const elapsed_days = differenceInDays(now, new Date(srsData.last_review));
+      const r = retrievability(elapsed_days, srsData.stability);
+      const d = srsData.difficulty;
+      totalMasteryScore += r * (1 - (d - 1) / 9); // Normalize difficulty from 1-10 to 0-1
+    }
+  });
+
+  if (fsrsItemCount === 0) return 0;
+  return (totalMasteryScore / fsrsItemCount) * 100;
 };

@@ -6,6 +6,8 @@ import { SrsSettings } from "@/contexts/SettingsContext";
 import { McqData, QuestionBankData } from "@/data/questionBanks";
 import { getAllMcqsFromBank } from "./question-bank-utils";
 import { getItemStatus, ItemStatus } from "./srs-utils";
+import { differenceInDays } from "date-fns";
+import { calculateAverageRetention } from "./analytics-utils";
 
 export const getCardsForExam = (exam: ExamData, allDecks: DeckData[], settings: SrsSettings): FlashcardData[] => {
   const allDecksFlat = (d: DeckData[]): DeckData[] => d.flatMap(deck => [deck, ...(deck.subDecks ? allDecksFlat(deck.subDecks) : [])]);
@@ -177,4 +179,41 @@ export const calculateExamProgress = (
     total: total,
     percentage: percentage,
   };
+};
+
+export const calculateProjectedRetention = (
+  exam: ExamData,
+  itemsInScope: (FlashcardData | McqData)[],
+  settings: SrsSettings
+): number | null => {
+  if (itemsInScope.length === 0) return 100;
+
+  const examDate = new Date(exam.date);
+  const now = new Date();
+  const daysUntilExam = differenceInDays(examDate, now);
+
+  if (daysUntilExam < 0) return null; // Exam has passed
+
+  if (daysUntilExam === 0) {
+    const avgRetention = calculateAverageRetention(itemsInScope, settings);
+    return avgRetention === null ? null : avgRetention;
+  }
+
+  const scheduler = settings.scheduler;
+  if (scheduler === 'sm2') return null;
+
+  const w = scheduler === 'fsrs6' ? settings.fsrs6Parameters.w : settings.fsrsParameters.w;
+  const factor = Math.pow(0.9, -1 / w[20]) - 1;
+  const retrievability = (t: number, s: number): number => Math.pow(1 + factor * t / s, -w[20]);
+
+  const projectedRetentionSum = itemsInScope.reduce((sum, item) => {
+      const srsData = scheduler === 'fsrs6' ? item.srs?.fsrs6 : item.srs?.fsrs;
+      if (srsData && srsData.state === State.Review) {
+          return sum + retrievability(daysUntilExam, srsData.stability);
+      }
+      // New/learning cards contribute 0 to projected retention if not reviewed
+      return sum;
+  }, 0);
+
+  return (projectedRetentionSum / itemsInScope.length) * 100;
 };

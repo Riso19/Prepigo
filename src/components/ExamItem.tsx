@@ -3,11 +3,11 @@ import { Link } from 'react-router-dom';
 import { ExamData } from '@/data/exams';
 import { useDecks } from '@/contexts/DecksContext';
 import { useSettings } from '@/contexts/SettingsContext';
-import { getCardsForExam, calculateExamProgress, getMcqsForExam } from '@/lib/exam-utils';
+import { getCardsForExam, calculateExamProgress, getMcqsForExam, calculateProjectedRetention } from '@/lib/exam-utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { Calendar, Tag, MoreVertical, Trash2, Pencil, FileText, HelpCircle } from 'lucide-react';
+import { Calendar, Tag, MoreVertical, Trash2, Pencil, FileText, HelpCircle, TrendingUp } from 'lucide-react';
 import { format, differenceInDays, isPast } from 'date-fns';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { useExams } from '@/contexts/ExamsContext';
@@ -43,6 +43,7 @@ export const ExamItem = ({ exam }: ExamItemProps) => {
   const itemsInScope = useMemo(() => [...cardsInScope, ...mcqsInScope], [cardsInScope, mcqsInScope]);
 
   const progress = useMemo(() => calculateExamProgress(exam, itemsInScope, settings), [exam, itemsInScope, settings]);
+  const projectedRetention = useMemo(() => calculateProjectedRetention(exam, itemsInScope, settings), [exam, itemsInScope, settings]);
 
   const deckNames = useMemo(() => {
     return exam.deckIds
@@ -60,7 +61,7 @@ export const ExamItem = ({ exam }: ExamItemProps) => {
   const daysLeft = differenceInDays(examDate, new Date());
 
   const getDaysLeftText = () => {
-    if (isPast(examDate)) return "Exam date has passed";
+    if (isPast(examDate) && daysLeft < 0) return "Exam date has passed";
     if (daysLeft === 0) return "Today is the day!";
     if (daysLeft === 1) return "1 day left";
     return `${daysLeft} days left`;
@@ -97,23 +98,30 @@ export const ExamItem = ({ exam }: ExamItemProps) => {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div>
-            <div className="text-center">
+          <div className="grid grid-cols-2 gap-4 text-center">
+            <div>
               <p className="text-sm font-medium text-muted-foreground">Readiness Score</p>
-              <p className={cn("text-4xl font-bold", getReadinessColor(progress.percentage))}>
+              <p className={cn("text-3xl font-bold", getReadinessColor(progress.percentage))}>
                 {progress.percentage}%
               </p>
               <p className="text-xs text-muted-foreground">
-                {progress.mastered} mastered, {progress.inProgress} in progress, {progress.newItems} new
+                {progress.mastered} mastered, {progress.newItems} new
               </p>
             </div>
-            <Progress value={progress.percentage} className="mt-2" />
-            <p className="text-xs text-center text-muted-foreground mt-1">
-              Readiness is a weighted score based on item status (New, Learning, Young, Mature, Mastered).
-            </p>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Projected Retention</p>
+              <p className={cn("text-3xl font-bold", getReadinessColor(projectedRetention ?? 0))}>
+                {projectedRetention !== null ? `${projectedRetention.toFixed(1)}%` : 'N/A'}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Est. recall on exam day
+              </p>
+            </div>
           </div>
+          <Progress value={progress.percentage} className="mt-2" />
+          
           <div className="pt-4 border-t">
-            <h4 className="text-sm font-semibold mb-2">Scope</h4>
+            <h4 className="text-sm font-semibold mb-2">Scope ({itemsInScope.length} items)</h4>
             <div className="space-y-3">
               {deckNames.length > 0 && (
                 <div>
