@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useDecks } from '@/contexts/DecksContext';
 import { useQuestionBanks } from '@/contexts/QuestionBankContext';
 import Header from '@/components/Header';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, CartesianGrid, LabelList, LineChart, Line } from 'recharts';
 import { getAllFlashcardsFromDeck } from '@/lib/card-utils';
 import { getAllMcqsFromBank } from '@/lib/question-bank-utils';
@@ -21,6 +21,7 @@ import { PerformanceGraph } from '@/components/PerformanceGraph';
 import { calculateAccuracy, calculateDueStats, calculateIntervalGrowth, calculateRetentionDistribution, calculateForecast, calculateAverageRetention, calculateAtRiskItems, calculateCumulativeStabilityGrowth, calculateSuspectedGuesses, calculateLearningCurve, calculateForgettingCurve, calculateStabilityOverTime, calculateMemoryDecayVelocity } from '@/lib/analytics-utils';
 import { ForgettingCurveChart } from '@/components/ForgettingCurveChart';
 import { StabilityTrendChart } from '@/components/StabilityTrendChart';
+import { AnimatedCard } from '@/components/AnimatedCard';
 
 const StatisticsPage = () => {
   const { decks } = useDecks();
@@ -346,27 +347,27 @@ const StatisticsPage = () => {
       <main className="flex-grow container mx-auto p-4 md:p-8">
         <h1 className="text-2xl sm:text-3xl font-bold mb-6">Statistics</h1>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-          <Card>
+          <AnimatedCard delay={0}>
             <CardHeader><CardTitle>Total Decks</CardTitle></CardHeader>
             <CardContent><p className="text-3xl sm:text-4xl font-bold">{collectionStats.totalDecks}</p></CardContent>
-          </Card>
-          <Card>
+          </AnimatedCard>
+          <AnimatedCard delay={0.1}>
             <CardHeader><CardTitle>Total Flashcards</CardTitle></CardHeader>
             <CardContent><p className="text-3xl sm:text-4xl font-bold">{collectionStats.totalFlashcards}</p></CardContent>
-          </Card>
-          <Card>
+          </AnimatedCard>
+          <AnimatedCard delay={0.2}>
             <CardHeader><CardTitle>Total Q-Banks</CardTitle></CardHeader>
             <CardContent><p className="text-3xl sm:text-4xl font-bold">{collectionStats.totalQBanks}</p></CardContent>
-          </Card>
-          <Card>
+          </AnimatedCard>
+          <AnimatedCard delay={0.3}>
             <CardHeader><CardTitle>Total MCQs</CardTitle></CardHeader>
             <CardContent><p className="text-3xl sm:text-4xl font-bold">{collectionStats.totalMcqs}</p></CardContent>
-          </Card>
+          </AnimatedCard>
         </div>
 
         <h2 className="text-xl sm:text-2xl font-bold mt-8 mb-4">Learning Progress</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-          <Card>
+          <AnimatedCard delay={0.4}>
             <CardHeader><CardTitle>Reviews</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
@@ -375,8 +376,8 @@ const StatisticsPage = () => {
                 <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><CalendarDays className="h-4 w-4" />Past 30 days</span><span className="font-bold">{progressStats?.reviewsPast30Days}</span></div>
               </>}
             </CardContent>
-          </Card>
-          <Card>
+          </AnimatedCard>
+          <AnimatedCard delay={0.5}>
             <CardHeader><CardTitle>Study Streak</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
@@ -384,8 +385,8 @@ const StatisticsPage = () => {
                 <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Flame className="h-4 w-4" />Longest Streak</span><span className="font-bold">{progressStats?.longestStreak} days</span></div>
               </>}
             </CardContent>
-          </Card>
-          <Card>
+          </AnimatedCard>
+          <AnimatedCard delay={0.6}>
             <CardHeader><CardTitle>Due & Overdue</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
@@ -397,8 +398,8 @@ const StatisticsPage = () => {
                 <div className="flex items-center justify-between pl-4"><span className="flex items-center gap-2 text-muted-foreground"><AlertTriangle className="h-4 w-4 text-red-500" />Overdue</span><span className="font-bold">{dueStats?.mcqs.overdue}</span></div>
               </>}
             </CardContent>
-          </Card>
-          <Card>
+          </AnimatedCard>
+          <AnimatedCard delay={0.7}>
             <CardHeader><CardTitle>Avg. Interval Growth</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
@@ -406,7 +407,7 @@ const StatisticsPage = () => {
                 <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><HelpCircle className="h-4 w-4" />MCQs</span><span className="font-bold">{intervalGrowthStats?.mcqs.toFixed(2)}x</span></div>
               </>}
             </CardContent>
-          </Card>
+          </AnimatedCard>
         </div>
 
         <h2 className="text-xl sm:text-2xl font-bold mt-8 mb-4">Performance Analytics</h2>
@@ -414,7 +415,7 @@ const StatisticsPage = () => {
 
         <h2 className="text-xl sm:text-2xl font-bold mt-8 mb-4">Memory Stability</h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-          <Card>
+          <AnimatedCard delay={0.8}>
             <CardHeader>
               <CardTitle>Flashcard Stability Trend</CardTitle>
               <CardDescription>Average stability of reviewed flashcards over time.</CardDescription>
@@ -434,8 +435,8 @@ const StatisticsPage = () => {
                 </>
               }
             </CardContent>
-          </Card>
-          <Card>
+          </AnimatedCard>
+          <AnimatedCard delay={0.9}>
             <CardHeader>
               <CardTitle>MCQ Stability Trend</CardTitle>
               <CardDescription>Average stability of reviewed MCQs over time.</CardDescription>
@@ -455,12 +456,12 @@ const StatisticsPage = () => {
                 </>
               }
             </CardContent>
-          </Card>
+          </AnimatedCard>
         </div>
 
         <h2 className="text-xl sm:text-2xl font-bold mt-8 mb-4">Advanced Memory Stats</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-            <Card>
+            <AnimatedCard delay={1.0}>
                 <CardHeader><CardTitle>Avg. Predicted Retention</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
                     {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
@@ -468,8 +469,8 @@ const StatisticsPage = () => {
                         <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><BrainCircuit className="h-4 w-4" />MCQs</span><span className="font-bold">{advancedStats?.mcqs.avgRetention?.toFixed(2) ?? 'N/A'}%</span></div>
                     </>}
                 </CardContent>
-            </Card>
-            <Card>
+            </AnimatedCard>
+            <AnimatedCard delay={1.1}>
                 <CardHeader><CardTitle>At-Risk Items</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
                     {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
@@ -477,8 +478,8 @@ const StatisticsPage = () => {
                         <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><ShieldAlert className="h-4 w-4" />MCQs</span><span className="font-bold">{advancedStats?.mcqs.atRisk ?? 'N/A'}</span></div>
                     </>}
                 </CardContent>
-            </Card>
-            <Card>
+            </AnimatedCard>
+            <AnimatedCard delay={1.2}>
                 <CardHeader><CardTitle>Stability Growth</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
                     {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
@@ -486,8 +487,8 @@ const StatisticsPage = () => {
                         <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><BarChartBig className="h-4 w-4" />MCQs</span><span className="font-bold">{Math.round(advancedStats?.mcqs.stabilityGrowth ?? 0)}</span></div>
                     </>}
                 </CardContent>
-            </Card>
-            <Card>
+            </AnimatedCard>
+            <AnimatedCard delay={1.3}>
                 <CardHeader><CardTitle>Suspected Guesses</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
                     {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
@@ -495,11 +496,11 @@ const StatisticsPage = () => {
                         <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Lightbulb className="h-4 w-4" />MCQs</span><span className="font-bold">{advancedStats?.mcqs.guesses}</span></div>
                     </>}
                 </CardContent>
-            </Card>
+            </AnimatedCard>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mt-6">
-          <Card>
+          <AnimatedCard delay={1.4}>
             <CardHeader>
               <CardTitle>Deck Performance</CardTitle>
               <CardDescription>Accuracy per deck and sub-deck.</CardDescription>
@@ -507,8 +508,8 @@ const StatisticsPage = () => {
             <CardContent>
               <PerformanceGraph data={performanceGraphData.deckPerformance} />
             </CardContent>
-          </Card>
-          <Card>
+          </AnimatedCard>
+          <AnimatedCard delay={1.5}>
             <CardHeader>
               <CardTitle>Question Bank Performance</CardTitle>
               <CardDescription>Accuracy per question bank and sub-bank.</CardDescription>
@@ -516,12 +517,12 @@ const StatisticsPage = () => {
             <CardContent>
               <PerformanceGraph data={performanceGraphData.qBankPerformance} />
             </CardContent>
-          </Card>
+          </AnimatedCard>
         </div>
 
         <h2 className="text-xl sm:text-2xl font-bold mt-8 mb-4">Forecast & Distribution</h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mt-6">
-          <Card className="lg:col-span-2">
+          <AnimatedCard delay={1.6} className="lg:col-span-2">
             <CardHeader>
               <CardTitle>Review Forecast</CardTitle>
               <CardDescription>Upcoming reviews for the next 30 days.</CardDescription>
@@ -541,9 +542,9 @@ const StatisticsPage = () => {
                 </ResponsiveContainer>
               )}
             </CardContent>
-          </Card>
+          </AnimatedCard>
 
-          <Card className="lg:col-span-2">
+          <AnimatedCard delay={1.7} className="lg:col-span-2">
             <CardHeader>
               <CardTitle>Forgetting Curve</CardTitle>
               <CardDescription>Actual retention based on time since last review.</CardDescription>
@@ -554,9 +555,9 @@ const StatisticsPage = () => {
                 <ForgettingCurveChart data={forgettingCurveData} />
               }
             </CardContent>
-          </Card>
+          </AnimatedCard>
 
-          <Card>
+          <AnimatedCard delay={1.8}>
             <CardHeader>
               <CardTitle>Learning Curve</CardTitle>
               <CardDescription>Accuracy by review number for all items.</CardDescription>
@@ -576,9 +577,9 @@ const StatisticsPage = () => {
                 </ResponsiveContainer>
               }
             </CardContent>
-          </Card>
+          </AnimatedCard>
 
-          <Card>
+          <AnimatedCard delay={1.9}>
             <CardHeader>
               <CardTitle>Predicted Retention (Flashcards)</CardTitle>
               <CardDescription>Based on FSRS model.</CardDescription>
@@ -599,9 +600,9 @@ const StatisticsPage = () => {
                 </ResponsiveContainer>
               }
             </CardContent>
-          </Card>
+          </AnimatedCard>
 
-          <Card>
+          <AnimatedCard delay={2.0}>
             <CardHeader>
               <CardTitle>Predicted Retention (MCQs)</CardTitle>
               <CardDescription>Based on FSRS model.</CardDescription>
@@ -622,10 +623,10 @@ const StatisticsPage = () => {
                 </ResponsiveContainer>
               }
             </CardContent>
-          </Card>
+          </AnimatedCard>
 
           {cardDifficultyDistribution && cardDifficultyDistribution.reviewedCount > 0 && (
-            <Card>
+            <AnimatedCard delay={2.1}>
                 <CardHeader>
                     <CardTitle>Flashcard Difficulty</CardTitle>
                     <CardDescription>Difficulty distribution for reviewed flashcards.</CardDescription>
@@ -648,11 +649,11 @@ const StatisticsPage = () => {
                         Average difficulty: {cardDifficultyDistribution.averageDifficulty}%
                     </p>
                 </CardContent>
-            </Card>
+            </AnimatedCard>
           )}
 
           {mcqDifficultyDistribution && mcqDifficultyDistribution.reviewedCount > 0 && (
-            <Card>
+            <AnimatedCard delay={2.2}>
                 <CardHeader>
                     <CardTitle>MCQ Difficulty</CardTitle>
                     <CardDescription>Difficulty distribution for reviewed MCQs.</CardDescription>
@@ -675,26 +676,26 @@ const StatisticsPage = () => {
                         Average difficulty: {mcqDifficultyDistribution.averageDifficulty}%
                     </p>
                 </CardContent>
-            </Card>
+            </AnimatedCard>
           )}
 
-          <Card>
+          <AnimatedCard delay={2.3}>
             <CardHeader>
               <CardTitle>Flashcard Maturity</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               {renderPieChart(maturityData.flashcardStatusCounts)}
             </CardContent>
-          </Card>
+          </AnimatedCard>
 
-          <Card>
+          <AnimatedCard delay={2.4}>
             <CardHeader>
               <CardTitle>MCQ Maturity</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               {renderPieChart(maturityData.mcqStatusCounts)}
             </CardContent>
-          </Card>
+          </AnimatedCard>
         </div>
       </main>
     </div>
