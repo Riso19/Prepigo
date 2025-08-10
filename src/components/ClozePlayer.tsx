@@ -37,7 +37,7 @@ const ClozePlayer = ({ text, description, isFlipped, onClick }: ClozePlayerProps
     >
       <Card className="w-full h-full flex flex-col">
         <CardContent className="p-6 text-center w-full flex-grow flex flex-col items-center justify-center">
-          <div className="text-lg md:text-xl font-semibold w-full">
+          <div className="text-base md:text-lg font-semibold w-full">
             {renderClozeText(isFlipped)}
           </div>
           {isFlipped && description && (

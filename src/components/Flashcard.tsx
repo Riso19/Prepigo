@@ -28,8 +28,8 @@ const Flashcard = ({ question, answer, isFlipped, onClick }: FlashcardProps) => 
         <div className="[backface-visibility:hidden] [grid-area:1/1]">
           <Card className="w-full h-full flex flex-col">
             <CardContent className="p-6 text-center flex-grow flex flex-col items-center justify-center">
-              <p className="text-lg font-semibold text-muted-foreground">Question:</p>
-              <div className="mt-2 text-lg md:text-xl font-bold prose dark:prose-invert max-w-none w-full" dangerouslySetInnerHTML={{ __html: resolvedQuestion }} />
+              <p className="text-base font-semibold text-muted-foreground">Question:</p>
+              <div className="mt-2 text-base md:text-lg font-bold prose dark:prose-invert max-w-none w-full" dangerouslySetInnerHTML={{ __html: resolvedQuestion }} />
             </CardContent>
           </Card>
         </div>
@@ -37,8 +37,8 @@ const Flashcard = ({ question, answer, isFlipped, onClick }: FlashcardProps) => 
         <div className="[backface-visibility:hidden] [transform:rotateY(180deg)] [grid-area:1/1]">
           <Card className="w-full h-full flex flex-col bg-secondary">
             <CardContent className="p-6 text-center flex-grow flex flex-col items-center justify-center">
-              <p className="text-lg font-semibold text-muted-foreground">Answer:</p>
-              <div className="mt-2 text-lg md:text-xl font-bold prose dark:prose-invert max-w-none w-full" dangerouslySetInnerHTML={{ __html: resolvedAnswer }} />
+              <p className="text-base font-semibold text-muted-foreground">Answer:</p>
+              <div className="mt-2 text-base md:text-lg font-bold prose dark:prose-invert max-w-none w-full" dangerouslySetInnerHTML={{ __html: resolvedAnswer }} />
             </CardContent>
           </Card>
         </div>
