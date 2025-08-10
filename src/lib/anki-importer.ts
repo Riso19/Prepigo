@@ -239,7 +239,7 @@ export const importAnkiFile = async (
             const occlusions = parseOcclusionsFromSvg(masksFieldContent);
 
             if (rawImageUrl && occlusions.length > 0) {
-                const questionOcclusion = occlusions[ord];
+                const questionOcclusion = occlusions.find(o => o.id === ord + 1);
                 if (questionOcclusion) {
                     flashcard = {
                         id: `anki-c-${_id}`, noteId: `anki-n-${noteId}`, type: 'imageOcclusion',
