@@ -28,9 +28,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { DeckSettingsForm } from '@/components/DeckSettingsForm';
 import { useSettings } from '@/contexts/SettingsContext';
 import { FlashcardStatus } from '@/components/FlashcardStatus';
-import { format } from 'date-fns';
 import { State } from 'ts-fsrs';
-import { cn } from '@/lib/utils';
+import { DynamicDueDate } from '@/components/DynamicDueDate';
 
 const DeckViewPage = () => {
   const { deckId } = useParams<{ deckId: string }>();
@@ -132,16 +131,12 @@ const DeckViewPage = () => {
                       isNew = !srsData || srsData.state === State.New;
                     }
 
-                    if (card.srs?.isSuspended) return <Badge variant="outline">Suspended</Badge>;
-                    if (isNew || !dueDate) return <Badge variant="secondary">New</Badge>;
-                    
-                    const date = new Date(dueDate);
-                    const isDue = date <= new Date();
-                    
                     return (
-                      <span className={cn("text-sm", isDue && "text-red-500 font-semibold")}>
-                        {format(date, 'PP')}
-                      </span>
+                      <DynamicDueDate
+                        dueDate={dueDate}
+                        isNew={isNew}
+                        isSuspended={card.srs?.isSuspended}
+                      />
                     );
                   })()}
                 </TableCell>
@@ -254,16 +249,12 @@ const DeckViewPage = () => {
                       isNew = !srsData || srsData.state === State.New;
                     }
 
-                    if (card.srs?.isSuspended) return <Badge variant="outline">Suspended</Badge>;
-                    if (isNew || !dueDate) return <Badge variant="secondary">New</Badge>;
-                    
-                    const date = new Date(dueDate);
-                    const isDue = date <= new Date();
-                    
                     return (
-                      <span className={cn("text-sm font-semibold", isDue && "text-red-500")}>
-                        {format(date, 'PP')}
-                      </span>
+                      <DynamicDueDate
+                        dueDate={dueDate}
+                        isNew={isNew}
+                        isSuspended={card.srs?.isSuspended}
+                      />
                     );
                   })()}
                 </div>

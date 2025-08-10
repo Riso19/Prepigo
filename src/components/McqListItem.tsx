@@ -8,8 +8,8 @@ import { HtmlRenderer } from './HtmlRenderer';
 import { CheckCircle2, Pencil, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { McqStatus } from './McqStatus';
-import { format } from 'date-fns';
 import { State } from 'ts-fsrs';
+import { DynamicDueDate } from './DynamicDueDate';
 
 interface McqListItemProps {
   mcq: McqData;
@@ -66,16 +66,12 @@ export const McqListItem = ({ mcq, bankId, onDelete, scheduler }: McqListItemPro
                   const dueDate = srsData?.due;
                   const isNew = !srsData || srsData.state === State.New;
 
-                  if (mcq.srs?.isSuspended) return <Badge variant="outline">Suspended</Badge>;
-                  if (isNew || !dueDate) return <Badge variant="secondary">New</Badge>;
-                  
-                  const date = new Date(dueDate);
-                  const isDue = date <= new Date();
-                  
                   return (
-                    <span className={cn("text-sm font-semibold", isDue && "text-red-500")}>
-                      {format(date, 'PP')}
-                    </span>
+                    <DynamicDueDate
+                      dueDate={dueDate}
+                      isNew={isNew}
+                      isSuspended={mcq.srs?.isSuspended}
+                    />
                   );
                 })()}
               </div>
