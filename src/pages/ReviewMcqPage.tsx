@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
 import { useQuestionBanks } from "@/contexts/QuestionBankContext";
 import { updateMcq, buildMcqSessionQueue, findQuestionBankById, getEffectiveMcqSrsSettings } from "@/lib/question-bank-utils";
@@ -65,6 +65,7 @@ const ReviewMcqPage = () => {
   const [isFinished, setIsFinished] = useState(false);
   const [dueTimeStrings, setDueTimeStrings] = useState<Record<string, string> | null>(null);
   const [mcqExamMap, setMcqExamMap] = useState<Map<string, ExamData>>(new Map());
+  const reviewStartTimeRef = useRef<number | null>(null);
 
   const fsrsInstance = useMemo(() => {
     const settings = getEffectiveMcqSrsSettings(questionBanks, bankId || 'all', globalSettings);
@@ -85,6 +86,12 @@ const ReviewMcqPage = () => {
   }, [currentQuestion, mcqExamMap]);
 
   useEffect(() => {
+    if (currentQuestion) {
+        reviewStartTimeRef.current = Date.now();
+    }
+  }, [currentQuestion]);
+
+  useEffect(() => {
     if (questionBanks.length > 0) {
       const banksToReview = bankId && bankId !== 'all' ? [findQuestionBankById(questionBanks, bankId)].filter(Boolean) as QuestionBankData[] : questionBanks;
       if (banksToReview.length > 0) {
@@ -101,6 +108,7 @@ const ReviewMcqPage = () => {
   const handleGradeAndProceed = useCallback(async (rating: Rating) => {
     if (!currentQuestion) return;
 
+    const duration = reviewStartTimeRef.current ? Date.now() - reviewStartTimeRef.current : 0;
     const settings = getEffectiveMcqSrsSettings(questionBanks, bankId || 'all', globalSettings);
     const wasNew = settings.scheduler === 'fsrs6' ? !currentQuestion.srs?.fsrs6 || currentQuestion.srs.fsrs6.state === State.New : !currentQuestion.srs?.fsrs || currentQuestion.srs.fsrs.state === State.New;
 
@@ -134,6 +142,7 @@ const ReviewMcqPage = () => {
       last_elapsed_days: nextState.log.last_elapsed_days,
       scheduled_days: nextState.log.scheduled_days,
       review: nextState.log.review.toISOString(),
+      duration,
     };
     await addMcqReviewLog(logToSave);
 

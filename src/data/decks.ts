@@ -121,6 +121,7 @@ export const reviewLogSchema = z.object({
   scheduled_days: z.number(),
   review: z.string(),
   learning_steps: z.number().optional(),
+  duration: z.number().optional(), // in milliseconds
 });
 
 // --- Final Schemas for Types and Validation ---

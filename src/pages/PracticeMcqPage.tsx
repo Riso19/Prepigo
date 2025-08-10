@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuestionBanks } from "@/contexts/QuestionBankContext";
 import { findQuestionBankById, getAllMcqsFromBank, updateMcq, getEffectiveMcqSrsSettings } from "@/lib/question-bank-utils";
@@ -60,6 +60,7 @@ const PracticeMcqPage = () => {
   const [sessionStats, setSessionStats] = useState({ correct: 0, incorrect: 0 });
   const [isFinished, setIsFinished] = useState(false);
   const [dueTimeStrings, setDueTimeStrings] = useState<Record<string, string> | null>(null);
+  const reviewStartTimeRef = useRef<number | null>(null);
 
   const fsrsInstance = useMemo(() => {
     const settings = getEffectiveMcqSrsSettings(questionBanks, bankId || 'all', globalSettings);
@@ -77,6 +78,12 @@ const PracticeMcqPage = () => {
   const currentQuestion = useMemo(() => sessionQueue[currentQuestionIndex], [sessionQueue, currentQuestionIndex]);
 
   useEffect(() => {
+    if (currentQuestion) {
+        reviewStartTimeRef.current = Date.now();
+    }
+  }, [currentQuestion]);
+
+  useEffect(() => {
     if (!bank && bankId !== 'all') return;
 
     const banksToPractice = bankId === 'all' ? questionBanks : (bank ? [bank] : []);
@@ -89,6 +96,7 @@ const PracticeMcqPage = () => {
   const handleGradeAndProceed = useCallback(async (rating: Rating) => {
     if (!currentQuestion) return;
 
+    const duration = reviewStartTimeRef.current ? Date.now() - reviewStartTimeRef.current : 0;
     const settings = getEffectiveMcqSrsSettings(questionBanks, bankId || 'all', globalSettings);
     const srsData = settings.scheduler === 'fsrs6' ? currentQuestion.srs?.fsrs6 : currentQuestion.srs?.fsrs;
     const card: FsrsCard | Fsrs6Card = srsData
@@ -120,6 +128,7 @@ const PracticeMcqPage = () => {
       last_elapsed_days: nextState.log.last_elapsed_days,
       scheduled_days: nextState.log.scheduled_days,
       review: nextState.log.review.toISOString(),
+      duration,
     };
     await addMcqReviewLog(logToSave);
 

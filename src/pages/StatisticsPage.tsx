@@ -11,7 +11,7 @@ import { useSettings } from '@/contexts/SettingsContext';
 import { useQuery } from '@tanstack/react-query';
 import { getAllReviewLogsFromDB, getAllMcqReviewLogsFromDB } from '@/lib/idb';
 import { format, subDays, startOfDay, isSameDay, differenceInDays } from 'date-fns';
-import { Loader2, TrendingUp, CalendarDays, Flame, CheckCircle, BookOpen, Loader } from 'lucide-react';
+import { Loader2, TrendingUp, CalendarDays, Flame, CheckCircle, BookOpen, Loader, Clock, Zap } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { State } from 'ts-fsrs';
 import { FlashcardData } from '@/data/decks';
@@ -89,6 +89,26 @@ const StatisticsPage = () => {
     }
 
     return { reviewsToday, reviewsPast7Days, reviewsPast30Days, currentStreak, longestStreak };
+  }, [reviewLogs]);
+
+  const timeStats = useMemo(() => {
+    if (!reviewLogs || reviewLogs.length === 0) {
+        return {
+            totalTimeFormatted: "0m",
+            avgPerHour: 0,
+        };
+    }
+
+    const totalDurationMs = reviewLogs.reduce((acc, log) => acc + (log.duration || 0), 0);
+    const totalDurationHours = totalDurationMs / (1000 * 60 * 60);
+
+    const hours = Math.floor(totalDurationHours);
+    const minutes = Math.round((totalDurationHours - hours) * 60);
+    const totalTimeFormatted = `${hours}h ${minutes}m`;
+
+    const avgPerHour = totalDurationHours > 0 ? Math.round(reviewLogs.length / totalDurationHours) : 0;
+
+    return { totalTimeFormatted, avgPerHour };
   }, [reviewLogs]);
 
   const masteryStats = useMemo(() => {
@@ -292,6 +312,15 @@ const StatisticsPage = () => {
               <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><BookOpen className="h-4 w-4" />Unseen</span><span className="font-bold">{masteryStats.flashcards.unseen}</span></div>
               <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Loader className="h-4 w-4" />In Progress</span><span className="font-bold">{masteryStats.flashcards.inProgress}</span></div>
               <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><CheckCircle className="h-4 w-4" />Mastered</span><span className="font-bold">{masteryStats.flashcards.mastered}</span></div>
+            </CardContent>
+          </Card>
+          <Card className="lg:col-span-3">
+            <CardHeader><CardTitle>Time-Based Metrics</CardTitle></CardHeader>
+            <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
+                    <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Clock className="h-4 w-4" />Total Time Studied</span><span className="font-bold">{timeStats?.totalTimeFormatted}</span></div>
+                    <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Zap className="h-4 w-4" />Avg. Reviews / Hour</span><span className="font-bold">{timeStats?.avgPerHour}</span></div>
+                </>}
             </CardContent>
           </Card>
         </div>

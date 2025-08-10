@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import { useDecks } from "@/contexts/DecksContext";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -46,6 +46,7 @@ const StudyPage = () => {
   const [isSrsEnabled, setIsSrsEnabled] = useState(true);
   const [customSessionTitle, setCustomSessionTitle] = useState('');
   const [cardExamMap, setCardExamMap] = useState<Map<string, ExamData>>(new Map());
+  const reviewStartTimeRef = useRef<number | null>(null);
   
   const fsrsInstance = useMemo(() => {
     const currentDeck = deckId ? findDeckById(decks, deckId) : null;
@@ -74,6 +75,12 @@ const StudyPage = () => {
     if (!currentCard) return null;
     return cardExamMap.get(currentCard.id);
   }, [currentCard, cardExamMap]);
+
+  useEffect(() => {
+    if (currentCard) {
+        reviewStartTimeRef.current = Date.now();
+    }
+  }, [currentCard]);
 
   useEffect(() => {
     if (deckId === 'custom' && location.state) {
@@ -110,6 +117,7 @@ const StudyPage = () => {
   const handleRating = useCallback(async (rating: Rating) => {
     if (!currentCard) return;
     
+    const duration = reviewStartTimeRef.current ? Date.now() - reviewStartTimeRef.current : 0;
     const actualCardIndex = sessionQueue.findIndex(c => c.id === currentCard.id);
     if (actualCardIndex === -1) return;
 
@@ -139,6 +147,7 @@ const StudyPage = () => {
         last_elapsed_days: logEntry.last_elapsed_days,
         scheduled_days: logEntry.scheduled_days,
         review: logEntry.review.toISOString(),
+        duration,
       };
       await addReviewLog(logToSave);
 
