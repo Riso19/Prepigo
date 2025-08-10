@@ -100,7 +100,7 @@ const StatisticsPage = () => {
         <CardTitle>{title}</CardTitle>
         <ResponsiveContainer width="100%" height={isMobile ? 200 : 250}>
           <PieChart>
-            <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={isMobile ? 60 : 80} label>
+            <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={isMobile ? 60 : 80}>
               {chartData.map((entry) => (
                 <Cell key={`cell-${entry.name}`} fill={PIE_COLORS[entry.name as ItemStatus]} />
               ))}
