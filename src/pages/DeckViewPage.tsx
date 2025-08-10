@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useDecks } from '@/contexts/DecksContext';
-import { findDeckById, getAllFlashcardsFromDeck, deleteFlashcard, findDeckPathById, getEffectiveSrsSettings } from '@/lib/deck-utils';
+import { findDeckById, deleteFlashcard, findDeckPathById, getEffectiveSrsSettings } from '@/lib/deck-utils';
+import { getAllFlashcardsFromDeck } from '@/lib/card-utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';

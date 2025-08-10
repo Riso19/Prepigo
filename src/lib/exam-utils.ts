@@ -1,6 +1,6 @@
 import { ExamData } from "@/data/exams";
 import { DeckData, FlashcardData } from "@/data/decks";
-import { getAllFlashcardsFromDeck } from "./deck-utils";
+import { getAllFlashcardsFromDeck } from "./card-utils";
 import { State } from "ts-fsrs";
 import { SrsSettings } from "@/contexts/SettingsContext";
 

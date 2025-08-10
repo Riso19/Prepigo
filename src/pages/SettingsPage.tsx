@@ -27,7 +27,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { getAllFlashcardsFromDeck, updateFlashcard, mergeDecks } from '@/lib/deck-utils';
+import { updateFlashcard, mergeDecks } from '@/lib/deck-utils';
+import { getAllFlashcardsFromDeck } from '@/lib/card-utils';
 import { fsrs, createEmptyCard, generatorParameters, Card as FsrsCard, Rating } from 'ts-fsrs';
 import { toast } from 'sonner';
 import { importAnkiFile } from '@/lib/anki-importer';

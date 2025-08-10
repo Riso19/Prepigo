@@ -1,6 +1,9 @@
 import { DeckData, FlashcardData } from "@/data/decks";
 import { SrsSettings } from "@/contexts/SettingsContext";
 import { State } from "ts-fsrs";
+import { getAllFlashcardsFromDeck } from "./card-utils";
+import { ExamData } from "@/data/exams";
+import { getCardsForExam } from "./exam-utils";
 
 // Recursively find a deck by its ID
 export const findDeckById = (decks: DeckData[], id: string): DeckData | null => {
@@ -29,17 +32,6 @@ export const findDeckPathById = (decks: DeckData[], deckId: string, currentPath:
     }
   }
   return null;
-};
-
-// Recursively get all flashcards from a deck and its sub-decks
-export const getAllFlashcardsFromDeck = (deck: DeckData): FlashcardData[] => {
-  let flashcards = [...deck.flashcards];
-  if (deck.subDecks) {
-    for (const subDeck of deck.subDecks) {
-      flashcards = [...flashcards, ...getAllFlashcardsFromDeck(subDeck)];
-    }
-  }
-  return flashcards;
 };
 
 // Immutably add a sub-deck to a parent deck
@@ -420,9 +412,36 @@ export const buildSessionQueue = (
   decksToStudy: DeckData[],
   allDecks: DeckData[],
   globalSettings: SrsSettings,
-  introducedTodayIds: Set<string>
+  introducedTodayIds: Set<string>,
+  exams?: ExamData[]
 ): FlashcardData[] => {
   const now = new Date();
+
+  const cardExamDateMap = new Map<string, Date>();
+  const hasExams = exams && exams.length > 0;
+  if (hasExams) {
+    const sortedExams = [...exams].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    for (const exam of sortedExams) {
+        const examCards = getCardsForExam(exam, allDecks, globalSettings);
+        for (const card of examCards) {
+            if (!cardExamDateMap.has(card.id)) {
+                cardExamDateMap.set(card.id, new Date(exam.date));
+            }
+        }
+    }
+  }
+
+  const examSort = (a: FlashcardData, b: FlashcardData): number => {
+    const dateA = cardExamDateMap.get(a.id);
+    const dateB = cardExamDateMap.get(b.id);
+    if (dateA && !dateB) return -1;
+    if (!dateA && dateB) return 1;
+    if (dateA && dateB) {
+        const diff = dateA.getTime() - dateB.getTime();
+        if (diff !== 0) return diff;
+    }
+    return 0;
+  };
 
   const isNew = (card: FlashcardData, s: SrsSettings) => {
     if (introducedTodayIds.has(card.id) || card.srs?.isSuspended) return false;
@@ -527,14 +546,30 @@ export const buildSessionQueue = (
   let gatheredNew = [...new Set(sessionNew)];
   if (globalSettings.newCardGatherOrder === 'ascending') gatheredNew.sort((a, b) => (a.srs?.newCardOrder || 0) - (b.srs?.newCardOrder || 0));
   if (globalSettings.newCardGatherOrder === 'descending') gatheredNew.sort((a, b) => (b.srs?.newCardOrder || 0) - (a.srs?.newCardOrder || 0));
-  if (globalSettings.newCardGatherOrder === 'randomCards' || globalSettings.newCardGatherOrder === 'randomNotes') gatheredNew = shuffle(gatheredNew);
-
+  
   let sortedNew = gatheredNew;
-  if (globalSettings.newCardSortOrder === 'random') sortedNew = shuffle(sortedNew);
+  sortedNew.sort((a, b) => {
+    if (hasExams) {
+        const examOrder = examSort(a, b);
+        if (examOrder !== 0) return examOrder;
+    }
+    return (a.srs?.newCardOrder || 0) - (b.srs?.newCardOrder || 0);
+  });
+
+  if ((globalSettings.newCardSortOrder === 'random' || globalSettings.newCardGatherOrder === 'randomCards' || globalSettings.newCardGatherOrder === 'randomNotes') && !hasExams) {
+    sortedNew = shuffle(sortedNew);
+  }
 
   let sortedReviews = [...new Set(sessionReviews)];
-  if (globalSettings.reviewSortOrder === 'dueDateRandom') {
-    sortedReviews.sort((a, b) => new Date(a.srs!.fsrs?.due || a.srs!.sm2!.due).getTime() - new Date(b.srs!.fsrs?.due || b.srs!.sm2!.due).getTime());
+  sortedReviews.sort((a, b) => {
+    if (hasExams) {
+        const examOrder = examSort(a, b);
+        if (examOrder !== 0) return examOrder;
+    }
+    return new Date(a.srs!.fsrs?.due || a.srs!.sm2!.due).getTime() - new Date(b.srs!.fsrs?.due || b.srs!.sm2!.due).getTime();
+  });
+
+  if (globalSettings.reviewSortOrder === 'dueDateRandom' && !hasExams) {
     sortedReviews = shuffle(sortedReviews);
   }
 

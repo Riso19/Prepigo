@@ -13,6 +13,7 @@ import { ArrowLeft, Home } from "lucide-react";
 import { fsrs, Card, State, Rating, RecordLog, generatorParameters, createEmptyCard } from "ts-fsrs";
 import { fsrs6, Card as Fsrs6Card, generatorParameters as fsrs6GeneratorParameters } from "@/lib/fsrs6";
 import { sm2, Sm2Quality } from "@/lib/sm2";
+import { useExams } from "@/contexts/ExamsContext";
 
 const parseSteps = (steps: string): number[] => {
   return steps.trim().split(/\s+/).filter(s => s).map(stepStr => {
@@ -30,6 +31,7 @@ const StudyPage = () => {
   const location = useLocation();
   const { decks, setDecks, introductionsToday, addIntroducedCard } = useDecks();
   const { settings: globalSettings } = useSettings();
+  const { exams } = useExams();
   const navigate = useNavigate();
   
   const [isFlipped, setIsFlipped] = useState(false);
@@ -62,7 +64,8 @@ const StudyPage = () => {
     return null;
   }, [sessionQueue, currentCardIndex, buriedNoteIds]);
 
-  // This effect sets up the session queue. It should only run when the session identity changes (deckId or custom session state).
+  // This effect sets up the session queue. It should only run when the session identity changes.
+  // It depends on `exams` so the queue is rebuilt if an exam is added/changed.
   // It intentionally does not depend on `decks` to prevent resetting the session every time a card's SRS data is updated.
   useEffect(() => {
     if (deckId === 'custom' && location.state) {
@@ -81,7 +84,7 @@ const StudyPage = () => {
         }
         const decksToStudy = deckId === 'all' ? decks : (currentDeck ? [currentDeck] : []);
         if (decksToStudy.length > 0) {
-            const queue = buildSessionQueue(decksToStudy, decks, globalSettings, introductionsToday);
+            const queue = buildSessionQueue(decksToStudy, decks, globalSettings, introductionsToday, exams);
             setSessionQueue(queue);
         } else {
             setSessionQueue([]);
@@ -91,7 +94,7 @@ const StudyPage = () => {
     setCurrentCardIndex(0);
     setBuriedNoteIds(new Set());
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deckId, location.state]);
+  }, [deckId, location.state, exams]);
 
   const handleRating = useCallback(async (rating: Rating) => {
     if (!currentCard) return;

@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { DeckTreeSelector } from '@/components/DeckTreeSelector';
 import { TagEditor } from '@/components/TagEditor';
-import { getAllFlashcardsFromDeck, getAllTags } from '@/lib/deck-utils';
+import { getAllTags } from '@/lib/deck-utils';
+import { getAllFlashcardsFromDeck } from '@/lib/card-utils';
 import { getAllReviewLogsFromDB } from '@/lib/idb';
 import { FlashcardData, DeckData } from '@/data/decks';
 import { Rating, State } from 'ts-fsrs';
