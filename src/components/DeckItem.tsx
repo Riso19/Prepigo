@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { DeckData, FlashcardData } from "@/data/decks";
+import { DeckData } from "@/data/decks";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "./ui/button";
-import { ChevronRight, FileText, Folder, MoreVertical, Plus, BookOpen, Image as ImageIcon, Settings, GripVertical, Trash2 } from "lucide-react";
-import { Card, CardContent } from "./ui/card";
+import { ChevronRight, Folder, MoreVertical, Plus, BookOpen, Settings, GripVertical, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AddSubDeckDialog } from "./AddSubDeckDialog";
@@ -37,26 +36,12 @@ const DeckItem = ({ deck }: { deck: DeckData }) => {
   });
 
   const hasSubDecks = deck.subDecks && deck.subDecks.length > 0;
-  const hasFlashcards = deck.flashcards && deck.flashcards.length > 0;
   const totalFlashcards = getAllFlashcardsFromDeck(deck).length;
 
   const handleDelete = () => {
     setDecks(prevDecks => deleteDeck(prevDecks, deck.id));
     showSuccess(`Deck "${deck.name}" and all its contents deleted.`);
     setIsDeleteAlertOpen(false);
-  };
-
-  const getCardPreview = (flashcard: FlashcardData) => {
-    switch (flashcard.type) {
-      case 'basic':
-        return { icon: <FileText className="h-5 w-5 text-secondary-foreground/80 flex-shrink-0" />, text: flashcard.question };
-      case 'cloze':
-        return { icon: <FileText className="h-5 w-5 text-secondary-foreground/80 flex-shrink-0" />, text: flashcard.text };
-      case 'imageOcclusion':
-        return { icon: <ImageIcon className="h-5 w-5 text-secondary-foreground/80 flex-shrink-0" />, text: 'Image Occlusion Card' };
-      default:
-        return { icon: <FileText className="h-5 w-5 text-secondary-foreground/80 flex-shrink-0" />, text: 'Unknown card type' };
-    }
   };
 
   const containerStyle = {
@@ -75,7 +60,7 @@ const DeckItem = ({ deck }: { deck: DeckData }) => {
             </div>
             <CollapsibleTrigger asChild>
               <button className="flex items-center gap-3 flex-grow text-left p-1 rounded-md">
-                <ChevronRight className={cn("h-5 w-5 transition-transform duration-200", isOpen && "rotate-90")} />
+                <ChevronRight className={cn("h-5 w-5 transition-transform duration-200", isOpen && "rotate-90", !hasSubDecks && "invisible")} />
                 <Folder className="h-5 w-5 text-primary" />
                 <span className="font-semibold">{deck.name}</span>
               </button>
@@ -91,6 +76,14 @@ const DeckItem = ({ deck }: { deck: DeckData }) => {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                {totalFlashcards > 0 && (
+                  <DropdownMenuItem asChild>
+                    <Link to={`/study/${deck.id}`}>
+                      <BookOpen className="mr-2 h-4 w-4" />
+                      Study Deck
+                    </Link>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem asChild>
                   <Link to={`/deck/${deck.id}/view`}>
                     <Settings className="mr-2 h-4 w-4" />
@@ -119,46 +112,13 @@ const DeckItem = ({ deck }: { deck: DeckData }) => {
             </DropdownMenu>
           </div>
         </div>
-        <CollapsibleContent className="space-y-4 pl-8 border-l-2 border-dashed ml-4">
+        <CollapsibleContent className="space-y-2 pl-8 border-l-2 border-dashed ml-4">
           {hasSubDecks && (
             <div className="space-y-2 pt-2">
               {deck.subDecks!.map((subDeck) => (
                 <DeckItem key={subDeck.id} deck={subDeck} />
               ))}
             </div>
-          )}
-
-          {hasFlashcards && (
-            <div className="space-y-2 pt-2">
-              {deck.flashcards!.map((flashcard) => {
-                const { icon, text } = getCardPreview(flashcard);
-                return (
-                  <Card key={flashcard.id} className="bg-card/50">
-                    <CardContent className="p-3 flex items-center gap-3">
-                      {icon}
-                      <p className="text-sm text-muted-foreground truncate" title={text}>
-                        {text}
-                      </p>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-
-          {(!hasSubDecks && !hasFlashcards) && (
-              <p className="text-sm text-muted-foreground py-4 text-center">This deck is empty.</p>
-          )}
-
-          {totalFlashcards > 0 && (
-              <div className="pt-2">
-                  <Button size="sm" variant="outline" asChild>
-                    <Link to={`/study/${deck.id}`}>
-                      <BookOpen className="mr-2 h-4 w-4" />
-                      Study this deck
-                    </Link>
-                  </Button>
-              </div>
           )}
         </CollapsibleContent>
       </Collapsible>
