@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import initSqlJs, { Database } from 'sql.js';
-import { DeckData, FlashcardData, BasicFlashcard, ClozeFlashcard, SrsData, Sm2State, ImageOcclusionFlashcard } from '@/data/decks';
+import { DeckData, FlashcardData, BasicFlashcard, ClozeFlashcard, SrsData, Sm2State, ImageOcclusionFlashcard, Occlusion } from '@/data/decks';
 
 const ANKI_FIELD_SEPARATOR = '\x1f';
 
@@ -49,6 +49,36 @@ const convertAnkiSchedulingData = (cardRow: any[], collectionCreationTimestamp: 
     isSuspended,
     newCardOrder: type === 0 ? due : undefined,
   };
+};
+
+const parseOcclusionsFromSvg = (svg: string): Occlusion[] => {
+  if (!svg) return [];
+  const occlusions: Occlusion[] = [];
+  const rectRegex = /<rect([^>]+)\/>/g;
+  const attrRegex = /([a-zA-Z0-9\-:]+)="([^"]+)"/g;
+  
+  let match;
+  let index = 0;
+  while ((match = rectRegex.exec(svg)) !== null) {
+    const attrsStr = match[1];
+    const attrs: { [key: string]: string } = {};
+    let attrMatch;
+    while ((attrMatch = attrRegex.exec(attrsStr)) !== null) {
+      attrs[attrMatch[1]] = attrMatch[2];
+    }
+
+    if (attrs.x && attrs.y && attrs.width && attrs.height) {
+      occlusions.push({
+        id: parseFloat(attrs['data-id'] || attrs.id || `${Date.now()}${index}`),
+        x: parseFloat(attrs.x),
+        y: parseFloat(attrs.y),
+        width: parseFloat(attrs.width),
+        height: parseFloat(attrs.height),
+      });
+      index++;
+    }
+  }
+  return occlusions;
 };
 
 export const importAnkiFile = async (
@@ -156,16 +186,40 @@ export const importAnkiFile = async (
     model.flds.forEach(fld => { fieldMap[fld.name] = fields[fld.ord] ?? ''; });
 
     if (model.name.toLowerCase().includes('image occlusion')) {
-        // Basic handling for IO, assuming specific field names
         const imageField = fieldMap['Image'] || '';
-        const questionField = fieldMap['Header'] || '';
-        const answerField = fieldMap['Extra'] || '';
-        const imageUrl = imageField.match(/src="([^"]+)"/)?.[1];
-        if (imageUrl) {
+        const masksField = fieldMap['Masks'] || '';
+        const headerField = fieldMap['Header'] || '';
+        const extraField = fieldMap['Extra'] || '';
+
+        const imageUrlMatch = imageField.match(/src="([^"]+)"/);
+        const imageUrl = imageUrlMatch ? imageUrlMatch[1] : null;
+        const occlusions = parseOcclusionsFromSvg(masksField);
+
+        if (imageUrl && occlusions.length > 0) {
+            const questionOcclusion = occlusions[ord];
+            if (questionOcclusion) {
+                let description = headerField;
+                if (extraField) {
+                    description += (description ? '<hr>' : '') + extraField;
+                }
+                flashcard = {
+                    id: `anki-c-${_id}`,
+                    noteId: `anki-n-${noteId}`,
+                    type: 'imageOcclusion',
+                    imageUrl: imageUrl,
+                    occlusions: occlusions,
+                    questionOcclusionId: questionOcclusion.id,
+                    description: replaceMediaSrc(description),
+                } as ImageOcclusionFlashcard;
+            }
+        } 
+        
+        if (!flashcard) {
+            // Fallback to basic card if parsing fails
             flashcard = {
                 id: `anki-c-${_id}`, noteId: `anki-n-${noteId}`, type: 'basic',
-                question: replaceMediaSrc(questionField + imageField),
-                answer: replaceMediaSrc(answerField),
+                question: replaceMediaSrc(headerField + imageField),
+                answer: replaceMediaSrc(extraField),
             } as BasicFlashcard;
         }
     } else if (model.type === 1 || template.qfmt.includes('{{cloze:')) {
