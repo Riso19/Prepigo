@@ -2,7 +2,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Occlusion } from "@/data/decks";
 import { useState, useRef, useEffect } from 'react';
 import { useResolvedMediaUrl } from '@/hooks/use-resolved-media-url';
-import { useResolvedHtml } from "@/hooks/use-resolved-html";
+import { HtmlRenderer } from "./HtmlRenderer";
 
 interface ImageOcclusionPlayerProps {
   imageUrl: string;
@@ -17,7 +17,6 @@ const ImageOcclusionPlayer = ({ imageUrl, occlusions, questionOcclusionId, descr
   const [imgDimensions, setImgDimensions] = useState<{ width: number; height: number } | null>(null);
   const resolvedImageUrl = useResolvedMediaUrl(imageUrl);
   const imgRef = useRef<HTMLImageElement>(null);
-  const resolvedDescription = useResolvedHtml(description);
 
   useEffect(() => {
     if (resolvedImageUrl && imgRef.current) {
@@ -74,7 +73,7 @@ const ImageOcclusionPlayer = ({ imageUrl, occlusions, questionOcclusionId, descr
           {isFlipped && description && (
             <div className="p-4 border-t">
               <p className="text-sm font-semibold text-muted-foreground mb-2">Extra Info:</p>
-              <div className="prose dark:prose-invert max-w-none text-sm" dangerouslySetInnerHTML={{ __html: resolvedDescription }} />
+              <HtmlRenderer html={description} className="prose dark:prose-invert max-w-none text-sm" />
             </div>
           )}
         </CardContent>

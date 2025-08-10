@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { useResolvedHtml } from "@/hooks/use-resolved-html";
+import { HtmlRenderer } from "./HtmlRenderer";
 
 interface FlashcardProps {
   question: string;
@@ -10,9 +10,6 @@ interface FlashcardProps {
 }
 
 const Flashcard = ({ question, answer, isFlipped, onClick }: FlashcardProps) => {
-  const resolvedQuestion = useResolvedHtml(question);
-  const resolvedAnswer = useResolvedHtml(answer);
-
   return (
     <div
       className="w-full min-h-[20rem] [perspective:1000px] cursor-pointer grid"
@@ -29,7 +26,10 @@ const Flashcard = ({ question, answer, isFlipped, onClick }: FlashcardProps) => 
           <Card className="w-full h-full flex flex-col">
             <CardContent className="p-6 text-center flex-grow flex flex-col items-center justify-center">
               <p className="text-base font-semibold text-muted-foreground">Question:</p>
-              <div className="mt-2 text-base md:text-lg font-bold prose dark:prose-invert max-w-none w-full" dangerouslySetInnerHTML={{ __html: resolvedQuestion }} />
+              <HtmlRenderer
+                html={question}
+                className="mt-2 text-base md:text-lg font-bold prose dark:prose-invert max-w-none w-full"
+              />
             </CardContent>
           </Card>
         </div>
@@ -38,7 +38,10 @@ const Flashcard = ({ question, answer, isFlipped, onClick }: FlashcardProps) => 
           <Card className="w-full h-full flex flex-col bg-secondary">
             <CardContent className="p-6 text-center flex-grow flex flex-col items-center justify-center">
               <p className="text-base font-semibold text-muted-foreground">Answer:</p>
-              <div className="mt-2 text-base md:text-lg font-bold prose dark:prose-invert max-w-none w-full" dangerouslySetInnerHTML={{ __html: resolvedAnswer }} />
+              <HtmlRenderer
+                html={answer}
+                className="mt-2 text-base md:text-lg font-bold prose dark:prose-invert max-w-none w-full"
+              />
             </CardContent>
           </Card>
         </div>
