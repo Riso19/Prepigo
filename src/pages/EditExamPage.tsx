@@ -20,7 +20,7 @@ import { TagEditor } from '@/components/TagEditor';
 import Header from '@/components/Header';
 import { cn } from '@/lib/utils';
 import { CalendarIcon, ArrowLeft } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, startOfToday } from 'date-fns';
 import { useMemo, useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -111,7 +111,7 @@ const EditExamPage = () => {
                           </FormControl>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar mode="single" selected={field.value ? new Date(field.value) : undefined} onSelect={(date) => field.onChange(date?.toISOString())} disabled={(date) => date < new Date()} />
+                          <Calendar mode="single" selected={field.value ? new Date(field.value) : undefined} onSelect={(date) => field.onChange(date?.toISOString())} disabled={(date) => date < startOfToday()} />
                         </PopoverContent>
                       </Popover>
                       <FormMessage />
