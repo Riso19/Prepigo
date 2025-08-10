@@ -21,7 +21,7 @@ const getAllChildDeckIds = (deck: DeckData): string[] => {
   return ids;
 };
 
-const DeckNode = ({ deck, selectedDeckIds, onSelectionChange, isRoot = false }: { deck: DeckData, isRoot?: boolean } & Omit<DeckTreeSelectorProps, 'decks'>) => {
+const DeckNode = ({ deck, selectedDeckIds = new Set(), onSelectionChange, isRoot = false }: { deck: DeckData, isRoot?: boolean } & Omit<DeckTreeSelectorProps, 'decks'>) => {
   const [isOpen, setIsOpen] = React.useState(false);
   const allChildrenIds = React.useMemo(() => getAllChildDeckIds(deck), [deck]);
   
@@ -70,7 +70,7 @@ const DeckNode = ({ deck, selectedDeckIds, onSelectionChange, isRoot = false }: 
   );
 };
 
-export const DeckTreeSelector = ({ decks, selectedDeckIds, onSelectionChange }: DeckTreeSelectorProps) => {
+export const DeckTreeSelector = ({ decks, selectedDeckIds = new Set(), onSelectionChange }: DeckTreeSelectorProps) => {
   return (
     <div className="p-2 border rounded-md max-h-72 overflow-y-auto">
       {decks.map(deck => (
