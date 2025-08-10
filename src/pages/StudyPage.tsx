@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useDecks } from "@/contexts/DecksContext";
 import { useSettings } from "@/contexts/SettingsContext";
-import { findDeckById, updateFlashcard, getEffectiveSrsSettings } from "@/lib/deck-utils";
+import { findDeckById, updateFlashcard, getEffectiveSrsSettings, findDeckWithAncestors } from "@/lib/deck-utils";
 import { addReviewLog } from "@/lib/idb";
 import { DeckData, FlashcardData, ReviewLog, Sm2State } from "@/data/decks";
 import Flashcard from "@/components/Flashcard";
@@ -109,54 +109,69 @@ const StudyPage = () => {
       return card.srs?.sm2?.state === 'review';
     };
 
-    // Recursive gathering function
-    const gatherCardsForSession = (rootDeck: DeckData) => {
+    // Determine the source for limit settings
+    const globalLimitToggles = globalSettings;
+    let limitSourceDeck = deck;
+    if (globalLimitToggles.limitsStartFromTop) {
+        const result = findDeckWithAncestors(decks, deck.id);
+        if (result && result.ancestors.length > 0) {
+            limitSourceDeck = result.ancestors[0];
+        }
+    }
+    const limitSettings = getEffectiveSrsSettings(decks, limitSourceDeck.id, globalSettings);
+
+    // The main gathering function
+    const gatherCardsForSession = (rootGatherDeck: DeckData) => {
       const sessionNew: FlashcardData[] = [];
       const sessionReviews: FlashcardData[] = []; // Interday learning + reviews
       const sessionLearning: FlashcardData[] = []; // Intraday learning
 
-      const recursiveGather = (currentDeck: DeckData, newBudget: number, reviewBudget: number) => {
-        const settings = getEffectiveSrsSettings(decks, currentDeck.id, globalSettings);
-        let newTakenOnThisBranch = 0;
-        let reviewsTakenOnThisBranch = 0;
+      const newCardLimit = limitSettings.newCardsPerDay;
+      const reviewLimit = limitSettings.maxReviewsPerDay;
 
-        const cards = currentDeck.flashcards.filter(c => !c.srs?.isSuspended);
-        const localNew = cards.filter(c => isNew(c, settings));
-        const localReviews = cards.filter(c => isReview(c));
-        const localInterday = cards.filter(c => isInterdayLearning(c));
-        const localIntraday = cards.filter(c => isIntradayLearning(c));
-
-        sessionLearning.push(...localIntraday);
-
-        const potentialReviews = [...localInterday, ...localReviews];
-        const reviewsToTake = Math.min(potentialReviews.length, reviewBudget);
-        if (reviewsToTake > 0) {
-          sessionReviews.push(...potentialReviews.slice(0, reviewsToTake));
-          reviewsTakenOnThisBranch += reviewsToTake;
+      const recursiveGather = (currentDeck: DeckData) => {
+        const reviewsFull = sessionReviews.length >= reviewLimit;
+        let newFull = sessionNew.length >= newCardLimit;
+        if (!globalLimitToggles.newCardsIgnoreReviewLimit && reviewsFull) {
+            newFull = true;
+        }
+        if (newFull && reviewsFull) {
+            return;
         }
 
-        const newToTake = Math.min(localNew.length, newBudget);
-        if (newToTake > 0) {
-          sessionNew.push(...localNew.slice(0, newToTake));
-          newTakenOnThisBranch += newToTake;
+        const settings = getEffectiveSrsSettings(decks, currentDeck.id, globalSettings);
+        const cards = currentDeck.flashcards.filter(c => !c.srs?.isSuspended);
+        
+        const localIntraday = cards.filter(c => isIntradayLearning(c));
+        sessionLearning.push(...localIntraday);
+
+        if (!reviewsFull) {
+            const localReviews = cards.filter(c => isReview(c));
+            const localInterday = cards.filter(c => isInterdayLearning(c));
+            const potentialReviews = [...localInterday, ...localReviews];
+            const reviewsToTake = Math.min(potentialReviews.length, reviewLimit - sessionReviews.length);
+            if (reviewsToTake > 0) {
+                sessionReviews.push(...potentialReviews.slice(0, reviewsToTake));
+            }
+        }
+
+        const canTakeNew = sessionNew.length < newCardLimit && (globalLimitToggles.newCardsIgnoreReviewLimit || sessionReviews.length < reviewLimit);
+        if (canTakeNew) {
+            const localNew = cards.filter(c => isNew(c, settings));
+            const newToTake = Math.min(localNew.length, newCardLimit - sessionNew.length);
+            if (newToTake > 0) {
+                sessionNew.push(...localNew.slice(0, newToTake));
+            }
         }
 
         if (currentDeck.subDecks) {
           for (const subDeck of currentDeck.subDecks) {
-            const remainingNew = newBudget - newTakenOnThisBranch;
-            const remainingReview = reviewBudget - reviewsTakenOnThisBranch;
-            if (remainingNew > 0 || remainingReview > 0) {
-              const { newTaken, reviewsTaken } = recursiveGather(subDeck, remainingNew, remainingReview);
-              newTakenOnThisBranch += newTaken;
-              reviewsTakenOnThisBranch += reviewsTaken;
-            }
+            recursiveGather(subDeck);
           }
         }
-        return { newTaken: newTakenOnThisBranch, reviewsTaken: reviewsTakenOnThisBranch };
       };
 
-      const topLevelSettings = getEffectiveSrsSettings(decks, rootDeck.id, globalSettings);
-      recursiveGather(rootDeck, topLevelSettings.newCardsPerDay, topLevelSettings.maxReviewsPerDay);
+      recursiveGather(rootGatherDeck);
       return { newCards: sessionNew, reviewCards: sessionReviews, learningCards: sessionLearning };
     };
 

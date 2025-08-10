@@ -485,6 +485,28 @@ const SettingsPage = () => {
                       <FormItem><FormLabel>Maximum reviews/day</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
                   </CardContent>
+                  <CardFooter className="flex flex-col gap-4 pt-4">
+                    <FormField control={form.control} name="newCardsIgnoreReviewLimit" render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm w-full">
+                          <div className="space-y-0.5">
+                            <FormLabel>New cards ignore review limit</FormLabel>
+                            <FormDescription>If enabled, new cards will be shown regardless of the review limit.</FormDescription>
+                          </div>
+                          <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField control={form.control} name="limitsStartFromTop" render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm w-full">
+                          <div className="space-y-0.5">
+                            <FormLabel>Limits start from top</FormLabel>
+                            <FormDescription>If enabled, limits from the top-level deck will apply to subdeck study sessions.</FormDescription>
+                          </div>
+                          <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </CardFooter>
                 </Card>
 
                 <Card>
