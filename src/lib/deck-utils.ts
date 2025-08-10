@@ -432,13 +432,14 @@ export const buildSessionQueue = (
         }
       }
 
-      const allNewCardsForExam = allCardsForExam.filter(card => {
-        const settings = getEffectiveSrsSettings(allDecks, findDeckWithAncestors(allDecks, card.id)?.deck.id || '', globalSettings);
-        return isTrulyNew(card, settings);
-      });
+      const settingsForExamCards = getEffectiveSrsSettings(allDecks, exam.deckIds[0] || '', globalSettings);
+      
+      const totalNewPoolForExam = allCardsForExam.filter(card => 
+        isTrulyNew(card, settingsForExamCards) || introducedTodayIds.has(card.id)
+      );
 
       const newIntroducedForThisExamToday = allCardsForExam.filter(card => introducedTodayIds.has(card.id)).length;
-      const availableNewCardsForExam = allNewCardsForExam.filter(card => !introducedTodayIds.has(card.id));
+      const availableNewCardsForExam = allCardsForExam.filter(card => isTrulyNew(card, settingsForExamCards) && !introducedTodayIds.has(card.id));
 
       const daysLeft = differenceInDays(new Date(exam.date), now);
       let dailyBudget: number;
@@ -446,7 +447,7 @@ export const buildSessionQueue = (
       if (daysLeft <= 0) {
         dailyBudget = availableNewCardsForExam.length;
       } else {
-        dailyBudget = Math.ceil(allNewCardsForExam.length / daysLeft);
+        dailyBudget = Math.ceil(totalNewPoolForExam.length / daysLeft);
       }
 
       const newForToday = Math.max(0, dailyBudget - newIntroducedForThisExamToday);
