@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useDecks } from "@/contexts/DecksContext";
-import { findFlashcardById, updateFlashcard, deleteFlashcard, addFlashcardToDeck } from "@/lib/deck-utils";
+import { findFlashcardById, updateFlashcard, deleteFlashcard, addFlashcardToDeck, getAllTags, updateNoteTags } from "@/lib/deck-utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -10,6 +10,7 @@ import { ArrowLeft } from "lucide-react";
 import HtmlEditor from "@/components/HtmlEditor";
 import { showError, showSuccess } from "@/utils/toast";
 import ImageOcclusionEditor from "@/components/ImageOcclusionEditor";
+import { TagEditor } from "@/components/TagEditor";
 
 const EditFlashcardPage = () => {
   const { deckId, flashcardId } = useParams<{ deckId: string; flashcardId: string }>();
@@ -21,8 +22,11 @@ const EditFlashcardPage = () => {
   const [answer, setAnswer] = useState("");
   const [clozeText, setClozeText] = useState("");
   const [description, setDescription] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
   const [originalCard, setOriginalCard] = useState<FlashcardData | null>(null);
   const [originalDeckId, setOriginalDeckId] = useState<string | null>(null);
+
+  const allTags = useMemo(() => getAllTags(decks), [decks]);
 
   useEffect(() => {
     if (flashcardId) {
@@ -32,6 +36,7 @@ const EditFlashcardPage = () => {
         setOriginalCard(flashcard);
         setOriginalDeckId(foundDeckId);
         setCardType(flashcard.type);
+        setTags(flashcard.tags || []);
         switch (flashcard.type) {
           case 'basic':
             setQuestion((flashcard as BasicFlashcard).question);
@@ -49,16 +54,31 @@ const EditFlashcardPage = () => {
     }
   }, [flashcardId, decks]);
 
+  const handleSaveChanges = (updatedCardFields: Partial<FlashcardData>) => {
+    if (!originalCard) return;
+
+    const updatedCard = { ...originalCard, ...updatedCardFields };
+
+    if (!originalCard.noteId) {
+        const cardWithTags = { ...updatedCard, tags };
+        setDecks(prevDecks => updateFlashcard(prevDecks, cardWithTags));
+    } else {
+        setDecks(prevDecks => {
+            const decksWithUpdatedCard = updateFlashcard(prevDecks, updatedCard);
+            return updateNoteTags(decksWithUpdatedCard, originalCard.noteId!, tags);
+        });
+    }
+    showSuccess("Flashcard updated successfully!");
+    navigate(`/deck/${deckId}/view`);
+  };
+
   const handleSaveBasic = () => {
     if (!originalCard) return;
     if (!question || !answer) {
       showError("Question and Answer cannot be empty.");
       return;
     }
-    const updatedCard: BasicFlashcard = { ...originalCard, type: 'basic', question, answer };
-    setDecks(prevDecks => updateFlashcard(prevDecks, updatedCard));
-    showSuccess("Flashcard updated successfully!");
-    navigate(`/deck/${deckId}/view`);
+    handleSaveChanges({ question, answer });
   };
 
   const handleSaveCloze = () => {
@@ -67,10 +87,7 @@ const EditFlashcardPage = () => {
       showError("Cloze text cannot be empty.");
       return;
     }
-    const updatedCard: ClozeFlashcard = { ...originalCard, type: 'cloze', text: clozeText, description };
-    setDecks(prevDecks => updateFlashcard(prevDecks, updatedCard));
-    showSuccess("Flashcard updated successfully!");
-    navigate(`/deck/${deckId}/view`);
+    handleSaveChanges({ text: clozeText, description });
   };
 
   const handleSaveImageOcclusion = (newImageUrl: string, newOcclusions: Occlusion[], newDescription: string) => {
@@ -107,6 +124,7 @@ const EditFlashcardPage = () => {
             occlusions: newOcclusions,
             questionOcclusionId: occ.id,
             description: newDescription,
+            tags,
         };
         updatedDecks = addFlashcardToDeck(updatedDecks, originalDeckId, newCard);
     });
@@ -131,7 +149,7 @@ const EditFlashcardPage = () => {
             <CardTitle className="text-2xl">Edit Flashcard</CardTitle>
             <p className="text-muted-foreground pt-2">Card Type: <span className="font-semibold capitalize">{cardType}</span></p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-6">
             {cardType === 'basic' && (
               <div className="space-y-4 pt-4">
                 <div className="space-y-2">
@@ -172,6 +190,10 @@ const EditFlashcardPage = () => {
                 />
               </div>
             )}
+             <div className="space-y-2">
+              <Label>Tags</Label>
+              <TagEditor tags={tags} onTagsChange={setTags} allTags={allTags} />
+            </div>
           </CardContent>
         </Card>
       </div>

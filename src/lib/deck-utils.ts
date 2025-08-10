@@ -118,6 +118,38 @@ export const updateFlashcard = (decks: DeckData[], updatedFlashcard: FlashcardDa
   });
 };
 
+// Get all unique tags from all decks
+export const getAllTags = (decks: DeckData[]): string[] => {
+    const allTags = new Set<string>();
+    const collectTags = (deck: DeckData) => {
+        deck.flashcards.forEach(fc => {
+            fc.tags?.forEach(tag => allTags.add(tag));
+        });
+        deck.subDecks?.forEach(collectTags);
+    };
+    decks.forEach(collectTags);
+    return Array.from(allTags).sort((a, b) => a.localeCompare(b));
+};
+
+// Immutably update tags for all cards belonging to a note
+export const updateNoteTags = (decks: DeckData[], noteId: string, newTags: string[]): DeckData[] => {
+  return decks.map(deck => {
+    const newFlashcards = deck.flashcards.map(fc => {
+      if (fc.noteId === noteId) {
+        return { ...fc, tags: newTags };
+      }
+      return fc;
+    });
+    
+    let newSubDecks = deck.subDecks;
+    if (deck.subDecks) {
+      newSubDecks = updateNoteTags(deck.subDecks, noteId, newTags);
+    }
+
+    return { ...deck, flashcards: newFlashcards, subDecks: newSubDecks };
+  });
+};
+
 export const tagLeech = (decks: DeckData[], flashcardId: string): DeckData[] => {
   return decks.map(deck => {
     const flashcardIndex = deck.flashcards.findIndex(fc => fc.id === flashcardId);

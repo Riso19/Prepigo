@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useDecks } from "@/contexts/DecksContext";
-import { findDeckById, addFlashcardToDeck } from "@/lib/deck-utils";
+import { findDeckById, addFlashcardToDeck, getAllTags } from "@/lib/deck-utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -13,6 +13,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import HtmlEditor from "@/components/HtmlEditor";
 import { showError } from "@/utils/toast";
 import { useSettings } from "@/contexts/SettingsContext";
+import { TagEditor } from "@/components/TagEditor";
 
 const CreateFlashcardPage = () => {
   const { deckId } = useParams<{ deckId: string }>();
@@ -27,8 +28,10 @@ const CreateFlashcardPage = () => {
   const [createReverse, setCreateReverse] = useState(false);
   const [clozeText, setClozeText] = useState("");
   const [description, setDescription] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
 
   const deck = deckId ? findDeckById(decks, deckId) : null;
+  const allTags = useMemo(() => getAllTags(decks), [decks]);
 
   useEffect(() => {
     setQuestion("");
@@ -36,6 +39,7 @@ const CreateFlashcardPage = () => {
     setCreateReverse(false);
     setClozeText("");
     setDescription("");
+    setTags([]);
   }, [cardType]);
 
   const cardTypeOptions = {
@@ -82,6 +86,7 @@ const CreateFlashcardPage = () => {
       type: "basic", 
       question, 
       answer,
+      tags,
       srs: { newCardOrder: newOrder }
     };
     setDecks(decks => addFlashcardToDeck(decks, deckId, newCard));
@@ -92,6 +97,7 @@ const CreateFlashcardPage = () => {
         type: "basic", 
         question: answer, 
         answer: question,
+        tags,
         srs: { newCardOrder: newOrder + 1 } // ensure reverse card is sequential
       };
       setDecks(decks => addFlashcardToDeck(decks, deckId, reverseCard));
@@ -107,6 +113,7 @@ const CreateFlashcardPage = () => {
       type: "cloze", 
       text: clozeText, 
       description,
+      tags,
       srs: { newCardOrder: getNewCardOrder() }
     };
     setDecks(decks => addFlashcardToDeck(decks, deckId, newCard));
@@ -126,6 +133,7 @@ const CreateFlashcardPage = () => {
         occlusions,
         questionOcclusionId: occ.id,
         description,
+        tags,
         srs: { newCardOrder: getNewCardOrder() }
       };
       currentDecks = addFlashcardToDeck(currentDecks, deckId, newCard);
@@ -176,7 +184,7 @@ const CreateFlashcardPage = () => {
               </DropdownMenu>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-6">
             {cardType === 'basic' && (
               <div className="space-y-4 pt-4">
                 <div className="space-y-2">
@@ -190,9 +198,6 @@ const CreateFlashcardPage = () => {
                 <div className="flex items-center space-x-2">
                   <Checkbox id="reverse" checked={createReverse} onCheckedChange={(checked) => setCreateReverse(!!checked)} />
                   <Label htmlFor="reverse">Create reverse card</Label>
-                </div>
-                <div className="flex justify-end mt-6">
-                  <Button onClick={handleSaveBasic}>Save Flashcard</Button>
                 </div>
               </div>
             )}
@@ -214,9 +219,6 @@ const CreateFlashcardPage = () => {
                   <Label>Extra Info (Optional)</Label>
                   <HtmlEditor value={description} onChange={setDescription} placeholder="Add a hint or extra context..."/>
                 </div>
-                <div className="flex justify-end mt-6">
-                  <Button onClick={handleSaveCloze}>Save Flashcard</Button>
-                </div>
               </div>
             )}
             {cardType === 'imageOcclusion' && (
@@ -224,6 +226,17 @@ const CreateFlashcardPage = () => {
                 <ImageOcclusionEditor onSave={handleSaveImageOcclusion} />
               </div>
             )}
+
+            <div className="space-y-2">
+              <Label>Tags</Label>
+              <TagEditor tags={tags} onTagsChange={setTags} allTags={allTags} />
+            </div>
+
+            <div className="flex justify-end mt-6">
+              {cardType === 'basic' && <Button onClick={handleSaveBasic}>Save Flashcard</Button>}
+              {cardType === 'cloze' && <Button onClick={handleSaveCloze}>Save Flashcard</Button>}
+              {/* Image Occlusion has its own save button inside the editor */}
+            </div>
           </CardContent>
         </Card>
       </div>

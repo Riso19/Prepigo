@@ -340,7 +340,7 @@ export const importAnkiFile = async (
     }
 
     if (flashcard) {
-      flashcard.tags = (tagsStr || '').trim().split(' ').filter(Boolean);
+      flashcard.tags = (tagsStr || '').trim().split(/\s+/).filter(Boolean);
       if (includeScheduling) flashcard.srs = convertAnkiSchedulingData(cardRow, crt);
       deck.flashcards.push(flashcard);
     }

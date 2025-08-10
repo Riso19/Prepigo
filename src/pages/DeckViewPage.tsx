@@ -22,6 +22,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { useIsMobile } from '@/hooks/use-mobile';
 import { MediaAwareImage } from '@/components/MediaAwareImage';
 import { HtmlRenderer } from '@/components/HtmlRenderer';
+import { Badge } from '@/components/ui/badge';
 
 const DeckViewPage = () => {
   const { deckId } = useParams<{ deckId: string }>();
@@ -60,6 +61,7 @@ const DeckViewPage = () => {
           <TableHead className="w-[100px]">Type</TableHead>
           <TableHead>Front / Question</TableHead>
           <TableHead>Back / Answer</TableHead>
+          <TableHead>Tags</TableHead>
           <TableHead className="text-right w-[100px]">Actions</TableHead>
         </TableRow>
       </TableHeader>
@@ -80,6 +82,11 @@ const DeckViewPage = () => {
               ) : (
                 <HtmlRenderer html={card.description || ''} className="prose dark:prose-invert max-w-none" />
               )}
+            </TableCell>
+            <TableCell>
+              <div className="flex flex-wrap gap-1 max-w-[200px]">
+                {card.tags?.map(tag => <Badge key={tag} variant="outline" className="font-normal">{tag}</Badge>)}
+              </div>
             </TableCell>
             <TableCell className="text-right">
               <div className="flex items-center justify-end gap-2">
@@ -159,6 +166,12 @@ const DeckViewPage = () => {
               ) : (
                 <HtmlRenderer html={card.description || ''} className="prose dark:prose-invert max-w-none" />
               )}
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-muted-foreground">Tags</p>
+              <div className="flex flex-wrap gap-1">
+                {card.tags?.map(tag => <Badge key={tag} variant="outline" className="font-normal">{tag}</Badge>)}
+              </div>
             </div>
           </CardContent>
         </Card>
