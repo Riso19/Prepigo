@@ -76,8 +76,8 @@ const DeckItem = ({ deck }: { deck: DeckData }) => {
           <div className="flex items-center gap-1">
             <div className="flex items-center gap-2 text-sm font-semibold px-2">
               {dueCounts.newCount > 0 && <span className="text-blue-600 dark:text-blue-400">{dueCounts.newCount}</span>}
-              {dueCounts.learnCount > 0 && <span className="text-red-600 dark:text-red-400">{dueCounts.learnCount}</span>}
-              {dueCounts.dueCount > 0 && <span className="text-green-600 dark:text-green-400">{dueCounts.dueCount}</span>}
+              {dueCounts.learnCount > 0 && <span className="text-green-600 dark:text-green-400">{dueCounts.learnCount}</span>}
+              {dueCounts.dueCount > 0 && <span className="text-red-600 dark:text-red-400">{dueCounts.dueCount}</span>}
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
