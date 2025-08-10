@@ -327,6 +327,61 @@ export const getEffectiveSrsSettings = (
   return getEffectiveSrsSettingsWithSource(decks, deckId, globalSettings).settings;
 };
 
+export const getDeckDueCounts = (
+  deck: DeckData,
+  allDecks: DeckData[],
+  globalSettings: SrsSettings
+): { newCount: number; learnCount: number; dueCount: number } => {
+  const now = new Date();
+  let counts = { newCount: 0, learnCount: 0, dueCount: 0 };
+
+  const settings = getEffectiveSrsSettings(allDecks, deck.id, globalSettings);
+
+  for (const card of deck.flashcards) {
+    if (card.srs?.isSuspended) continue;
+
+    let isCardNew = false;
+    let isCardDue = false;
+    let isCardLearning = false;
+
+    if (settings.scheduler === 'sm2') {
+      const sm2State = card.srs?.sm2;
+      isCardNew = !sm2State || sm2State.state === 'new' || !sm2State.state;
+      isCardDue = !!sm2State && new Date(sm2State.due) <= now;
+      isCardLearning = isCardDue && (sm2State.state === 'learning' || sm2State.state === 'relearning');
+    } else { // fsrs or fsrs6
+      const srsData = settings.scheduler === 'fsrs6' ? card.srs?.fsrs6 : card.srs?.fsrs;
+      isCardNew = !srsData || srsData.state === State.New;
+      isCardDue = !!srsData && new Date(srsData.due) <= now;
+      isCardLearning = isCardDue && (srsData.state === State.Learning || srsData.state === State.Relearning);
+    }
+    
+    if (isCardNew) {
+      counts.newCount++;
+      continue;
+    }
+
+    if (isCardDue) {
+      if (isCardLearning) {
+        counts.learnCount++;
+      } else {
+        counts.dueCount++;
+      }
+    }
+  }
+
+  if (deck.subDecks) {
+    for (const subDeck of deck.subDecks) {
+      const subCounts = getDeckDueCounts(subDeck, allDecks, globalSettings);
+      counts.newCount += subCounts.newCount;
+      counts.learnCount += subCounts.learnCount;
+      counts.dueCount += subCounts.dueCount;
+    }
+  }
+
+  return counts;
+};
+
 const parseSteps = (steps: string): number[] => {
   return steps.trim().split(/\s+/).filter(s => s).map(stepStr => {
     const value = parseFloat(stepStr);
@@ -344,68 +399,6 @@ const shuffle = <T,>(array: T[]): T[] => {
     [array[i], array[j]] = [array[j], array[i]];
   }
   return array;
-};
-
-export const getDeckDueCounts = (
-  deck: DeckData,
-  allDecks: DeckData[],
-  globalSettings: SrsSettings
-): { newCount: number; learnCount: number; dueCount: number } => {
-  const now = new Date();
-  let counts = { newCount: 0, learnCount: 0, dueCount: 0 };
-
-  const settings = getEffectiveSrsSettings(allDecks, deck.id, globalSettings);
-
-  for (const card of deck.flashcards) {
-    if (card.srs?.isSuspended) continue;
-
-    let isCardNew = false;
-    let isCardDue = false;
-    let isCardLearning = false;
-    let isCardReview = false;
-
-    if (settings.scheduler === 'sm2') {
-      const sm2State = card.srs?.sm2;
-      isCardNew = !sm2State || sm2State.state === 'new' || !sm2State.state;
-      isCardDue = !!sm2State && new Date(sm2State.due) <= now;
-      if (isCardDue) {
-        isCardLearning = sm2State.state === 'learning' || sm2State.state === 'relearning';
-        isCardReview = sm2State.state === 'review';
-      }
-    } else { // FSRS or FSRS6
-      const srsData = settings.scheduler === 'fsrs6' ? card.srs?.fsrs6 : card.srs?.fsrs;
-      isCardNew = !srsData || srsData.state === State.New;
-      isCardDue = !!srsData && new Date(srsData.due) <= now;
-      if (isCardDue) {
-        isCardLearning = srsData.state === State.Learning || srsData.state === State.Relearning;
-        isCardReview = srsData.state === State.Review;
-      }
-    }
-
-    if (isCardNew) {
-      counts.newCount++;
-      continue;
-    }
-
-    if (isCardDue) {
-      if (isCardLearning) {
-        counts.learnCount++;
-      } else if (isCardReview) {
-        counts.dueCount++;
-      }
-    }
-  }
-
-  if (deck.subDecks) {
-    for (const subDeck of deck.subDecks) {
-      const subCounts = getDeckDueCounts(subDeck, allDecks, globalSettings);
-      counts.newCount += subCounts.newCount;
-      counts.learnCount += subCounts.learnCount;
-      counts.dueCount += subCounts.dueCount;
-    }
-  }
-
-  return counts;
 };
 
 export const buildSessionQueue = (
@@ -443,7 +436,46 @@ export const buildSessionQueue = (
     return 0;
   };
 
+  const examPriorityNew: FlashcardData[] = [];
+  const examPriorityCardIds = new Set<string>();
+
+  if (hasExams) {
+      const cardToDeckIdMap = new Map<string, string>();
+      const buildCardToDeckIdMap = (d: DeckData[]) => {
+          for (const deck of d) {
+              for (const card of deck.flashcards) {
+                  cardToDeckIdMap.set(card.id, deck.id);
+              }
+              if (deck.subDecks) buildCardToDeckIdMap(deck.subDecks);
+          }
+      };
+      buildCardToDeckIdMap(allDecks);
+
+      const examDeckIds = new Set(exams.flatMap(e => e.deckIds));
+      const allCardsInStudyScope = decksToStudy.flatMap(d => getAllFlashcardsFromDeck(d));
+
+      const originalIsNew = (card: FlashcardData, s: SrsSettings) => {
+          if (introducedTodayIds.has(card.id) || card.srs?.isSuspended) return false;
+          if (s.scheduler === 'sm2') return !card.srs?.sm2 || card.srs.sm2.state === 'new' || !card.srs.sm2.state;
+          const srsData = s.scheduler === 'fsrs6' ? card.srs?.fsrs6 : card.srs?.fsrs;
+          return !srsData || srsData.state === State.New;
+      };
+
+      const priorityCards = allCardsInStudyScope.filter(card => {
+          const cardDeckId = cardToDeckIdMap.get(card.id);
+          if (!cardDeckId || !examDeckIds.has(cardDeckId)) return false;
+          const settings = getEffectiveSrsSettings(allDecks, cardDeckId, globalSettings);
+          return originalIsNew(card, settings);
+      });
+
+      priorityCards.forEach(card => {
+          examPriorityNew.push(card);
+          examPriorityCardIds.add(card.id);
+      });
+  }
+
   const isNew = (card: FlashcardData, s: SrsSettings) => {
+    if (examPriorityCardIds.has(card.id)) return false;
     if (introducedTodayIds.has(card.id) || card.srs?.isSuspended) return false;
     if (s.scheduler === 'sm2') return !card.srs?.sm2 || card.srs.sm2.state === 'new' || !card.srs.sm2.state;
     const srsData = s.scheduler === 'fsrs6' ? card.srs?.fsrs6 : card.srs?.fsrs;
@@ -579,7 +611,8 @@ export const buildSessionQueue = (
                        globalSettings.newReviewOrder === 'after' ? [...sortedReviews, ...sortedNew] :
                        [...sortedNew, ...sortedReviews];
 
-  const finalQueue = [...learningCombined, ...finalWithNew];
+  examPriorityNew.sort(examSort);
+  const finalQueue = [...examPriorityNew, ...learningCombined, ...finalWithNew];
 
   return { queue: finalQueue, cardExamMap };
 };
