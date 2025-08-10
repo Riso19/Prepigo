@@ -18,7 +18,8 @@ import { DeckData, FlashcardData, ReviewLog } from '@/data/decks';
 import { McqData, QuestionBankData } from '@/data/questionBanks';
 import { PerformanceAnalytics } from '@/components/PerformanceAnalytics';
 import { PerformanceGraph } from '@/components/PerformanceGraph';
-import { calculateAccuracy, calculateDueStats, calculateIntervalGrowth, calculateRetentionDistribution, calculateForecast, calculateAverageRetention, calculateAtRiskItems, calculateCumulativeStabilityGrowth, calculateSuspectedGuesses, calculateLearningCurve } from '@/lib/analytics-utils';
+import { calculateAccuracy, calculateDueStats, calculateIntervalGrowth, calculateRetentionDistribution, calculateForecast, calculateAverageRetention, calculateAtRiskItems, calculateCumulativeStabilityGrowth, calculateSuspectedGuesses, calculateLearningCurve, calculateForgettingCurve } from '@/lib/analytics-utils';
+import { ForgettingCurveChart } from '@/components/ForgettingCurveChart';
 
 const StatisticsPage = () => {
   const { decks } = useDecks();
@@ -262,6 +263,12 @@ const StatisticsPage = () => {
     return calculateLearningCurve(combinedLogs);
   }, [logs]);
 
+  const forgettingCurveData = useMemo(() => {
+    if (!logs) return null;
+    const combinedLogs = [...logs.cardLogs, ...logs.mcqLogs];
+    return calculateForgettingCurve(combinedLogs);
+  }, [logs]);
+
   // --- Charting Constants ---
   const PIE_COLORS: Record<ItemStatus, string> = {
     New: '#3b82f6', // blue-500
@@ -470,6 +477,19 @@ const StatisticsPage = () => {
                   </BarChart>
                 </ResponsiveContainer>
               )}
+            </CardContent>
+          </Card>
+
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle>Forgetting Curve</CardTitle>
+              <CardDescription>Actual retention based on time since last review.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : 
+                !forgettingCurveData ? <p className="text-sm text-muted-foreground">Not enough review data to plot the forgetting curve.</p> :
+                <ForgettingCurveChart data={forgettingCurveData} />
+              }
             </CardContent>
           </Card>
 

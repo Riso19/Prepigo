@@ -273,3 +273,32 @@ export const calculateLearningCurve = (logs: (ReviewLog | McqReviewLog)[]) => {
         }))
         .filter(d => d.reviews > 0);
 };
+
+export const calculateForgettingCurve = (logs: (ReviewLog | McqReviewLog)[]) => {
+    const reviewLogs = logs.filter(log => log.state === State.Review && log.elapsed_days > 0);
+    if (reviewLogs.length < 20) return null;
+
+    const buckets: Record<number, { correct: number, total: number }> = {};
+
+    reviewLogs.forEach(log => {
+        const interval = log.elapsed_days;
+        if (!buckets[interval]) {
+            buckets[interval] = { correct: 0, total: 0 };
+        }
+        buckets[interval].total++;
+        if (log.rating > Rating.Again) {
+            buckets[interval].correct++;
+        }
+    });
+
+    const curveData = Object.entries(buckets)
+        .map(([interval, data]) => ({
+            interval: parseInt(interval, 10),
+            accuracy: (data.correct / data.total) * 100,
+            reviews: data.total,
+        }))
+        .filter(d => d.reviews > 5) // Only include intervals with a meaningful number of reviews
+        .sort((a, b) => a.interval - b.interval);
+
+    return curveData.length > 3 ? curveData : null;
+};
