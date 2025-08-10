@@ -25,6 +25,7 @@ import { ExamsProvider } from "./contexts/ExamsContext";
 import ExamSchedulerPage from "./pages/ExamSchedulerPage";
 import CreateExamPage from "./pages/CreateExamPage";
 import ExamDetailPage from "./pages/ExamDetailPage";
+import EditExamPage from "./pages/EditExamPage";
 
 const queryClient = new QueryClient();
 
@@ -56,6 +57,7 @@ const App = () => (
                   <Route path="/settings/mcq" element={<McqSettingsPage />} />
                   <Route path="/exams" element={<ExamSchedulerPage />} />
                   <Route path="/exams/new" element={<CreateExamPage />} />
+                  <Route path="/exams/edit/:examId" element={<EditExamPage />} />
                   <Route path="/exams/:examId" element={<ExamDetailPage />} />
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                   <Route path="*" element={<NotFound />} />

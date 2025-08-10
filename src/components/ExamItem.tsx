@@ -2,7 +2,7 @@ import { ExamData } from '@/data/exams';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { Calendar, Trash2 } from 'lucide-react';
+import { Calendar, Trash2, Pencil } from 'lucide-react';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import { Link } from 'react-router-dom';
 
@@ -29,9 +29,16 @@ export const ExamItem = ({ exam, onDelete }: ExamItemProps) => {
               {format(examDate, 'PPP')} ({daysLeft >= 0 ? `${daysLeft} days left` : 'Past'})
             </CardDescription>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => onDelete(exam.id)}>
-            <Trash2 className="h-4 w-4 text-destructive" />
-          </Button>
+          <div className="flex items-center">
+            <Button variant="ghost" size="icon" asChild>
+              <Link to={`/exams/edit/${exam.id}`}>
+                <Pencil className="h-4 w-4 text-muted-foreground" />
+              </Link>
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => onDelete(exam.id)}>
+              <Trash2 className="h-4 w-4 text-destructive" />
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
