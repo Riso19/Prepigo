@@ -4,12 +4,14 @@ import { useDecks } from '@/contexts/DecksContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { ArrowLeft, Home, Calendar, BookOpen } from 'lucide-react';
+import { ArrowLeft, Home, Calendar as CalendarIcon, BookOpen, List } from 'lucide-react';
 import { format, parseISO, isToday, isPast } from 'date-fns';
 import { ExamData, ExamScheduleItem } from '@/data/exams';
 import { findFlashcardById } from '@/lib/deck-utils';
 import { cn } from '@/lib/utils';
 import Header from '@/components/Header';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ExamCalendarView } from '@/components/ExamCalendarView';
 
 const DailyScheduleItem = ({ day, exam }: { day: ExamScheduleItem, exam: ExamData }) => {
   const navigate = useNavigate();
@@ -95,7 +97,7 @@ const ExamDetailPage = () => {
             <CardHeader>
               <CardTitle className="text-3xl">{exam.name}</CardTitle>
               <CardDescription className="flex items-center gap-2 pt-2">
-                <Calendar className="h-4 w-4" />
+                <CalendarIcon className="h-4 w-4" />
                 Exam Date: {format(parseISO(exam.examDate), 'PPP')}
               </CardDescription>
               <div className="pt-4 space-y-2">
@@ -106,11 +108,23 @@ const ExamDetailPage = () => {
                 <Progress value={overallProgress} />
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <h3 className="text-xl font-semibold">Daily Schedule</h3>
-              {exam.schedule.map(day => (
-                <DailyScheduleItem key={day.date} day={day} exam={exam} />
-              ))}
+            <CardContent>
+              <Tabs defaultValue="list" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="list"><List className="mr-2 h-4 w-4" />List View</TabsTrigger>
+                  <TabsTrigger value="calendar"><CalendarIcon className="mr-2 h-4 w-4" />Calendar View</TabsTrigger>
+                </TabsList>
+                <TabsContent value="list" className="mt-4">
+                  <div className="space-y-4">
+                    {exam.schedule.map(day => (
+                      <DailyScheduleItem key={day.date} day={day} exam={exam} />
+                    ))}
+                  </div>
+                </TabsContent>
+                <TabsContent value="calendar" className="mt-4 flex justify-center">
+                  <ExamCalendarView exam={exam} />
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
         </div>
