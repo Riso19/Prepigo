@@ -6,6 +6,7 @@ import { Occlusion } from '@/data/decks';
 import { showError, showLoading, showSuccess, dismissToast } from '@/utils/toast';
 import { X, Upload, Link as LinkIcon, Loader2 } from 'lucide-react';
 import HtmlEditor from './HtmlEditor';
+import { useResolvedMediaUrl } from '@/hooks/use-resolved-media-url';
 
 interface OcclusionInPixels extends Occlusion {}
 
@@ -17,6 +18,7 @@ interface ImageOcclusionEditorProps {
 }
 
 const ImageOcclusionEditor = ({ onSave, initialImageUrl, initialOcclusions, initialDescription }: ImageOcclusionEditorProps) => {
+  const resolvedInitialUrl = useResolvedMediaUrl(initialImageUrl);
   const [image, setImage] = useState<string | null>(null);
   const [imgDimensions, setImgDimensions] = useState<{ width: number; height: number } | null>(null);
   const [pixelOcclusions, setPixelOcclusions] = useState<OcclusionInPixels[]>([]);
@@ -30,9 +32,14 @@ const ImageOcclusionEditor = ({ onSave, initialImageUrl, initialOcclusions, init
   const imgRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
-    if (initialImageUrl) setImage(initialImageUrl);
+    if (resolvedInitialUrl) {
+      setImage(resolvedInitialUrl);
+    }
+  }, [resolvedInitialUrl]);
+
+  useEffect(() => {
     if (initialDescription) setDescription(initialDescription);
-  }, [initialImageUrl, initialDescription]);
+  }, [initialDescription]);
 
   useEffect(() => {
     if (image && imgRef.current) {
@@ -41,7 +48,7 @@ const ImageOcclusionEditor = ({ onSave, initialImageUrl, initialOcclusions, init
         const dims = { width: imgElement.naturalWidth, height: imgElement.naturalHeight };
         setImgDimensions(dims);
         
-        if (initialOcclusions) {
+        if (initialOcclusions && image === resolvedInitialUrl) { // Only load initial occlusions if it's the initial image
           const denormalized = initialOcclusions.map(occ => ({
             ...occ,
             x: occ.x * dims.width,
@@ -58,7 +65,7 @@ const ImageOcclusionEditor = ({ onSave, initialImageUrl, initialOcclusions, init
       
       return () => imgElement.removeEventListener('load', handleLoad);
     }
-  }, [image, initialOcclusions]);
+  }, [image, initialOcclusions, resolvedInitialUrl]);
 
   useEffect(() => {
     const loadImageFromUrl = async (url: string) => {
@@ -74,7 +81,7 @@ const ImageOcclusionEditor = ({ onSave, initialImageUrl, initialOcclusions, init
         const reader = new FileReader();
         reader.onloadend = () => {
           setImage(reader.result as string);
-          setPixelOcclusions([]);
+          setPixelOcclusions([]); // Reset occlusions for new image
           dismissToast(loadingToast);
           showSuccess("Image loaded!");
         };
@@ -99,7 +106,7 @@ const ImageOcclusionEditor = ({ onSave, initialImageUrl, initialOcclusions, init
       const reader = new FileReader();
       reader.onloadend = () => {
         setImage(reader.result as string);
-        setPixelOcclusions([]);
+        setPixelOcclusions([]); // Reset occlusions for new image
       };
       reader.readAsDataURL(file);
     }
@@ -158,6 +165,11 @@ const ImageOcclusionEditor = ({ onSave, initialImageUrl, initialOcclusions, init
 
   const handleSaveClick = () => {
     if (image && pixelOcclusions.length > 0 && imgDimensions) {
+      // If the image is a blob url, we need to find the original media:// url to save.
+      // For this fix, we assume if an initialImageUrl was provided, we save that.
+      // A more robust solution might involve tracking the original URL alongside the blob URL.
+      const urlToSave = initialImageUrl && image === resolvedInitialUrl ? initialImageUrl : image;
+
       const normalizedOcclusions = pixelOcclusions
         .filter(o => o.id !== -1)
         .map(occ => ({
@@ -167,7 +179,7 @@ const ImageOcclusionEditor = ({ onSave, initialImageUrl, initialOcclusions, init
           width: occ.width / imgDimensions.width,
           height: occ.height / imgDimensions.height,
         }));
-      onSave(image, normalizedOcclusions, description);
+      onSave(urlToSave, normalizedOcclusions, description);
     }
   };
 

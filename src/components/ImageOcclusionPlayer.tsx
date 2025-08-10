@@ -65,13 +65,36 @@ const ImageOcclusionPlayer = ({ imageUrl, occlusions, questionOcclusionId, descr
               >
                 {occlusions.map(occ => {
                   const isQuestion = occ.id === questionOcclusionId;
-                  const isRevealed = revealedOcclusions.has(occ.id);
-
-                  if (!isFlipped && !isQuestion) return null;
-                  if (isFlipped && isRevealed) return null;
-
-                  const fillColor = isQuestion ? "fill-blue-500" : "fill-primary";
                   
+                  // --- FRONT OF CARD ---
+                  if (!isFlipped) {
+                    if (isQuestion) {
+                      return (
+                        <rect
+                          key={occ.id}
+                          x={occ.x * imgDimensions.width}
+                          y={occ.y * imgDimensions.height}
+                          width={occ.width * imgDimensions.width}
+                          height={occ.height * imgDimensions.height}
+                          className="fill-blue-500"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      );
+                    }
+                    return null; // Hide all other masks on the front
+                  }
+
+                  // --- BACK OF CARD ---
+                  if (isQuestion) {
+                    return null; // Always hide the question mask on the back (it's the answer)
+                  }
+
+                  // For other masks, hide them if they've been revealed by a click
+                  if (revealedOcclusions.has(occ.id)) {
+                    return null;
+                  }
+                  
+                  // Otherwise, show the other masks and make them interactive
                   return (
                     <rect
                       key={occ.id}
@@ -79,7 +102,7 @@ const ImageOcclusionPlayer = ({ imageUrl, occlusions, questionOcclusionId, descr
                       y={occ.y * imgDimensions.height}
                       width={occ.width * imgDimensions.width}
                       height={occ.height * imgDimensions.height}
-                      className={cn(fillColor, "cursor-pointer transition-opacity hover:opacity-80")}
+                      className="fill-primary cursor-pointer transition-opacity hover:opacity-80"
                       vectorEffect="non-scaling-stroke"
                       onClick={(e) => handleOcclusionClick(e, occ.id)}
                     />
