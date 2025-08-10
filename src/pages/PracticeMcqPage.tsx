@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuestionBanks } from "@/contexts/QuestionBankContext";
-import { findQuestionBankById, getAllMcqsFromBank, updateMcq } from "@/lib/question-bank-utils";
+import { findQuestionBankById, getAllMcqsFromBank, updateMcq, getEffectiveMcqSrsSettings } from "@/lib/question-bank-utils";
 import { McqData } from "@/data/questionBanks";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Home, X, HelpCircle, Clock, Check, Sparkles } from "lucide-react";
@@ -39,7 +39,7 @@ const PracticeMcqPage = () => {
   const { bankId } = useParams<{ bankId: string }>();
   const { questionBanks, setQuestionBanks } = useQuestionBanks();
   const navigate = useNavigate();
-  const { settings } = useSettings();
+  const { settings: globalSettings } = useSettings();
 
   const [sessionQueue, setSessionQueue] = useState<McqData[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -51,11 +51,12 @@ const PracticeMcqPage = () => {
   const [dueTimeStrings, setDueTimeStrings] = useState<Record<string, string> | null>(null);
 
   const fsrsInstance = useMemo(() => {
+    const settings = getEffectiveMcqSrsSettings(questionBanks, bankId || 'all', globalSettings);
     if (settings.scheduler === 'fsrs6') {
       return fsrs6(fsrs6GeneratorParameters(settings.mcqFsrs6Parameters));
     }
     return fsrs(settings.mcqFsrsParameters);
-  }, [settings.scheduler, settings.mcqFsrsParameters, settings.mcqFsrs6Parameters]);
+  }, [questionBanks, bankId, globalSettings]);
 
   const bank = useMemo(() => (bankId && bankId !== 'all' ? findQuestionBankById(questionBanks, bankId) : null), [questionBanks, bankId]);
   const currentQuestion = useMemo(() => sessionQueue[currentQuestionIndex], [sessionQueue, currentQuestionIndex]);
@@ -73,6 +74,7 @@ const PracticeMcqPage = () => {
   const handleGradeAndProceed = useCallback(async (rating: Rating) => {
     if (!currentQuestion) return;
 
+    const settings = getEffectiveMcqSrsSettings(questionBanks, bankId || 'all', globalSettings);
     const srsData = settings.scheduler === 'fsrs6' ? currentQuestion.srs?.fsrs6 : currentQuestion.srs?.fsrs;
     const card: FsrsCard | Fsrs6Card = srsData
       ? {
@@ -129,7 +131,7 @@ const PracticeMcqPage = () => {
     } else {
       setIsFinished(true);
     }
-  }, [currentQuestion, currentQuestionIndex, sessionQueue.length, fsrsInstance, setQuestionBanks, settings.scheduler]);
+  }, [currentQuestion, currentQuestionIndex, sessionQueue.length, fsrsInstance, setQuestionBanks, bankId, globalSettings]);
 
   const handleSelectAndSubmit = useCallback((optionId: string) => {
     if (isSubmitted) return;
@@ -150,6 +152,7 @@ const PracticeMcqPage = () => {
 
   useEffect(() => {
     if (isSubmitted && currentQuestion && isAnswerCorrect) {
+        const settings = getEffectiveMcqSrsSettings(questionBanks, bankId || 'all', globalSettings);
         const srsData = settings.scheduler === 'fsrs6' ? currentQuestion.srs?.fsrs6 : currentQuestion.srs?.fsrs;
         const card: FsrsCard | Fsrs6Card = srsData
             ? {
@@ -181,7 +184,7 @@ const PracticeMcqPage = () => {
     } else {
         setDueTimeStrings(null);
     }
-  }, [isSubmitted, currentQuestion, fsrsInstance, settings.scheduler, isAnswerCorrect]);
+  }, [isSubmitted, currentQuestion, fsrsInstance, bankId, questionBanks, globalSettings, isAnswerCorrect]);
 
   const handleRestart = useCallback(() => {
     setSessionQueue(shuffle(sessionQueue));

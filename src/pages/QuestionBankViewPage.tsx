@@ -14,11 +14,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ArrowLeft, Home, PlusCircle } from 'lucide-react';
+import { ArrowLeft, Home, PlusCircle, Settings } from 'lucide-react';
 import { McqData } from '@/data/questionBanks';
 import { showSuccess } from '@/utils/toast';
 import { McqListItem } from '@/components/McqListItem';
 import { useSettings } from '@/contexts/SettingsContext';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { QuestionBankSettingsForm } from '@/components/QuestionBankSettingsForm';
 
 const QuestionBankViewPage = () => {
   const { bankId } = useParams<{ bankId: string }>();
@@ -56,6 +58,20 @@ const QuestionBankViewPage = () => {
         <Button variant="ghost" onClick={() => navigate('/question-bank')} className="mb-4">
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Question Banks
         </Button>
+
+        <Accordion type="single" collapsible className="w-full mb-6">
+          <AccordionItem value="bank-settings">
+            <AccordionTrigger>
+              <div className="flex items-center gap-2 text-lg font-semibold">
+                <Settings className="h-5 w-5" />
+                Bank Specific Settings
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="pt-4">
+              <QuestionBankSettingsForm bank={bank} />
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
 
         <Card>
           <CardHeader>

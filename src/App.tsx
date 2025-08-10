@@ -41,6 +41,7 @@ const App = () => (
                 <Route path="/question-bank/:bankId/edit/:mcqId" element={<EditMcqPage />} />
                 <Route path="/question-bank/:bankId/practice" element={<PracticeMcqPage />} />
                 <Route path="/mcq-review/all" element={<ReviewMcqPage />} />
+                <Route path="/mcq-review/:bankId" element={<ReviewMcqPage />} />
                 <Route path="/custom-study" element={<CustomStudySetupPage />} />
                 <Route path="/study/:deckId" element={<StudyPage />} />
                 <Route path="/deck/:deckId/add" element={<CreateFlashcardPage />} />

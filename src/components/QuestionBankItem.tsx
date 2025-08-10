@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { QuestionBankData } from "@/data/questionBanks";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -7,7 +7,7 @@ import { ChevronRight, Folder, MoreVertical, Plus, Settings, GripVertical, Trash
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AddSubQuestionBankDialog } from "./AddSubQuestionBankDialog";
-import { deleteQuestionBank } from "@/lib/question-bank-utils";
+import { deleteQuestionBank, getMcqDueCounts } from "@/lib/question-bank-utils";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useQuestionBanks } from "@/contexts/QuestionBankContext";
 import { showSuccess } from "@/utils/toast";
@@ -21,12 +21,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useSettings } from "@/contexts/SettingsContext";
 
 const QuestionBankItem = ({ bank }: { bank: QuestionBankData }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isAddSubBankOpen, setIsAddSubBankOpen] = useState(false);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
-  const { setQuestionBanks } = useQuestionBanks();
+  const { questionBanks, setQuestionBanks } = useQuestionBanks();
+  const { settings } = useSettings();
 
   const { attributes, listeners, setNodeRef: setDraggableRef, isDragging } = useDraggable({
     id: bank.id,
@@ -36,6 +38,12 @@ const QuestionBankItem = ({ bank }: { bank: QuestionBankData }) => {
   });
 
   const hasSubBanks = bank.subBanks && bank.subBanks.length > 0;
+
+  const dueCounts = useMemo(() => {
+    return getMcqDueCounts(bank, questionBanks, settings);
+  }, [bank, questionBanks, settings]);
+
+  const totalDue = dueCounts.newCount + dueCounts.learnCount + dueCounts.dueCount;
 
   const handleDelete = () => {
     setQuestionBanks(prevBanks => deleteQuestionBank(prevBanks, bank.id));
@@ -66,6 +74,11 @@ const QuestionBankItem = ({ bank }: { bank: QuestionBankData }) => {
             </CollapsibleTrigger>
           </div>
           <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2 text-sm font-semibold px-2">
+              <span className="text-blue-600 dark:text-blue-400">{dueCounts.newCount}</span>
+              <span className="text-green-600 dark:text-green-400">{dueCounts.learnCount}</span>
+              <span className="text-red-600 dark:text-red-400">{dueCounts.dueCount}</span>
+            </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -74,6 +87,14 @@ const QuestionBankItem = ({ bank }: { bank: QuestionBankData }) => {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                {totalDue > 0 && (
+                  <DropdownMenuItem asChild>
+                    <Link to={`/mcq-review/${bank.id}`}>
+                      <HelpCircle className="mr-2 h-4 w-4" />
+                      Review Due
+                    </Link>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem asChild>
                   <Link to={`/question-bank/${bank.id}/practice`}>
                     <HelpCircle className="mr-2 h-4 w-4" />

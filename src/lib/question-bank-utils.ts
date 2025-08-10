@@ -197,41 +197,210 @@ const shuffle = <T,>(array: T[]): T[] => {
   return array;
 };
 
+export const findQuestionBankWithAncestors = (
+  banks: QuestionBankData[],
+  bankId: string,
+  ancestors: QuestionBankData[] = []
+): { bank: QuestionBankData; ancestors: QuestionBankData[] } | null => {
+  for (const bank of banks) {
+    if (bank.id === bankId) {
+      return { bank, ancestors };
+    }
+    if (bank.subBanks) {
+      const found = findQuestionBankWithAncestors(bank.subBanks, bankId, [...ancestors, bank]);
+      if (found) return found;
+    }
+  }
+  return null;
+};
+
+export const getEffectiveMcqSrsSettingsWithSource = (
+  banks: QuestionBankData[],
+  bankId: string,
+  globalSettings: SrsSettings
+): { settings: SrsSettings; sourceName: string } => {
+  const result = findQuestionBankWithAncestors(banks, bankId);
+  if (!result) return { settings: globalSettings, sourceName: 'Global' };
+
+  const { bank, ancestors } = result;
+  const hierarchy = [...ancestors, bank];
+
+  for (let i = hierarchy.length - 1; i >= 0; i--) {
+    const currentBank = hierarchy[i];
+    if (currentBank.hasCustomSettings && currentBank.srsSettings) {
+      return { settings: currentBank.srsSettings, sourceName: currentBank.name };
+    }
+  }
+
+  return { settings: globalSettings, sourceName: 'Global' };
+};
+
+export const getEffectiveMcqSrsSettings = (
+  banks: QuestionBankData[],
+  bankId: string,
+  globalSettings: SrsSettings
+): SrsSettings => {
+  return getEffectiveMcqSrsSettingsWithSource(banks, bankId, globalSettings).settings;
+};
+
+export const updateQuestionBank = (banks: QuestionBankData[], updatedBank: QuestionBankData): QuestionBankData[] => {
+  return banks.map(bank => {
+    if (bank.id === updatedBank.id) {
+      return updatedBank;
+    }
+    if (bank.subBanks) {
+      return { ...bank, subBanks: updateQuestionBank(bank.subBanks, updatedBank) };
+    }
+    return bank;
+  });
+};
+
+export const getMcqDueCounts = (
+  bank: QuestionBankData,
+  allBanks: QuestionBankData[],
+  globalSettings: SrsSettings
+): { newCount: number; learnCount: number; dueCount: number } => {
+  const now = new Date();
+  let counts = { newCount: 0, learnCount: 0, dueCount: 0 };
+
+  const settings = getEffectiveMcqSrsSettings(allBanks, bank.id, globalSettings);
+  const scheduler = settings.scheduler === 'sm2' ? 'fsrs' : settings.scheduler;
+
+  for (const mcq of bank.mcqs) {
+    if (mcq.srs?.isSuspended) continue;
+
+    const srsData = scheduler === 'fsrs6' ? mcq.srs?.fsrs6 : mcq.srs?.fsrs;
+    const isCardNew = !srsData || srsData.state === State.New;
+    const isCardDue = !!srsData && new Date(srsData.due) <= now;
+    
+    if (isCardNew) {
+      counts.newCount++;
+      continue;
+    }
+
+    if (isCardDue) {
+      const isCardLearning = srsData.state === State.Learning || srsData.state === State.Relearning;
+      if (isCardLearning) {
+        counts.learnCount++;
+      } else {
+        counts.dueCount++;
+      }
+    }
+  }
+
+  if (bank.subBanks) {
+    for (const subBank of bank.subBanks) {
+      const subCounts = getMcqDueCounts(subBank, allBanks, globalSettings);
+      counts.newCount += subCounts.newCount;
+      counts.learnCount += subCounts.learnCount;
+      counts.dueCount += subCounts.dueCount;
+    }
+  }
+
+  return counts;
+};
+
 export const buildMcqSessionQueue = (
-  questionBanks: QuestionBankData[],
-  settings: SrsSettings,
+  banksToStudy: QuestionBankData[],
+  allBanks: QuestionBankData[],
+  globalSettings: SrsSettings,
   introducedMcqIds: Set<string>
 ): McqData[] => {
   const now = new Date();
-  const allMcqs = questionBanks.flatMap(bank => getAllMcqsFromBank(bank));
 
-  const isNew = (mcq: McqData) => !introducedMcqIds.has(mcq.id) && (settings.scheduler === 'fsrs6' ? !mcq.srs?.fsrs6 || mcq.srs.fsrs6.state === State.New : !mcq.srs?.fsrs || mcq.srs.fsrs.state === State.New);
-  const isDue = (mcq: McqData) => (settings.scheduler === 'fsrs6' ? mcq.srs?.fsrs6 && new Date(mcq.srs.fsrs6.due) <= now : mcq.srs?.fsrs && new Date(mcq.srs.fsrs.due) <= now);
-  const isLearning = (mcq: McqData) => isDue(mcq) && (settings.scheduler === 'fsrs6' ? mcq.srs?.fsrs6?.state === State.Learning || mcq.srs?.fsrs6?.state === State.Relearning : mcq.srs?.fsrs?.state === State.Learning || mcq.srs?.fsrs?.state === State.Relearning);
-  const isReview = (mcq: McqData) => isDue(mcq) && (settings.scheduler === 'fsrs6' ? mcq.srs?.fsrs6?.state === State.Review : mcq.srs?.fsrs?.state === State.Review);
+  const isNew = (mcq: McqData, s: SrsSettings) => {
+    if (introducedMcqIds.has(mcq.id) || mcq.srs?.isSuspended) return false;
+    const scheduler = s.scheduler === 'sm2' ? 'fsrs' : s.scheduler;
+    const srsData = scheduler === 'fsrs6' ? mcq.srs?.fsrs6 : mcq.srs?.fsrs;
+    return !srsData || srsData.state === State.New;
+  };
+
+  const isDue = (mcq: McqData, s: SrsSettings) => {
+    if (mcq.srs?.isSuspended) return false;
+    const scheduler = s.scheduler === 'sm2' ? 'fsrs' : s.scheduler;
+    const srsData = scheduler === 'fsrs6' ? mcq.srs?.fsrs6 : mcq.srs?.fsrs;
+    return !!srsData && new Date(srsData.due) <= now;
+  };
+
+  const isLearning = (mcq: McqData, s: SrsSettings) => {
+    if (!isDue(mcq, s)) return false;
+    const scheduler = s.scheduler === 'sm2' ? 'fsrs' : s.scheduler;
+    const srsData = scheduler === 'fsrs6' ? mcq.srs?.fsrs6 : mcq.srs?.fsrs;
+    return !!srsData && (srsData.state === State.Learning || srsData.state === State.Relearning);
+  };
+
+  const isReview = (mcq: McqData, s: SrsSettings) => {
+    if (!isDue(mcq, s)) return false;
+    const scheduler = s.scheduler === 'sm2' ? 'fsrs' : s.scheduler;
+    const srsData = scheduler === 'fsrs6' ? mcq.srs?.fsrs6 : mcq.srs?.fsrs;
+    return !!srsData && srsData.state === State.Review;
+  };
 
   const sessionNew: McqData[] = [];
   const sessionReviews: McqData[] = [];
   const sessionLearning: McqData[] = [];
 
-  let newBudget = settings.mcqNewCardsPerDay - introducedMcqIds.size;
-  let reviewBudget = settings.mcqMaxReviewsPerDay;
+  const recursiveGather = (bank: QuestionBankData, newBudget: number, reviewBudget: number): { newTaken: number, reviewsTaken: number } => {
+    const settings = getEffectiveMcqSrsSettings(allBanks, bank.id, globalSettings);
+    const currentNewBudget = Math.min(newBudget, settings.mcqNewCardsPerDay);
+    const currentReviewBudget = Math.min(reviewBudget, settings.mcqMaxReviewsPerDay);
+    let newTaken = 0;
+    let reviewsTaken = 0;
 
-  for (const mcq of allMcqs) {
-    if (isLearning(mcq)) {
-      sessionLearning.push(mcq);
-    } else if (isReview(mcq) && reviewBudget > 0) {
-      sessionReviews.push(mcq);
-      reviewBudget--;
-    } else if (isNew(mcq) && newBudget > 0) {
-      sessionNew.push(mcq);
-      newBudget--;
+    const mcqs = bank.mcqs;
+    sessionLearning.push(...mcqs.filter(m => isLearning(m, settings)));
+    
+    const potentialReviews = mcqs.filter(m => isReview(m, settings));
+    const reviewsToTake = Math.min(potentialReviews.length, currentReviewBudget);
+    if (reviewsToTake > 0) {
+      sessionReviews.push(...potentialReviews.slice(0, reviewsToTake));
+      reviewsTaken += reviewsToTake;
     }
+
+    const canTakeNew = globalSettings.newCardsIgnoreReviewLimit || reviewsTaken < currentReviewBudget;
+    if (canTakeNew) {
+      const potentialNew = mcqs.filter(m => isNew(m, settings));
+      const newToTake = Math.min(potentialNew.length, currentNewBudget);
+      if (newToTake > 0) {
+        sessionNew.push(...potentialNew.slice(0, newToTake));
+        newTaken += newToTake;
+      }
+    }
+
+    if (bank.subBanks) {
+      for (const subBank of bank.subBanks) {
+        const remainingNew = newBudget - newTaken;
+        const remainingReview = reviewBudget - reviewsTaken;
+        if (remainingNew <= 0 && remainingReview <= 0) break;
+        const { newTaken: subNew, reviewsTaken: subReviews } = recursiveGather(subBank, remainingNew, remainingReview);
+        newTaken += subNew;
+        reviewsTaken += subReviews;
+      }
+    }
+    return { newTaken, reviewsTaken };
+  };
+
+  let remainingNewBudget = Math.max(0, globalSettings.mcqNewCardsPerDay - introducedMcqIds.size);
+  let remainingReviewBudget = globalSettings.mcqMaxReviewsPerDay;
+
+  for (const bank of banksToStudy) {
+    if (remainingNewBudget <= 0 && remainingReviewBudget <= 0 && !globalSettings.newCardsIgnoreReviewLimit) {
+      break;
+    }
+    
+    const { newTaken, reviewsTaken } = recursiveGather(bank, remainingNewBudget, remainingReviewBudget);
+    
+    remainingNewBudget -= newTaken;
+    remainingReviewBudget -= reviewsTaken;
   }
 
-  const sortedNew = shuffle(sessionNew);
-  const sortedReviews = shuffle(sessionReviews);
-  const learningCombined = sessionLearning.sort((a, b) => new Date(a.srs!.fsrs?.due || a.srs!.fsrs6!.due).getTime() - new Date(b.srs!.fsrs?.due || b.srs!.fsrs6!.due).getTime());
+  const sortedNew = shuffle([...new Set(sessionNew)]);
+  const sortedReviews = shuffle([...new Set(sessionReviews)]);
+  const learningCombined = [...new Set(sessionLearning)].sort((a, b) => {
+      const srsA = a.srs?.fsrs || a.srs?.fsrs6;
+      const srsB = b.srs?.fsrs || b.srs?.fsrs6;
+      return new Date(srsA!.due).getTime() - new Date(srsB!.due).getTime();
+  });
 
   return [...learningCombined, ...shuffle([...sortedReviews, ...sortedNew])];
 };

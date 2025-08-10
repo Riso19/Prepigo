@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuestionBanks } from "@/contexts/QuestionBankContext";
-import { updateMcq, buildMcqSessionQueue } from "@/lib/question-bank-utils";
-import { McqData } from "@/data/questionBanks";
+import { updateMcq, buildMcqSessionQueue, findQuestionBankById, getEffectiveMcqSrsSettings } from "@/lib/question-bank-utils";
+import { McqData, QuestionBankData } from "@/data/questionBanks";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Home, X, HelpCircle, Clock, Check, Sparkles } from "lucide-react";
 import McqPlayer from "@/components/McqPlayer";
@@ -36,9 +36,10 @@ const formatInterval = (interval: number): string => {
 };
 
 const ReviewMcqPage = () => {
+  const { bankId } = useParams<{ bankId: string }>();
   const { questionBanks, setQuestionBanks, mcqIntroductionsToday, addIntroducedMcq } = useQuestionBanks();
   const navigate = useNavigate();
-  const { settings } = useSettings();
+  const { settings: globalSettings } = useSettings();
 
   const [sessionQueue, setSessionQueue] = useState<McqData[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -50,24 +51,31 @@ const ReviewMcqPage = () => {
   const [dueTimeStrings, setDueTimeStrings] = useState<Record<string, string> | null>(null);
 
   const fsrsInstance = useMemo(() => {
+    const settings = getEffectiveMcqSrsSettings(questionBanks, bankId || 'all', globalSettings);
     if (settings.scheduler === 'fsrs6') {
       return fsrs6(fsrs6GeneratorParameters(settings.mcqFsrs6Parameters));
     }
     return fsrs(settings.mcqFsrsParameters);
-  }, [settings.scheduler, settings.mcqFsrsParameters, settings.mcqFsrs6Parameters]);
+  }, [bankId, questionBanks, globalSettings]);
 
   const currentQuestion = useMemo(() => sessionQueue[currentQuestionIndex], [sessionQueue, currentQuestionIndex]);
 
   useEffect(() => {
     if (questionBanks.length > 0) {
-      const queue = buildMcqSessionQueue(questionBanks, settings, mcqIntroductionsToday);
-      setSessionQueue(queue);
+      const banksToReview = bankId && bankId !== 'all' ? [findQuestionBankById(questionBanks, bankId)].filter(Boolean) as QuestionBankData[] : questionBanks;
+      if (banksToReview.length > 0) {
+        const queue = buildMcqSessionQueue(banksToReview, questionBanks, globalSettings, mcqIntroductionsToday);
+        setSessionQueue(queue);
+      } else {
+        setSessionQueue([]);
+      }
     }
-  }, [questionBanks, settings, mcqIntroductionsToday]);
+  }, [bankId, questionBanks, globalSettings, mcqIntroductionsToday]);
 
   const handleGradeAndProceed = useCallback(async (rating: Rating) => {
     if (!currentQuestion) return;
 
+    const settings = getEffectiveMcqSrsSettings(questionBanks, bankId || 'all', globalSettings);
     const wasNew = settings.scheduler === 'fsrs6' ? !currentQuestion.srs?.fsrs6 || currentQuestion.srs.fsrs6.state === State.New : !currentQuestion.srs?.fsrs || currentQuestion.srs.fsrs.state === State.New;
 
     const srsData = settings.scheduler === 'fsrs6' ? currentQuestion.srs?.fsrs6 : currentQuestion.srs?.fsrs;
@@ -130,7 +138,7 @@ const ReviewMcqPage = () => {
     } else {
       setIsFinished(true);
     }
-  }, [currentQuestion, currentQuestionIndex, sessionQueue.length, fsrsInstance, setQuestionBanks, settings.scheduler, addIntroducedMcq]);
+  }, [currentQuestion, currentQuestionIndex, sessionQueue.length, fsrsInstance, setQuestionBanks, bankId, globalSettings, addIntroducedMcq]);
 
   const handleSelectAndSubmit = useCallback((optionId: string) => {
     if (isSubmitted) return;
@@ -151,6 +159,7 @@ const ReviewMcqPage = () => {
 
   useEffect(() => {
     if (isSubmitted && currentQuestion && isAnswerCorrect) {
+        const settings = getEffectiveMcqSrsSettings(questionBanks, bankId || 'all', globalSettings);
         const srsData = settings.scheduler === 'fsrs6' ? currentQuestion.srs?.fsrs6 : currentQuestion.srs?.fsrs;
         const card: FsrsCard | Fsrs6Card = srsData
             ? {
@@ -182,18 +191,21 @@ const ReviewMcqPage = () => {
     } else {
         setDueTimeStrings(null);
     }
-  }, [isSubmitted, currentQuestion, fsrsInstance, settings.scheduler, isAnswerCorrect]);
+  }, [isSubmitted, currentQuestion, fsrsInstance, bankId, questionBanks, globalSettings, isAnswerCorrect]);
 
   const handleRestart = useCallback(() => {
-    const queue = buildMcqSessionQueue(questionBanks, settings, mcqIntroductionsToday);
-    setSessionQueue(queue);
+    const banksToReview = bankId && bankId !== 'all' ? [findQuestionBankById(questionBanks, bankId)].filter(Boolean) as QuestionBankData[] : questionBanks;
+    if (banksToReview.length > 0) {
+      const queue = buildMcqSessionQueue(banksToReview, questionBanks, globalSettings, mcqIntroductionsToday);
+      setSessionQueue(queue);
+    }
     setCurrentQuestionIndex(0);
     setSelectedOptionId(null);
     setIsSubmitted(false);
     setIsAnswerCorrect(null);
     setSessionStats({ correct: 0, incorrect: 0 });
     setIsFinished(false);
-  }, [questionBanks, settings, mcqIntroductionsToday]);
+  }, [bankId, questionBanks, globalSettings, mcqIntroductionsToday]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -229,6 +241,8 @@ const ReviewMcqPage = () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [isSubmitted, isAnswerCorrect, currentQuestion, handleSelectAndSubmit, handleGradeAndProceed]);
+
+  const pageTitle = bankId && bankId !== 'all' ? `Reviewing: ${findQuestionBankById(questionBanks, bankId)?.name}` : "Reviewing All Due MCQs";
 
   if (sessionQueue.length === 0 && currentQuestionIndex === 0) {
     return (
@@ -282,7 +296,7 @@ const ReviewMcqPage = () => {
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Banks
           </Button>
           <header className="w-full max-w-2xl mx-auto text-center mb-4 pt-8 sm:pt-0">
-            <h1 className="text-2xl font-bold">Reviewing Due MCQs</h1>
+            <h1 className="text-2xl font-bold">{pageTitle}</h1>
             <Progress value={((currentQuestionIndex + 1) / sessionQueue.length) * 100} className="mt-4 h-2" />
           </header>
           <main className="w-full max-w-2xl mx-auto flex flex-col items-center justify-start py-6 gap-6">

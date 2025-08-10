@@ -28,15 +28,14 @@ const RootDroppable = () => {
 };
 
 const QuestionBankManager = () => {
-  const { questionBanks, mcqIntroductionsToday } = useQuestionBanks();
-  const { setQuestionBanks } = useQuestionBanks();
+  const { questionBanks, mcqIntroductionsToday, setQuestionBanks } = useQuestionBanks();
   const { settings } = useSettings();
   const [isAddBankOpen, setIsAddBankOpen] = useState(false);
   const [dueMcqCount, setDueMcqCount] = useState(0);
 
   useEffect(() => {
     if (questionBanks.length > 0) {
-      const queue = buildMcqSessionQueue(questionBanks, settings, mcqIntroductionsToday);
+      const queue = buildMcqSessionQueue(questionBanks, questionBanks, settings, mcqIntroductionsToday);
       setDueMcqCount(queue.length);
     } else {
       setDueMcqCount(0);

@@ -1,5 +1,6 @@
 import * as z from 'zod';
 import { srsDataSchema } from './decks';
+import { srsSettingsSchema } from '@/contexts/SettingsContext';
 
 // --- MCQ Schemas ---
 export const mcqOptionSchema = z.object({
@@ -22,6 +23,8 @@ const baseQuestionBankSchema = z.object({
   id: z.string(),
   name: z.string(),
   mcqs: z.array(mcqDataSchema),
+  hasCustomSettings: z.boolean().optional(),
+  srsSettings: srsSettingsSchema.optional(),
 });
 
 export type QuestionBankData = z.infer<typeof baseQuestionBankSchema> & {
