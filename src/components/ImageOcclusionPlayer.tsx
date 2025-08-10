@@ -1,8 +1,9 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Occlusion } from "@/data/decks";
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useResolvedMediaUrl } from '@/hooks/use-resolved-media-url';
 import { HtmlRenderer } from "./HtmlRenderer";
+import { cn } from "@/lib/utils";
 
 interface ImageOcclusionPlayerProps {
   imageUrl: string;
@@ -15,8 +16,14 @@ interface ImageOcclusionPlayerProps {
 
 const ImageOcclusionPlayer = ({ imageUrl, occlusions, questionOcclusionId, description, isFlipped, onClick }: ImageOcclusionPlayerProps) => {
   const [imgDimensions, setImgDimensions] = useState<{ width: number; height: number } | null>(null);
+  const [revealedOcclusions, setRevealedOcclusions] = useState<Set<number>>(new Set());
   const resolvedImageUrl = useResolvedMediaUrl(imageUrl);
   const imgRef = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    // Reset revealed state when card changes
+    setRevealedOcclusions(new Set());
+  }, [imageUrl, questionOcclusionId]);
 
   useEffect(() => {
     if (resolvedImageUrl && imgRef.current) {
@@ -37,6 +44,23 @@ const ImageOcclusionPlayer = ({ imageUrl, occlusions, questionOcclusionId, descr
     }
   }, [resolvedImageUrl]);
 
+  const handleOcclusionClick = useCallback((e: React.MouseEvent, id: number) => {
+    e.stopPropagation(); // Prevent card flip
+    if (!isFlipped) {
+      onClick(); // Flip the card if not already flipped
+      return;
+    }
+    setRevealedOcclusions(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  }, [isFlipped, onClick]);
+
   return (
     <div className="w-full min-h-[20rem] max-w-2xl cursor-pointer" onClick={onClick}>
       <Card className="w-full flex flex-col">
@@ -50,11 +74,13 @@ const ImageOcclusionPlayer = ({ imageUrl, occlusions, questionOcclusionId, descr
               >
                 {occlusions.map(occ => {
                   const isQuestion = occ.id === questionOcclusionId;
-                  if (isFlipped && isQuestion) {
-                    return null;
-                  }
-                  
+                  const isRevealed = revealedOcclusions.has(occ.id);
+
+                  if (!isFlipped && !isQuestion) return null;
+                  if (isFlipped && isRevealed) return null;
+
                   const fillColor = isQuestion ? "fill-blue-500" : "fill-primary";
+                  
                   return (
                     <rect
                       key={occ.id}
@@ -62,8 +88,9 @@ const ImageOcclusionPlayer = ({ imageUrl, occlusions, questionOcclusionId, descr
                       y={occ.y}
                       width={occ.width}
                       height={occ.height}
-                      className={fillColor}
+                      className={cn(fillColor, "cursor-pointer transition-opacity hover:opacity-80")}
                       vectorEffect="non-scaling-stroke"
+                      onClick={(e) => handleOcclusionClick(e, occ.id)}
                     />
                   );
                 })}

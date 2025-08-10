@@ -77,6 +77,8 @@ export const imageOcclusionFlashcardSchema = baseFlashcardSchema.extend({
   occlusions: z.array(occlusionSchema),
   questionOcclusionId: z.number(),
   description: z.string().optional(),
+  // Adding revealState to track revealed occlusions
+  revealState: z.record(z.boolean()).optional(),
 });
 
 export const flashcardDataSchema = z.union([
