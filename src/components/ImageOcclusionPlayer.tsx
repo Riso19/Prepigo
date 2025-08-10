@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 
 interface ImageOcclusionPlayerProps {
   imageUrl: string;
-  occlusions: Occlusion[];
+  occlusions: Occlusion[]; // Normalized
   questionOcclusionId: number;
   description?: string;
   isFlipped: boolean;
@@ -21,7 +21,6 @@ const ImageOcclusionPlayer = ({ imageUrl, occlusions, questionOcclusionId, descr
   const imgRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
-    // Reset revealed state when card changes
     setRevealedOcclusions(new Set());
   }, [imageUrl, questionOcclusionId]);
 
@@ -32,31 +31,23 @@ const ImageOcclusionPlayer = ({ imageUrl, occlusions, questionOcclusionId, descr
         setImgDimensions({ width: imgElement.naturalWidth, height: imgElement.naturalHeight });
       };
       
-      if (imgElement.complete) {
-        handleLoad();
-      } else {
-        imgElement.addEventListener('load', handleLoad);
-      }
+      if (imgElement.complete) handleLoad();
+      else imgElement.addEventListener('load', handleLoad);
       
-      return () => {
-        imgElement.removeEventListener('load', handleLoad);
-      };
+      return () => imgElement.removeEventListener('load', handleLoad);
     }
   }, [resolvedImageUrl]);
 
   const handleOcclusionClick = useCallback((e: React.MouseEvent, id: number) => {
-    e.stopPropagation(); // Prevent card flip
+    e.stopPropagation();
     if (!isFlipped) {
-      onClick(); // Flip the card if not already flipped
+      onClick();
       return;
     }
     setRevealedOcclusions(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(id)) {
-        newSet.delete(id);
-      } else {
-        newSet.add(id);
-      }
+      if (newSet.has(id)) newSet.delete(id);
+      else newSet.add(id);
       return newSet;
     });
   }, [isFlipped, onClick]);
@@ -84,10 +75,10 @@ const ImageOcclusionPlayer = ({ imageUrl, occlusions, questionOcclusionId, descr
                   return (
                     <rect
                       key={occ.id}
-                      x={occ.x}
-                      y={occ.y}
-                      width={occ.width}
-                      height={occ.height}
+                      x={occ.x * imgDimensions.width}
+                      y={occ.y * imgDimensions.height}
+                      width={occ.width * imgDimensions.width}
+                      height={occ.height * imgDimensions.height}
                       className={cn(fillColor, "cursor-pointer transition-opacity hover:opacity-80")}
                       vectorEffect="non-scaling-stroke"
                       onClick={(e) => handleOcclusionClick(e, occ.id)}

@@ -182,9 +182,17 @@ export const importAnkiFile = async (
     model.flds.forEach(fld => { fieldMap[fld.name] = fields[fld.ord] ?? ''; });
 
     let isIOE = model.name.toLowerCase().includes('image occlusion');
+    if (!isIOE && model.type === 1) {
+        const firstField = fieldMap[model.flds[0].name] ?? '';
+        if (firstField.includes('{{c') && firstField.includes('image-occlusion:')) {
+            isIOE = true;
+        }
+    }
+    
     let parsedAsIOE = false;
 
     if (isIOE) {
+        // Attempt to parse as SVG-based IOE
         let imageFieldName: string | null = null;
         let masksFieldName: string | null = null;
         let headerFieldName: string | null = null;
@@ -215,15 +223,79 @@ export const importAnkiFile = async (
                     if (extraField) description += (description ? '<hr>' : '') + extraField;
                     
                     flashcard = {
-                        id: `anki-c-${_id}`,
-                        noteId: `anki-n-${noteId}`,
-                        type: 'imageOcclusion',
-                        imageUrl: `media://${rawImageUrl}`,
-                        occlusions: occlusions,
-                        questionOcclusionId: questionOcclusion.id,
-                        description: replaceMediaSrc(description),
+                        id: `anki-c-${_id}`, noteId: `anki-n-${noteId}`, type: 'imageOcclusion',
+                        imageUrl: `media://${rawImageUrl}`, occlusions: occlusions,
+                        questionOcclusionId: questionOcclusion.id, description: replaceMediaSrc(description),
                     } as ImageOcclusionFlashcard;
                     parsedAsIOE = true;
+                }
+            }
+        }
+
+        // Attempt to parse as text-based IOE if SVG parsing failed
+        if (!parsedAsIOE) {
+            let clozeTextFieldName: string | null = null;
+            if (!imageFieldName) { // Find image field if not already found
+                for (const fld of model.flds) {
+                    const fieldContent = fieldMap[fld.name];
+                    if (fieldContent && fieldContent.includes('<img')) { imageFieldName = fld.name; break; }
+                }
+            }
+            for (const fld of model.flds) {
+                const fieldContent = fieldMap[fld.name];
+                if (fieldContent && fieldContent.includes('{{c') && fieldContent.includes('image-occlusion:rect')) {
+                    clozeTextFieldName = fld.name; break;
+                }
+            }
+
+            if (imageFieldName && clozeTextFieldName) {
+                const imageField = fieldMap[imageFieldName];
+                const clozeTextField = fieldMap[clozeTextFieldName];
+                const imageUrlMatch = imageField.match(/src="([^"]+)"/);
+                const rawImageUrl = imageUrlMatch ? imageUrlMatch[1] : null;
+
+                const clozeRegex = /{{c(\d+)::([^}]+)}}/g;
+                let match;
+                const parsedOcclusions: Occlusion[] = [];
+                const clozeMap = new Map<number, Occlusion>();
+
+                while ((match = clozeRegex.exec(clozeTextField)) !== null) {
+                    const clozeIndex = parseInt(match[1], 10);
+                    const content = match[2];
+
+                    if (content.startsWith('image-occlusion:rect')) {
+                        const params = content.split(':');
+                        const coords: any = {};
+                        params.forEach(p => {
+                            const [key, value] = p.split('=');
+                            if (['left', 'top', 'width', 'height'].includes(key)) {
+                                coords[key] = parseFloat(value);
+                            }
+                        });
+
+                        if (coords.left !== undefined && coords.top !== undefined && coords.width !== undefined && coords.height !== undefined) {
+                            const newOcclusion: Occlusion = {
+                                id: clozeIndex, x: coords.left, y: coords.top,
+                                width: coords.width, height: coords.height,
+                            };
+                            parsedOcclusions.push(newOcclusion);
+                            clozeMap.set(clozeIndex, newOcclusion);
+                        }
+                    }
+                }
+
+                if (rawImageUrl && parsedOcclusions.length > 0) {
+                    const targetClozeIndex = ord + 1;
+                    const questionOcclusion = clozeMap.get(targetClozeIndex);
+
+                    if (questionOcclusion) {
+                        flashcard = {
+                            id: `anki-c-${_id}`, noteId: `anki-n-${noteId}`, type: 'imageOcclusion',
+                            imageUrl: `media://${rawImageUrl}`, occlusions: parsedOcclusions,
+                            questionOcclusionId: questionOcclusion.id, description: '',
+                        } as ImageOcclusionFlashcard;
+                        parsedAsIOE = true;
+                    }
                 }
             }
         }

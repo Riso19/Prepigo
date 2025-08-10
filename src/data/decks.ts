@@ -65,6 +65,7 @@ export const clozeFlashcardSchema = baseFlashcardSchema.extend({
 
 export const occlusionSchema = z.object({
   id: z.number(),
+  // All coordinates and dimensions are normalized (0.0 to 1.0) relative to the image size.
   x: z.number(),
   y: z.number(),
   width: z.number(),

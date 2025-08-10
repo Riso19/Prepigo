@@ -7,17 +7,19 @@ import { showError, showLoading, showSuccess, dismissToast } from '@/utils/toast
 import { X, Upload, Link as LinkIcon, Loader2 } from 'lucide-react';
 import HtmlEditor from './HtmlEditor';
 
+interface OcclusionInPixels extends Occlusion {}
+
 interface ImageOcclusionEditorProps {
   onSave: (imageUrl: string, occlusions: Occlusion[], description: string) => void;
   initialImageUrl?: string;
-  initialOcclusions?: Occlusion[];
+  initialOcclusions?: Occlusion[]; // Normalized
   initialDescription?: string;
 }
 
 const ImageOcclusionEditor = ({ onSave, initialImageUrl, initialOcclusions, initialDescription }: ImageOcclusionEditorProps) => {
   const [image, setImage] = useState<string | null>(null);
   const [imgDimensions, setImgDimensions] = useState<{ width: number; height: number } | null>(null);
-  const [occlusions, setOcclusions] = useState<Occlusion[]>([]);
+  const [pixelOcclusions, setPixelOcclusions] = useState<OcclusionInPixels[]>([]);
   const [description, setDescription] = useState('');
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(null);
@@ -29,54 +31,54 @@ const ImageOcclusionEditor = ({ onSave, initialImageUrl, initialOcclusions, init
 
   useEffect(() => {
     if (initialImageUrl) setImage(initialImageUrl);
-    if (initialOcclusions) setOcclusions(initialOcclusions);
     if (initialDescription) setDescription(initialDescription);
-  }, [initialImageUrl, initialOcclusions, initialDescription]);
+  }, [initialImageUrl, initialDescription]);
 
   useEffect(() => {
     if (image && imgRef.current) {
       const imgElement = imgRef.current;
       const handleLoad = () => {
-        setImgDimensions({ width: imgElement.naturalWidth, height: imgElement.naturalHeight });
+        const dims = { width: imgElement.naturalWidth, height: imgElement.naturalHeight };
+        setImgDimensions(dims);
+        
+        if (initialOcclusions) {
+          const denormalized = initialOcclusions.map(occ => ({
+            ...occ,
+            x: occ.x * dims.width,
+            y: occ.y * dims.height,
+            width: occ.width * dims.width,
+            height: occ.height * dims.height,
+          }));
+          setPixelOcclusions(denormalized);
+        }
       };
       
-      if (imgElement.complete) {
-        handleLoad();
-      } else {
-        imgElement.addEventListener('load', handleLoad);
-      }
+      if (imgElement.complete) handleLoad();
+      else imgElement.addEventListener('load', handleLoad);
       
-      return () => {
-        imgElement.removeEventListener('load', handleLoad);
-      };
+      return () => imgElement.removeEventListener('load', handleLoad);
     }
-  }, [image]);
+  }, [image, initialOcclusions]);
 
   useEffect(() => {
     const loadImageFromUrl = async (url: string) => {
-      if (!url || !(url.startsWith('http://') || url.startsWith('https://'))) {
-        return;
-      }
+      if (!url || !(url.startsWith('http://') || url.startsWith('https://'))) return;
       setIsLoading(true);
       const loadingToast = showLoading("Loading image...");
       try {
         const proxyUrl = 'https://images.weserv.nl/?url=';
         const response = await fetch(proxyUrl + encodeURIComponent(url));
-        if (!response.ok) {
-          throw new Error(`Failed to fetch image. Status: ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`Failed to fetch image. Status: ${response.status}`);
         const blob = await response.blob();
         
         const reader = new FileReader();
         reader.onloadend = () => {
           setImage(reader.result as string);
-          setOcclusions([]);
+          setPixelOcclusions([]);
           dismissToast(loadingToast);
           showSuccess("Image loaded!");
         };
-        reader.onerror = () => {
-          throw new Error('Failed to read image data from blob.');
-        };
+        reader.onerror = () => { throw new Error('Failed to read image data from blob.'); };
         reader.readAsDataURL(blob);
       } catch (error) {
         console.error("Error fetching image from URL:", error);
@@ -87,15 +89,8 @@ const ImageOcclusionEditor = ({ onSave, initialImageUrl, initialOcclusions, init
       }
     };
 
-    const handler = setTimeout(() => {
-      if (imageUrlInput) {
-        loadImageFromUrl(imageUrlInput);
-      }
-    }, 800);
-
-    return () => {
-      clearTimeout(handler);
-    };
+    const handler = setTimeout(() => { if (imageUrlInput) loadImageFromUrl(imageUrlInput); }, 800);
+    return () => clearTimeout(handler);
   }, [imageUrlInput]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -104,7 +99,7 @@ const ImageOcclusionEditor = ({ onSave, initialImageUrl, initialOcclusions, init
       const reader = new FileReader();
       reader.onloadend = () => {
         setImage(reader.result as string);
-        setOcclusions([]);
+        setPixelOcclusions([]);
       };
       reader.readAsDataURL(file);
     }
@@ -137,8 +132,8 @@ const ImageOcclusionEditor = ({ onSave, initialImageUrl, initialOcclusions, init
       width: Math.abs(startPos.x - currentPos.x),
       height: Math.abs(startPos.y - currentPos.y),
     };
-    const tempOcclusions = occlusions.filter(o => o.id !== -1);
-    setOcclusions([...tempOcclusions, newRect]);
+    const tempOcclusions = pixelOcclusions.filter(o => o.id !== -1);
+    setPixelOcclusions([...tempOcclusions, newRect]);
   };
 
   const handleMouseUp = (e: MouseEvent) => {
@@ -147,23 +142,32 @@ const ImageOcclusionEditor = ({ onSave, initialImageUrl, initialOcclusions, init
     setIsDrawing(false);
     setStartPos(null);
     
-    const finalOcclusions = occlusions.filter(o => o.id !== -1);
-    const newOcclusion = occlusions.find(o => o.id === -1);
+    const finalOcclusions = pixelOcclusions.filter(o => o.id !== -1);
+    const newOcclusion = pixelOcclusions.find(o => o.id === -1);
 
     if (newOcclusion && newOcclusion.width > 5 && newOcclusion.height > 5) {
-      setOcclusions([...finalOcclusions, { ...newOcclusion, id: Date.now() }]);
+      setPixelOcclusions([...finalOcclusions, { ...newOcclusion, id: Date.now() }]);
     } else {
-      setOcclusions(finalOcclusions);
+      setPixelOcclusions(finalOcclusions);
     }
   };
 
   const removeOcclusion = (id: number) => {
-    setOcclusions(occlusions.filter(o => o.id !== id));
+    setPixelOcclusions(pixelOcclusions.filter(o => o.id !== id));
   };
 
   const handleSaveClick = () => {
-    if (image && occlusions.length > 0) {
-      onSave(image, occlusions.filter(o => o.id !== -1), description);
+    if (image && pixelOcclusions.length > 0 && imgDimensions) {
+      const normalizedOcclusions = pixelOcclusions
+        .filter(o => o.id !== -1)
+        .map(occ => ({
+          ...occ,
+          x: occ.x / imgDimensions.width,
+          y: occ.y / imgDimensions.height,
+          width: occ.width / imgDimensions.width,
+          height: occ.height / imgDimensions.height,
+        }));
+      onSave(image, normalizedOcclusions, description);
     }
   };
 
@@ -171,19 +175,13 @@ const ImageOcclusionEditor = ({ onSave, initialImageUrl, initialOcclusions, init
     <div className="space-y-4">
       {!image && (
         <div className="space-y-4">
-            <div className="flex items-center gap-2">
-                <Upload className="h-5 w-5 text-muted-foreground" />
-                <Label>Upload from computer</Label>
-            </div>
+            <div className="flex items-center gap-2"><Upload className="h-5 w-5 text-muted-foreground" /><Label>Upload from computer</Label></div>
             <Input type="file" accept="image/*" onChange={handleFileChange} />
             <div className="relative flex items-center justify-center my-4">
                 <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
                 <div className="relative flex justify-center text-xs uppercase"><span className="bg-background px-2 text-muted-foreground">OR</span></div>
             </div>
-            <div className="flex items-center gap-2">
-                <LinkIcon className="h-5 w-5 text-muted-foreground" />
-                <Label htmlFor="imageUrl">Load from URL</Label>
-            </div>
+            <div className="flex items-center gap-2"><LinkIcon className="h-5 w-5 text-muted-foreground" /><Label htmlFor="imageUrl">Load from URL</Label></div>
             <div className="relative">
                 <Input id="imageUrl" type="text" placeholder="Paste an image URL here..." value={imageUrlInput} onChange={(e) => setImageUrlInput(e.target.value)} disabled={isLoading} />
                 {isLoading && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />}
@@ -197,10 +195,8 @@ const ImageOcclusionEditor = ({ onSave, initialImageUrl, initialOcclusions, init
               <img ref={imgRef} src={image} alt="Occlusion base" className="block max-w-full max-h-[70vh] rounded-md" />
               {imgDimensions && (
                 <svg ref={svgRef} className="absolute top-0 left-0 w-full h-full cursor-crosshair" onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} viewBox={`0 0 ${imgDimensions.width} ${imgDimensions.height}`}>
-                  {occlusions.map((occ) => (
-                    <g key={occ.id}>
-                      <rect x={occ.x} y={occ.y} width={occ.width} height={occ.height} className="fill-primary stroke-primary-foreground" strokeWidth="2" vectorEffect="non-scaling-stroke" />
-                    </g>
+                  {pixelOcclusions.map((occ) => (
+                    <g key={occ.id}><rect x={occ.x} y={occ.y} width={occ.width} height={occ.height} className="fill-primary stroke-primary-foreground" strokeWidth="2" vectorEffect="non-scaling-stroke" /></g>
                   ))}
                 </svg>
               )}
@@ -208,23 +204,18 @@ const ImageOcclusionEditor = ({ onSave, initialImageUrl, initialOcclusions, init
           </div>
           <div className="space-y-2">
             <h4 className="font-semibold">Occlusions:</h4>
-            {occlusions.filter(o => o.id !== -1).length === 0 && <p className="text-sm text-muted-foreground">Draw rectangles on the image to create occlusions.</p>}
-            {occlusions.filter(o => o.id !== -1).map((occ, index) => (
+            {pixelOcclusions.filter(o => o.id !== -1).length === 0 && <p className="text-sm text-muted-foreground">Draw rectangles on the image to create occlusions.</p>}
+            {pixelOcclusions.filter(o => o.id !== -1).map((occ, index) => (
               <div key={occ.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
                 <span>Occlusion {index + 1}</span>
-                <Button variant="ghost" size="icon" onClick={() => removeOcclusion(occ.id)}>
-                  <X className="h-4 w-4" />
-                </Button>
+                <Button variant="ghost" size="icon" onClick={() => removeOcclusion(occ.id)}><X className="h-4 w-4" /></Button>
               </div>
             ))}
           </div>
-          <div className="space-y-2">
-            <Label>Extra Info (Optional)</Label>
-            <HtmlEditor value={description} onChange={setDescription} placeholder="Add a hint or extra context..."/>
-          </div>
+          <div className="space-y-2"><Label>Extra Info (Optional)</Label><HtmlEditor value={description} onChange={setDescription} placeholder="Add a hint or extra context..."/></div>
           <div className="flex justify-end">
-            <Button onClick={handleSaveClick} disabled={occlusions.filter(o => o.id !== -1).length === 0}>
-              Save Flashcards ({occlusions.filter(o => o.id !== -1).length} created)
+            <Button onClick={handleSaveClick} disabled={pixelOcclusions.filter(o => o.id !== -1).length === 0}>
+              Save Flashcards ({pixelOcclusions.filter(o => o.id !== -1).length} created)
             </Button>
           </div>
         </>
