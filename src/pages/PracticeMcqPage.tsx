@@ -145,11 +145,8 @@ const PracticeMcqPage = () => {
       setSessionStats(prev => ({ ...prev, correct: prev.correct + 1 }));
     } else {
       setSessionStats(prev => ({ ...prev, incorrect: prev.incorrect + 1 }));
-      setTimeout(() => {
-        handleGradeAndProceed(Rating.Again);
-      }, 3000);
     }
-  }, [isSubmitted, currentQuestion, handleGradeAndProceed]);
+  }, [isSubmitted, currentQuestion]);
 
   useEffect(() => {
     if (isSubmitted && currentQuestion && isAnswerCorrect) {
@@ -324,7 +321,12 @@ const PracticeMcqPage = () => {
               </div>
             ) : (
               <div className="h-16 flex items-center justify-center">
-                <p className="text-red-500 font-semibold animate-pulse">Incorrect. Moving to the next question...</p>
+                <Button
+                  onClick={() => handleGradeAndProceed(Rating.Again)}
+                  className="w-full h-16 text-lg bg-red-500 hover:bg-red-600 text-white font-bold"
+                >
+                  Continue
+                </Button>
               </div>
             )
           ) : (
