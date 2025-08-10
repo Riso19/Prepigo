@@ -25,6 +25,7 @@ import { ExamsProvider } from "./contexts/ExamsContext";
 import ExamSchedulerPage from "./pages/ExamSchedulerPage";
 import CreateExamPage from "./pages/CreateExamPage";
 import EditExamPage from "./pages/EditExamPage";
+import StatisticsPage from "./pages/StatisticsPage";
 
 const queryClient = new QueryClient();
 
@@ -57,6 +58,7 @@ const App = () => (
                   <Route path="/exams" element={<ExamSchedulerPage />} />
                   <Route path="/exams/new" element={<CreateExamPage />} />
                   <Route path="/exams/:examId/edit" element={<EditExamPage />} />
+                  <Route path="/statistics" element={<StatisticsPage />} />
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                   <Route path="*" element={<NotFound />} />
                 </Routes>

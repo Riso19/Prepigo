@@ -149,6 +149,11 @@ export const getReviewLogsForMcq = async (mcqId: string): Promise<McqReviewLog[]
   return db.getAllFromIndex(MCQ_REVIEW_LOGS_STORE, 'mcqId', mcqId);
 };
 
+export const getAllMcqReviewLogsFromDB = async (): Promise<McqReviewLog[]> => {
+    const db = await getDb();
+    return db.getAll(MCQ_REVIEW_LOGS_STORE);
+};
+
 export const clearMcqReviewLogsDB = async (): Promise<void> => {
   const db = await getDb();
   await db.clear(MCQ_REVIEW_LOGS_STORE);
