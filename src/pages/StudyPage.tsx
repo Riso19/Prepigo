@@ -3,8 +3,8 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { useDecks } from "@/contexts/DecksContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { findDeckById, getAllFlashcardsFromDeck, updateFlashcard } from "@/lib/deck-utils";
-import { addReviewLog, deleteLastReviewLogForCard } from "@/lib/idb";
-import { FlashcardData, ReviewLog, Sm2State, SrsData } from "@/data/decks";
+import { addReviewLog } from "@/lib/idb";
+import { FlashcardData, ReviewLog, Sm2State } from "@/data/decks";
 import Flashcard from "@/components/Flashcard";
 import ClozePlayer from "@/components/ClozePlayer";
 import ImageOcclusionPlayer from "@/components/ImageOcclusionPlayer";
@@ -45,7 +45,6 @@ const StudyPage = () => {
   const [sessionQueue, setSessionQueue] = useState<FlashcardData[]>([]);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [buriedNoteIds, setBuriedNoteIds] = useState<Set<string>>(new Set());
-  const [history, setHistory] = useState<Map<string, SrsData | undefined>>(new Map());
   
   const [fsrsOutcomes, setFsrsOutcomes] = useState<RecordLog | null>(null);
   const fsrsInstance = useMemo(() => fsrs(generatorParameters(settings.fsrsParameters)), [settings.fsrsParameters]);
@@ -168,8 +167,6 @@ const StudyPage = () => {
 
     const actualCardIndex = sessionQueue.findIndex(c => c.id === currentCard.id);
     if (actualCardIndex === -1) return;
-
-    setHistory(prev => new Map(prev).set(currentCard.id, currentCard.srs));
 
     let updatedCard: FlashcardData = currentCard;
 
@@ -316,42 +313,6 @@ const StudyPage = () => {
     setCurrentCardIndex(actualCardIndex + 1);
   }, [currentCard, sessionQueue, settings, setDecks, fsrsOutcomes, fsrsInstance]);
 
-  const handlePrevious = useCallback(async () => {
-    const lastRatedCardId = Array.from(history.keys()).pop();
-    if (!lastRatedCardId) return;
-
-    const cardToRevert = sessionQueue.find(c => c.id === lastRatedCardId);
-    if (!cardToRevert) return;
-
-    const originalSrs = history.get(lastRatedCardId);
-    const revertedCard = { ...cardToRevert, srs: originalSrs };
-    setDecks(prevDecks => updateFlashcard(prevDecks, revertedCard));
-
-    if (settings.scheduler === 'fsrs' && originalSrs?.fsrs) {
-      await deleteLastReviewLogForCard(cardToRevert.id);
-    }
-
-    if (cardToRevert.noteId) {
-      setBuriedNoteIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(cardToRevert.noteId!);
-        return newSet;
-      });
-    }
-
-    setHistory(prev => {
-      const newHistory = new Map(prev);
-      newHistory.delete(lastRatedCardId);
-      return newHistory;
-    });
-
-    const revertedCardIndex = sessionQueue.findIndex(c => c.id === lastRatedCardId);
-    if (revertedCardIndex === -1) return;
-
-    setCurrentCardIndex(revertedCardIndex);
-    setIsFlipped(false);
-  }, [sessionQueue, history, setDecks, settings.scheduler]);
-
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.code === 'Space' && !isFlipped) {
@@ -470,10 +431,6 @@ const StudyPage = () => {
           <main className="w-full max-w-2xl mx-auto flex flex-col items-center justify-start py-6 gap-6">
             {renderCard()}
             <div className="flex items-center gap-4 text-sm text-muted-foreground flex-shrink-0">
-              <Button variant="outline" size="sm" onClick={handlePrevious} disabled={history.size === 0}>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Previous
-              </Button>
               <span>
                 {sessionQueue.length > 0 && `Card ${currentCardIndex + 1} of ${sessionQueue.length}`}
               </span>

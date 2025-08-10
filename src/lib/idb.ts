@@ -81,17 +81,6 @@ export const getReviewLogsForCard = async (cardId: string): Promise<ReviewLog[]>
   return db.getAllFromIndex(REVIEW_LOGS_STORE, 'cardId', cardId);
 };
 
-export const deleteLastReviewLogForCard = async (cardId: string): Promise<void> => {
-  const db = await getDb();
-  const tx = db.transaction(REVIEW_LOGS_STORE, 'readwrite');
-  const index = tx.store.index('cardId');
-  const cursor = await index.openCursor(cardId, 'prev');
-  if (cursor) {
-    await cursor.delete();
-  }
-  await tx.done;
-};
-
 export const clearReviewLogsDB = async (): Promise<void> => {
   const db = await getDb();
   await db.clear(REVIEW_LOGS_STORE);
