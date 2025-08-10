@@ -18,10 +18,13 @@ import { DeckData, FlashcardData, ReviewLog } from '@/data/decks';
 import { McqData, QuestionBankData } from '@/data/questionBanks';
 import { PerformanceAnalytics } from '@/components/PerformanceAnalytics';
 import { PerformanceGraph } from '@/components/PerformanceGraph';
-import { calculateAccuracy, calculateDueStats, calculateIntervalGrowth, calculateRetentionDistribution, calculateForecast, calculateAverageRetention, calculateAtRiskItems, calculateCumulativeStabilityGrowth, calculateSuspectedGuesses, calculateLearningCurve, calculateForgettingCurve, calculateStabilityOverTime, calculateMemoryDecayVelocity, calculateAverageKnowledgeHalfLife, calculateDifficultyDelta, calculateOverlearningRatio } from '@/lib/analytics-utils';
+import { calculateAccuracy, calculateDueStats, calculateIntervalGrowth, calculateRetentionDistribution, calculateForecast, calculateAverageRetention, calculateAtRiskItems, calculateCumulativeStabilityGrowth, calculateSuspectedGuesses, calculateLearningCurve, calculateForgettingCurve, calculateStabilityOverTime, calculateMemoryDecayVelocity, calculateAverageKnowledgeHalfLife, calculateDifficultyDelta, calculateOverlearningRatio, calculateReviewTimeDistribution, calculateDailySummary } from '@/lib/analytics-utils';
 import { ForgettingCurveChart } from '@/components/ForgettingCurveChart';
 import { StabilityTrendChart } from '@/components/StabilityTrendChart';
 import { AnimatedCard } from '@/components/AnimatedCard';
+import { ReviewTimeDistributionChart } from '@/components/ReviewTimeDistributionChart';
+import { DailyActivityChart } from '@/components/DailyActivityChart';
+import { DifficultyTrendChart } from '@/components/DifficultyTrendChart';
 
 const StatisticsPage = () => {
   const { decks } = useDecks();
@@ -293,6 +296,22 @@ const StatisticsPage = () => {
     };
   }, [logs]);
 
+  const reviewTimeData = useMemo(() => {
+    if (!logs) return null;
+    return {
+      flashcards: calculateReviewTimeDistribution(logs.cardLogs),
+      mcqs: calculateReviewTimeDistribution(logs.mcqLogs),
+    };
+  }, [logs]);
+
+  const dailySummaryData = useMemo(() => {
+    if (!logs) return null;
+    return {
+      flashcards: calculateDailySummary(logs.cardLogs),
+      mcqs: calculateDailySummary(logs.mcqLogs),
+    };
+  }, [logs]);
+
   // --- Charting Constants ---
   const PIE_COLORS: Record<ItemStatus, string> = {
     New: '#3b82f6', // blue-500
@@ -505,6 +524,64 @@ const StatisticsPage = () => {
                     </>}
                 </CardContent>
             </AnimatedCard>
+        </div>
+
+        <h2 className="text-xl sm:text-2xl font-bold mt-8 mb-4">Deeper Insights & Trends</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+          <AnimatedCard>
+            <CardHeader><CardTitle>Flashcard Burnout Risk</CardTitle><CardDescription>Daily review load vs. accuracy.</CardDescription></CardHeader>
+            <CardContent>
+              {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : 
+                !dailySummaryData || dailySummaryData.flashcards.length < 2 ? <p className="text-sm text-muted-foreground">Not enough data.</p> :
+                <DailyActivityChart data={dailySummaryData.flashcards} />
+              }
+            </CardContent>
+          </AnimatedCard>
+          <AnimatedCard>
+            <CardHeader><CardTitle>MCQ Burnout Risk</CardTitle><CardDescription>Daily review load vs. accuracy.</CardDescription></CardHeader>
+            <CardContent>
+              {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : 
+                !dailySummaryData || dailySummaryData.mcqs.length < 2 ? <p className="text-sm text-muted-foreground">Not enough data.</p> :
+                <DailyActivityChart data={dailySummaryData.mcqs} />
+              }
+            </CardContent>
+          </AnimatedCard>
+          <AnimatedCard>
+            <CardHeader><CardTitle>Flashcard Difficulty Trend</CardTitle><CardDescription>Average FSRS difficulty over time.</CardDescription></CardHeader>
+            <CardContent>
+              {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : 
+                !dailySummaryData || dailySummaryData.flashcards.length < 2 ? <p className="text-sm text-muted-foreground">Not enough data.</p> :
+                <DifficultyTrendChart data={dailySummaryData.flashcards} />
+              }
+            </CardContent>
+          </AnimatedCard>
+          <AnimatedCard>
+            <CardHeader><CardTitle>MCQ Difficulty Trend</CardTitle><CardDescription>Average FSRS difficulty over time.</CardDescription></CardHeader>
+            <CardContent>
+              {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : 
+                !dailySummaryData || dailySummaryData.mcqs.length < 2 ? <p className="text-sm text-muted-foreground">Not enough data.</p> :
+                <DifficultyTrendChart data={dailySummaryData.mcqs} />
+              }
+            </CardContent>
+          </AnimatedCard>
+          <AnimatedCard>
+            <CardHeader><CardTitle>Flashcard Review Time</CardTitle><CardDescription>Distribution of time spent per review.</CardDescription></CardHeader>
+            <CardContent>
+              {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : 
+                !reviewTimeData || !reviewTimeData.flashcards ? <p className="text-sm text-muted-foreground">Not enough data.</p> :
+                <ReviewTimeDistributionChart data={reviewTimeData.flashcards} />
+              }
+            </CardContent>
+          </AnimatedCard>
+          <AnimatedCard>
+            <CardHeader><CardTitle>MCQ Review Time</CardTitle><CardDescription>Distribution of time spent per review.</CardDescription></CardHeader>
+            <CardContent>
+              {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : 
+                !reviewTimeData || !reviewTimeData.mcqs ? <p className="text-sm text-muted-foreground">Not enough data.</p> :
+                <ReviewTimeDistributionChart data={reviewTimeData.mcqs} />
+              }
+            </CardContent>
+          </AnimatedCard>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mt-6">

@@ -1,5 +1,5 @@
 import { ReviewLog } from "@/data/decks";
-import { McqReviewLog } from "@/lib/idb";
+import { McqReviewLog } from "./idb";
 import { Rating, State } from "ts-fsrs";
 import { DeckData, FlashcardData } from "@/data/decks";
 import { McqData } from "@/data/questionBanks";
