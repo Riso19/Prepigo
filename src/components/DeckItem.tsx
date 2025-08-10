@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { DeckData } from "@/data/decks";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -7,9 +7,10 @@ import { ChevronRight, Folder, MoreVertical, Plus, BookOpen, Settings, GripVerti
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AddSubDeckDialog } from "./AddSubDeckDialog";
-import { getAllFlashcardsFromDeck, deleteDeck } from "@/lib/deck-utils";
+import { deleteDeck, getDeckDueCounts } from "@/lib/deck-utils";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useDecks } from "@/contexts/DecksContext";
+import { useSettings } from "@/contexts/SettingsContext";
 import { showSuccess } from "@/utils/toast";
 import {
   AlertDialog,
@@ -26,7 +27,8 @@ const DeckItem = ({ deck }: { deck: DeckData }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isAddSubDeckOpen, setIsAddSubDeckOpen] = useState(false);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
-  const { setDecks } = useDecks();
+  const { decks, setDecks } = useDecks();
+  const { settings } = useSettings();
 
   const { attributes, listeners, setNodeRef: setDraggableRef, isDragging } = useDraggable({
     id: deck.id,
@@ -36,7 +38,12 @@ const DeckItem = ({ deck }: { deck: DeckData }) => {
   });
 
   const hasSubDecks = deck.subDecks && deck.subDecks.length > 0;
-  const totalFlashcards = getAllFlashcardsFromDeck(deck).length;
+
+  const dueCounts = useMemo(() => {
+    return getDeckDueCounts(deck, decks, settings);
+  }, [deck, decks, settings]);
+
+  const totalDue = dueCounts.newCount + dueCounts.learnCount + dueCounts.dueCount;
 
   const handleDelete = () => {
     setDecks(prevDecks => deleteDeck(prevDecks, deck.id));
@@ -67,7 +74,11 @@ const DeckItem = ({ deck }: { deck: DeckData }) => {
             </CollapsibleTrigger>
           </div>
           <div className="flex items-center gap-1">
-            <span className="text-sm text-muted-foreground">{totalFlashcards} cards</span>
+            <div className="flex items-center gap-2 text-sm font-semibold px-2">
+              {dueCounts.newCount > 0 && <span className="text-blue-600 dark:text-blue-400">{dueCounts.newCount}</span>}
+              {dueCounts.learnCount > 0 && <span className="text-red-600 dark:text-red-400">{dueCounts.learnCount}</span>}
+              {dueCounts.dueCount > 0 && <span className="text-green-600 dark:text-green-400">{dueCounts.dueCount}</span>}
+            </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -76,7 +87,7 @@ const DeckItem = ({ deck }: { deck: DeckData }) => {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {totalFlashcards > 0 && (
+                {totalDue > 0 && (
                   <DropdownMenuItem asChild>
                     <Link to={`/study/${deck.id}`}>
                       <BookOpen className="mr-2 h-4 w-4" />
