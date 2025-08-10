@@ -331,6 +331,14 @@ const StudyPage = () => {
       await deleteLastReviewLogForCard(cardToRevert.id);
     }
 
+    if (cardToRevert.noteId) {
+      setBuriedNoteIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(cardToRevert.noteId!);
+        return newSet;
+      });
+    }
+
     setHistory(prev => {
       const newHistory = new Map(prev);
       newHistory.delete(lastRatedCardId);
