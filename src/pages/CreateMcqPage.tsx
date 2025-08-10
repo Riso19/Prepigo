@@ -5,7 +5,6 @@ import { findQuestionBankById, addMcqToBank, getAllTagsFromQuestionBanks } from 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { McqData, McqOption } from "@/data/questionBanks";
 import { ArrowLeft, PlusCircle, X } from "lucide-react";
@@ -105,20 +104,24 @@ const CreateMcqPage = () => {
 
             <div className="space-y-4">
               <Label>Options</Label>
-              <RadioGroup value={correctOptionId || undefined} onValueChange={setCorrectOptionId}>
+              <RadioGroup value={correctOptionId || undefined} onValueChange={setCorrectOptionId} className="space-y-4">
                 {options.map((option, index) => (
-                  <div key={option.id} className="flex items-center gap-2">
-                    <RadioGroupItem value={option.id} id={option.id} />
-                    <Label htmlFor={option.id} className="sr-only">Mark option {index + 1} as correct</Label>
-                    <Input
+                  <div key={option.id} className="p-4 border rounded-lg space-y-3 bg-background/50">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <RadioGroupItem value={option.id} id={option.id} />
+                        <Label htmlFor={option.id} className="font-semibold">Correct Answer</Label>
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={() => handleRemoveOption(option.id)}>
+                        <X className="h-4 w-4" />
+                        <span className="sr-only">Remove option</span>
+                      </Button>
+                    </div>
+                    <HtmlEditor
                       value={option.text}
-                      onChange={(e) => handleOptionChange(option.id, e.target.value)}
+                      onChange={(html) => handleOptionChange(option.id, html)}
                       placeholder={`Option ${index + 1}`}
-                      className="flex-grow"
                     />
-                    <Button variant="ghost" size="icon" onClick={() => handleRemoveOption(option.id)}>
-                      <X className="h-4 w-4" />
-                    </Button>
                   </div>
                 ))}
               </RadioGroup>
