@@ -1,12 +1,14 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { DeckData, ReviewLog } from '@/data/decks';
+import { QuestionBankData } from '@/data/questionBanks';
 
 const DB_NAME = 'PrepigoDB';
-const DB_VERSION = 4; // Increment version to trigger upgrade
+const DB_VERSION = 5; // Increment version to trigger upgrade
 const DECKS_STORE = 'decks';
 const REVIEW_LOGS_STORE = 'review_logs';
 const MEDIA_STORE = 'media';
 const SESSION_STATE_STORE = 'session_state';
+const QUESTION_BANKS_STORE = 'question_banks';
 
 interface PrepigoDB extends DBSchema {
   [DECKS_STORE]: {
@@ -25,6 +27,10 @@ interface PrepigoDB extends DBSchema {
   [SESSION_STATE_STORE]: {
     key: string;
     value: any;
+  };
+  [QUESTION_BANKS_STORE]: {
+    key: string;
+    value: QuestionBankData;
   };
 }
 
@@ -53,6 +59,11 @@ const getDb = () => {
         if (oldVersion < 4) {
             if (!db.objectStoreNames.contains(SESSION_STATE_STORE)) {
                 db.createObjectStore(SESSION_STATE_STORE);
+            }
+        }
+        if (oldVersion < 5) {
+            if (!db.objectStoreNames.contains(QUESTION_BANKS_STORE)) {
+                db.createObjectStore(QUESTION_BANKS_STORE, { keyPath: 'id' });
             }
         }
       },
@@ -134,4 +145,23 @@ export const getIntroductionsFromDB = async (): Promise<{ date: string; ids: str
 export const saveIntroductionsToDB = async (introductions: { date: string; ids: string[] }): Promise<void> => {
   const db = await getDb();
   await db.put(SESSION_STATE_STORE, introductions, 'introductionsToday');
+};
+
+// --- Question Bank Functions ---
+export const getAllQuestionBanksFromDB = async (): Promise<QuestionBankData[]> => {
+  const db = await getDb();
+  return db.getAll(QUESTION_BANKS_STORE);
+};
+
+export const saveQuestionBanksToDB = async (questionBanks: QuestionBankData[]): Promise<void> => {
+  const db = await getDb();
+  const tx = db.transaction(QUESTION_BANKS_STORE, 'readwrite');
+  await tx.store.clear();
+  await Promise.all(questionBanks.map(bank => tx.store.put(bank)));
+  await tx.done;
+};
+
+export const clearQuestionBanksDB = async (): Promise<void> => {
+  const db = await getDb();
+  await db.clear(QUESTION_BANKS_STORE);
 };
