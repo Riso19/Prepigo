@@ -364,7 +364,7 @@ export const buildSessionQueue = (
   const sessionReviews: FlashcardData[] = [];
   const sessionLearning: FlashcardData[] = [];
 
-  const recursiveGather = (deck: DeckData, newBudget: number, reviewBudget: number) => {
+  const recursiveGather = (deck: DeckData, newBudget: number, reviewBudget: number): { newTaken: number, reviewsTaken: number } => {
     const settings = getEffectiveSrsSettings(allDecks, deck.id, globalSettings);
     const currentNewBudget = Math.min(newBudget, settings.newCardsPerDay);
     const currentReviewBudget = Math.min(reviewBudget, settings.maxReviewsPerDay);
@@ -404,9 +404,18 @@ export const buildSessionQueue = (
     return { newTaken, reviewsTaken };
   };
 
+  let remainingNewBudget = Math.max(0, globalSettings.newCardsPerDay - introducedTodayIds.size);
+  let remainingReviewBudget = globalSettings.maxReviewsPerDay;
+
   for (const deck of decksToStudy) {
-    const settings = getEffectiveSrsSettings(allDecks, deck.id, globalSettings);
-    recursiveGather(deck, settings.newCardsPerDay, settings.maxReviewsPerDay);
+    if (remainingNewBudget <= 0 && remainingReviewBudget <= 0 && !globalSettings.newCardsIgnoreReviewLimit) {
+      break;
+    }
+    
+    const { newTaken, reviewsTaken } = recursiveGather(deck, remainingNewBudget, remainingReviewBudget);
+    
+    remainingNewBudget -= newTaken;
+    remainingReviewBudget -= reviewsTaken;
   }
 
   let gatheredNew = [...new Set(sessionNew)];
