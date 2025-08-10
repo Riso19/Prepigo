@@ -202,9 +202,7 @@ const PracticeMcqPage = () => {
               ))}
             </div>
           ) : (
-            <div className="flex items-center justify-center h-14 text-base text-muted-foreground">
-              Select an answer to continue
-            </div>
+            <div className="h-14" />
           )}
         </div>
       </footer>
