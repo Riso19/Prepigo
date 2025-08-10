@@ -1,5 +1,6 @@
 import { DeckData, FlashcardData } from "@/data/decks";
 import { SrsSettings } from "@/contexts/SettingsContext";
+import { State } from "ts-fsrs";
 
 // Recursively find a deck by its ID
 export const findDeckById = (decks: DeckData[], id: string): DeckData | null => {
@@ -323,4 +324,109 @@ export const getEffectiveSrsSettings = (
   }
 
   return globalSettings;
+};
+
+const parseSteps = (steps: string): number[] => {
+  return steps.trim().split(/\s+/).filter(s => s).map(stepStr => {
+    const value = parseFloat(stepStr);
+    if (isNaN(value)) return 1;
+    if (stepStr.endsWith('d')) return value * 24 * 60;
+    if (stepStr.endsWith('h')) return value * 60;
+    if (stepStr.endsWith('s')) return Math.max(1, value / 60);
+    return value;
+  });
+};
+
+const shuffle = <T,>(array: T[]): T[] => {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+};
+
+export const buildSessionQueue = (
+  decksToStudy: DeckData[],
+  allDecks: DeckData[],
+  globalSettings: SrsSettings
+): FlashcardData[] => {
+  const now = new Date();
+
+  const isNew = (card: FlashcardData, s: SrsSettings) => !card.srs?.isSuspended && (s.scheduler === 'fsrs' ? !card.srs?.fsrs || card.srs.fsrs.state === State.New : !card.srs?.sm2 || card.srs.sm2.state === 'new');
+  const isDue = (card: FlashcardData, s: SrsSettings) => !card.srs?.isSuspended && (s.scheduler === 'fsrs' ? card.srs?.fsrs && new Date(card.srs.fsrs.due) <= now : card.srs?.sm2 && new Date(card.srs.sm2.due) <= now);
+  const isLearning = (card: FlashcardData, s: SrsSettings) => isDue(card, s) && (s.scheduler === 'fsrs' ? card.srs?.fsrs?.state === State.Learning || card.srs?.fsrs?.state === State.Relearning : card.srs?.sm2?.state === 'learning' || card.srs?.sm2?.state === 'relearning');
+  const isInterdayLearning = (card: FlashcardData, s: SrsSettings) => isLearning(card, s) && (s.scheduler === 'fsrs' || (s.scheduler === 'sm2' && (card.srs!.sm2!.learning_step || 0) >= parseSteps(card.srs!.sm2!.state === 'learning' ? s.learningSteps : s.relearningSteps).length || parseSteps(card.srs!.sm2!.state === 'learning' ? s.learningSteps : s.relearningSteps)[card.srs!.sm2!.learning_step || 0] >= 1440));
+  const isIntradayLearning = (card: FlashcardData, s: SrsSettings) => isLearning(card, s) && !isInterdayLearning(card, s);
+  const isReview = (card: FlashcardData, s: SrsSettings) => isDue(card, s) && (s.scheduler === 'fsrs' ? card.srs?.fsrs?.state === State.Review : card.srs?.sm2?.state === 'review');
+
+  const sessionNew: FlashcardData[] = [];
+  const sessionReviews: FlashcardData[] = [];
+  const sessionLearning: FlashcardData[] = [];
+
+  const recursiveGather = (deck: DeckData, newBudget: number, reviewBudget: number) => {
+    const settings = getEffectiveSrsSettings(allDecks, deck.id, globalSettings);
+    const currentNewBudget = Math.min(newBudget, settings.newCardsPerDay);
+    const currentReviewBudget = Math.min(reviewBudget, settings.maxReviewsPerDay);
+    let newTaken = 0;
+    let reviewsTaken = 0;
+
+    const cards = deck.flashcards;
+    sessionLearning.push(...cards.filter(c => isIntradayLearning(c, settings)));
+    
+    const potentialReviews = cards.filter(c => isReview(c, settings) || isInterdayLearning(c, settings));
+    const reviewsToTake = Math.min(potentialReviews.length, currentReviewBudget);
+    if (reviewsToTake > 0) {
+      sessionReviews.push(...potentialReviews.slice(0, reviewsToTake));
+      reviewsTaken += reviewsToTake;
+    }
+
+    const canTakeNew = globalSettings.newCardsIgnoreReviewLimit || reviewsTaken < currentReviewBudget;
+    if (canTakeNew) {
+      const potentialNew = cards.filter(c => isNew(c, settings));
+      const newToTake = Math.min(potentialNew.length, currentNewBudget);
+      if (newToTake > 0) {
+        sessionNew.push(...potentialNew.slice(0, newToTake));
+        newTaken += newToTake;
+      }
+    }
+
+    if (deck.subDecks) {
+      for (const subDeck of deck.subDecks) {
+        const remainingNew = newBudget - newTaken;
+        const remainingReview = reviewBudget - reviewsTaken;
+        if (remainingNew <= 0 && remainingReview <= 0) break;
+        const { newTaken: subNew, reviewsTaken: subReviews } = recursiveGather(subDeck, remainingNew, remainingReview);
+        newTaken += subNew;
+        reviewsTaken += subReviews;
+      }
+    }
+    return { newTaken, reviewsTaken };
+  };
+
+  for (const deck of decksToStudy) {
+    const settings = getEffectiveSrsSettings(allDecks, deck.id, globalSettings);
+    recursiveGather(deck, settings.newCardsPerDay, settings.maxReviewsPerDay);
+  }
+
+  let gatheredNew = [...new Set(sessionNew)];
+  if (globalSettings.newCardGatherOrder === 'ascending') gatheredNew.sort((a, b) => (a.srs?.newCardOrder || 0) - (b.srs?.newCardOrder || 0));
+  if (globalSettings.newCardGatherOrder === 'descending') gatheredNew.sort((a, b) => (b.srs?.newCardOrder || 0) - (a.srs?.newCardOrder || 0));
+  if (globalSettings.newCardGatherOrder === 'randomCards' || globalSettings.newCardGatherOrder === 'randomNotes') gatheredNew = shuffle(gatheredNew);
+
+  let sortedNew = gatheredNew;
+  if (globalSettings.newCardSortOrder === 'random') sortedNew = shuffle(sortedNew);
+
+  let sortedReviews = [...new Set(sessionReviews)];
+  if (globalSettings.reviewSortOrder === 'dueDateRandom') {
+    sortedReviews.sort((a, b) => new Date(a.srs!.fsrs?.due || a.srs!.sm2!.due).getTime() - new Date(b.srs!.fsrs?.due || b.srs!.sm2!.due).getTime());
+    sortedReviews = shuffle(sortedReviews);
+  }
+
+  const learningCombined = [...new Set(sessionLearning)].sort((a, b) => new Date(a.srs!.fsrs?.due || a.srs!.sm2!.due).getTime() - new Date(b.srs!.fsrs?.due || b.srs!.sm2!.due).getTime());
+
+  const finalWithNew = globalSettings.newReviewOrder === 'mix' ? shuffle([...sortedReviews, ...sortedNew]) :
+                       globalSettings.newReviewOrder === 'after' ? [...sortedReviews, ...sortedNew] :
+                       [...sortedNew, ...sortedReviews];
+
+  return [...learningCombined, ...finalWithNew];
 };

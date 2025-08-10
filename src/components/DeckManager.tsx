@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { PlusCircle } from "lucide-react";
 import { useDecks } from "@/contexts/DecksContext";
@@ -6,7 +6,9 @@ import DeckItem from "@/components/DeckItem";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { AddDeckDialog } from "./AddDeckDialog";
 import { DndContext, DragEndEvent, useDroppable } from "@dnd-kit/core";
-import { moveDeck } from "@/lib/deck-utils";
+import { moveDeck, buildSessionQueue } from "@/lib/deck-utils";
+import { useNavigate } from "react-router-dom";
+import { useSettings } from "@/contexts/SettingsContext";
 
 const RootDroppable = () => {
   const { setNodeRef, isOver } = useDroppable({
@@ -27,12 +29,23 @@ const RootDroppable = () => {
 
 const DeckManager = () => {
   const { decks, setDecks } = useDecks();
+  const { settings } = useSettings();
   const [isAddDeckOpen, setIsAddDeckOpen] = useState(false);
+  const [dueCount, setDueCount] = useState(0);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (decks.length > 0) {
+      const queue = buildSessionQueue(decks, decks, settings);
+      setDueCount(queue.length);
+    } else {
+      setDueCount(0);
+    }
+  }, [decks, settings]);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
 
-    // If dropped nowhere, or on itself, do nothing
     if (!over || active.id === over.id) {
       return;
     }
@@ -46,9 +59,19 @@ const DeckManager = () => {
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <CardTitle className="text-2xl">My Decks</CardTitle>
-            <Button onClick={() => setIsAddDeckOpen(true)}>
-              <PlusCircle className="mr-2 h-4 w-4" /> Add New Deck
-            </Button>
+            <div className="flex items-center gap-2">
+              {dueCount > 0 && (
+                <Button onClick={() => navigate('/study/all')} className="relative">
+                  Study Now
+                  <span className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white">
+                    {dueCount}
+                  </span>
+                </Button>
+              )}
+              <Button onClick={() => setIsAddDeckOpen(true)}>
+                <PlusCircle className="mr-2 h-4 w-4" /> Add New Deck
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>

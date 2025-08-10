@@ -25,6 +25,7 @@ const App = () => (
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<Index />} />
+              <Route path="/study/all" element={<StudyPage />} />
               <Route path="/study/:deckId" element={<StudyPage />} />
               <Route path="/deck/:deckId/add" element={<CreateFlashcardPage />} />
               <Route path="/deck/:deckId/view" element={<DeckViewPage />} />
