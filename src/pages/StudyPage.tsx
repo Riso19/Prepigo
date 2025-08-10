@@ -31,8 +31,6 @@ const StudyPage = () => {
   const { decks, setDecks, introductionsToday, addIntroducedCard } = useDecks();
   const { settings: globalSettings } = useSettings();
   const navigate = useNavigate();
-
-  const deck = useMemo(() => (deckId && deckId !== 'all' ? findDeckById(decks, deckId) : null), [decks, deckId]);
   
   const [isFlipped, setIsFlipped] = useState(false);
   const [sessionQueue, setSessionQueue] = useState<FlashcardData[]>([]);
@@ -46,12 +44,13 @@ const StudyPage = () => {
   const [customSessionTitle, setCustomSessionTitle] = useState('');
   
   const fsrsInstance = useMemo(() => {
-    const settings = deck ? getEffectiveSrsSettings(decks, deck.id, globalSettings) : globalSettings;
+    const currentDeck = deckId ? findDeckById(decks, deckId) : null;
+    const settings = currentDeck ? getEffectiveSrsSettings(decks, currentDeck.id, globalSettings) : globalSettings;
     if (settings.scheduler === 'fsrs6') {
         return fsrs6(fsrs6GeneratorParameters(settings.fsrs6Parameters));
     }
     return fsrs(generatorParameters(settings.fsrsParameters));
-  }, [deck, decks, globalSettings]);
+  }, [deckId, decks, globalSettings]);
 
   const currentCard = useMemo(() => {
     for (let i = currentCardIndex; i < sessionQueue.length; i++) {
@@ -63,6 +62,8 @@ const StudyPage = () => {
     return null;
   }, [sessionQueue, currentCardIndex, buriedNoteIds]);
 
+  // This effect sets up the session queue. It should only run when the session identity changes (deckId or custom session state).
+  // It intentionally does not depend on `decks` to prevent resetting the session every time a card's SRS data is updated.
   useEffect(() => {
     if (deckId === 'custom' && location.state) {
         const { queue, srsEnabled, title } = location.state;
@@ -73,17 +74,24 @@ const StudyPage = () => {
     } else {
         setIsCustomSession(false);
         setIsSrsEnabled(true);
-        if (!deck && deckId !== 'all') return;
-        const decksToStudy = deckId === 'all' ? decks : (deck ? [deck] : []);
+        const currentDeck = deckId && deckId !== 'all' ? findDeckById(decks, deckId) : null;
+        if (!currentDeck && deckId !== 'all' && deckId !== 'custom') {
+            setSessionQueue([]);
+            return;
+        }
+        const decksToStudy = deckId === 'all' ? decks : (currentDeck ? [currentDeck] : []);
         if (decksToStudy.length > 0) {
             const queue = buildSessionQueue(decksToStudy, decks, globalSettings, introductionsToday);
             setSessionQueue(queue);
+        } else {
+            setSessionQueue([]);
         }
     }
     
     setCurrentCardIndex(0);
     setBuriedNoteIds(new Set());
-  }, [deckId, location.state, deck, decks, globalSettings, introductionsToday]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deckId, location.state]);
 
   const handleRating = useCallback(async (rating: Rating) => {
     if (!currentCard) return;
@@ -229,6 +237,11 @@ const StudyPage = () => {
 
     setDecks(prevDecks => updateFlashcard(prevDecks, updatedCard));
     
+    // Also update the card within the current session queue to prevent stale data
+    setSessionQueue(prevQueue => 
+        prevQueue.map(card => card.id === updatedCard.id ? updatedCard : card)
+    );
+    
     if (currentCard.noteId) {
       const cardState = settings.scheduler === 'fsrs' ? updatedCard.srs?.fsrs?.state : updatedCard.srs?.sm2?.state;
       let shouldBury = false;
@@ -303,9 +316,9 @@ const StudyPage = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFlipped, handleRating, isSrsEnabled]);
 
-  const pageTitle = isCustomSession ? customSessionTitle : (deckId === 'all' ? "Studying All Due Cards" : `Studying: ${deck?.name}`);
+  const pageTitle = isCustomSession ? customSessionTitle : (deckId === 'all' ? "Studying All Due Cards" : `Studying: ${findDeckById(decks, deckId || '')?.name}`);
 
-  if (!isCustomSession && !deck && deckId !== 'all') {
+  if (!isCustomSession && !findDeckById(decks, deckId || '') && deckId !== 'all') {
     return <div className="min-h-screen flex flex-col items-center justify-center text-center p-4"><h2 className="text-2xl font-bold mb-4">Deck not found</h2><Button asChild><Link to="/"><Home className="mr-2 h-4 w-4" /> Go back to My Decks</Link></Button></div>;
   }
   if (sessionQueue.length === 0 && currentCardIndex === 0) {
