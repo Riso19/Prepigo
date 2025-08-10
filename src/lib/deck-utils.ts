@@ -437,16 +437,21 @@ export const buildSessionQueue = (
         return isTrulyNew(card, settings);
       });
 
+      const newIntroducedForThisExamToday = allCardsForExam.filter(card => introducedTodayIds.has(card.id)).length;
+      const availableNewCardsForExam = allNewCardsForExam.filter(card => !introducedTodayIds.has(card.id));
+
       const daysLeft = differenceInDays(new Date(exam.date), now);
       let dailyBudget: number;
 
       if (daysLeft <= 0) {
-        dailyBudget = allNewCardsForExam.length;
+        dailyBudget = availableNewCardsForExam.length;
       } else {
         dailyBudget = Math.ceil(allNewCardsForExam.length / daysLeft);
       }
 
-      const cardsForToday = allNewCardsForExam.slice(0, dailyBudget);
+      const newForToday = Math.max(0, dailyBudget - newIntroducedForThisExamToday);
+
+      const cardsForToday = availableNewCardsForExam.slice(0, newForToday);
       cardsForToday.forEach(card => {
         if (!examPriorityCardIds.has(card.id)) {
           examPriorityNew.push(card);
