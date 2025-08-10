@@ -31,6 +31,7 @@ const DailyScheduleItem = ({ day, exam }: { day: ExamScheduleItem, exam: ExamDat
       state: {
         queue: cardsToStudy,
         srsEnabled: exam.studyMode === 'srs',
+        studyMode: exam.studyMode,
         title: `Exam Study: ${format(date, 'PPP')}`,
         examId: exam.id,
         scheduleDate: day.date,

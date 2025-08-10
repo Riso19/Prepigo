@@ -19,12 +19,21 @@ import { toast } from "sonner";
 const parseSteps = (steps: string): number[] => {
   return steps.trim().split(/\s+/).filter(s => s).map(stepStr => {
     const value = parseFloat(stepStr);
-    if (isNaN(value)) return 1; // Default to 1 minute if parsing fails
+    if (isNaN(value)) return 1;
     if (stepStr.endsWith('d')) return value * 24 * 60;
     if (stepStr.endsWith('h')) return value * 60;
-    if (stepStr.endsWith('s')) return Math.max(1, value / 60); // Convert seconds to minutes, with a 1-minute minimum
-    return value; // Assume minutes if no unit
+    if (stepStr.endsWith('s')) return Math.max(1, value / 60);
+    return value;
   });
+};
+
+const shuffle = <T,>(array: T[]): T[] => {
+  const newArray = [...array];
+  for (let i = newArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+  }
+  return newArray;
 };
 
 const StudyPage = () => {
@@ -46,6 +55,8 @@ const StudyPage = () => {
   const [isCustomSession, setIsCustomSession] = useState(false);
   const [isSrsEnabled, setIsSrsEnabled] = useState(true);
   const [customSessionTitle, setCustomSessionTitle] = useState('');
+  const [studyMode, setStudyMode] = useState<'srs' | 'cram'>('srs');
+  const [failedCardsQueue, setFailedCardsQueue] = useState<FlashcardData[]>([]);
   
   const fsrsInstance = useMemo(() => {
     const currentDeck = deckId ? findDeckById(decks, deckId) : null;
@@ -68,14 +79,16 @@ const StudyPage = () => {
 
   useEffect(() => {
     if (deckId === 'custom' && location.state) {
-        const { queue, srsEnabled, title } = location.state;
+        const { queue, srsEnabled, title, studyMode: mode } = location.state;
         setIsCustomSession(true);
         setSessionQueue(queue || []);
         setIsSrsEnabled(srsEnabled);
         setCustomSessionTitle(title || 'Custom Study');
+        setStudyMode(mode || 'srs');
     } else {
         setIsCustomSession(false);
         setIsSrsEnabled(true);
+        setStudyMode('srs');
         const currentDeck = deckId && deckId !== 'all' ? findDeckById(decks, deckId) : null;
         if (!currentDeck && deckId !== 'all' && deckId !== 'custom') {
             setSessionQueue([]);
@@ -93,180 +106,196 @@ const StudyPage = () => {
     setCurrentCardIndex(0);
     setBuriedNoteIds(new Set());
     setSessionCompleted(false);
+    setFailedCardsQueue([]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deckId, location.state]);
 
-  const handleRating = useCallback(async (rating: Rating) => {
+  const processAndAdvance = useCallback(async (rating?: Rating) => {
     if (!currentCard) return;
-    
+
     const actualCardIndex = sessionQueue.findIndex(c => c.id === currentCard.id);
     if (actualCardIndex === -1) return;
 
-    if (!isSrsEnabled) {
-        setIsFlipped(false);
-        setCurrentCardIndex(actualCardIndex + 1);
-        return;
-    }
-
-    const settings = getEffectiveSrsSettings(decks, deckId || 'all', globalSettings);
-    const wasNew = (currentCard.srs?.fsrs?.reps === 0 || !currentCard.srs?.fsrs) || (currentCard.srs?.sm2?.repetitions === 0 || !currentCard.srs?.sm2);
-    let updatedCard: FlashcardData = currentCard;
-
-    if (settings.scheduler === 'fsrs' || settings.scheduler === 'fsrs6') {
-      if (!fsrsOutcomes) return;
-      const nextState = fsrsOutcomes[rating];
-      const logEntry = nextState.log;
-
-      const logToSave: ReviewLog = {
-        cardId: currentCard.id,
-        rating: logEntry.rating,
-        state: logEntry.state,
-        due: logEntry.due.toISOString(),
-        stability: logEntry.stability,
-        difficulty: logEntry.difficulty,
-        elapsed_days: logEntry.elapsed_days,
-        last_elapsed_days: logEntry.last_elapsed_days,
-        scheduled_days: logEntry.scheduled_days,
-        review: logEntry.review.toISOString(),
-      };
-      await addReviewLog(logToSave);
-
-      const updatedSrsData = {
-          ...nextState.card,
-          due: nextState.card.due.toISOString(),
-          last_review: nextState.card.last_review?.toISOString(),
-      };
-
-      updatedCard = { 
-        ...currentCard, 
-        srs: { 
-          ...currentCard.srs, 
-          ...(settings.scheduler === 'fsrs6' ? { fsrs6: updatedSrsData } : { fsrs: updatedSrsData }),
-        } 
-      };
-    } else { // SM-2 Logic
-      const sm2State = currentCard.srs?.sm2 || { state: 'new', repetitions: 0, lapses: 0, easinessFactor: settings.sm2StartingEase, interval: 0, due: new Date().toISOString(), learning_step: 0 };
-      let nextSm2State: Sm2State = { ...sm2State };
-      const cardState = sm2State.state || 'new';
-      const isReview = cardState === 'review';
-
+    // --- Step 1: Process the current card ---
+    if (studyMode === 'cram') {
       if (rating === Rating.Again) {
-        if (isReview) {
-          nextSm2State.lapses = (sm2State.lapses || 0) + 1;
-          nextSm2State.easinessFactor = Math.max(settings.sm2MinEasinessFactor, sm2State.easinessFactor - 0.20);
-          const newInterval = Math.max(settings.sm2MinimumInterval, sm2State.interval * settings.sm2LapsedIntervalMultiplier);
-          nextSm2State.interval = newInterval;
-          const relearningSteps = parseSteps(settings.relearningSteps);
-          if (relearningSteps.length > 0) {
-            nextSm2State.state = 'relearning';
-            nextSm2State.learning_step = 0;
-            const nextDue = new Date();
-            nextDue.setMinutes(nextDue.getMinutes() + relearningSteps[0]);
-            nextSm2State.due = nextDue.toISOString();
+        setFailedCardsQueue(prev => [...prev, currentCard]);
+      }
+    } else if (isSrsEnabled && rating) {
+      const settings = getEffectiveSrsSettings(decks, deckId || 'all', globalSettings);
+      const wasNew = (currentCard.srs?.fsrs?.reps === 0 || !currentCard.srs?.fsrs) || (currentCard.srs?.sm2?.repetitions === 0 || !currentCard.srs?.sm2);
+      let updatedCard: FlashcardData = currentCard;
+
+      if (settings.scheduler === 'fsrs' || settings.scheduler === 'fsrs6') {
+        if (!fsrsOutcomes) return;
+        const nextState = fsrsOutcomes[rating];
+        const logEntry = nextState.log;
+
+        const logToSave: ReviewLog = {
+          cardId: currentCard.id,
+          rating: logEntry.rating,
+          state: logEntry.state,
+          due: logEntry.due.toISOString(),
+          stability: logEntry.stability,
+          difficulty: logEntry.difficulty,
+          elapsed_days: logEntry.elapsed_days,
+          last_elapsed_days: logEntry.last_elapsed_days,
+          scheduled_days: logEntry.scheduled_days,
+          review: logEntry.review.toISOString(),
+        };
+        await addReviewLog(logToSave);
+
+        const updatedSrsData = {
+            ...nextState.card,
+            due: nextState.card.due.toISOString(),
+            last_review: nextState.card.last_review?.toISOString(),
+        };
+
+        updatedCard = { 
+          ...currentCard, 
+          srs: { 
+            ...currentCard.srs, 
+            ...(settings.scheduler === 'fsrs6' ? { fsrs6: updatedSrsData } : { fsrs: updatedSrsData }),
+          } 
+        };
+      } else { // SM-2 Logic
+        const sm2State = currentCard.srs?.sm2 || { state: 'new', repetitions: 0, lapses: 0, easinessFactor: settings.sm2StartingEase, interval: 0, due: new Date().toISOString(), learning_step: 0 };
+        let nextSm2State: Sm2State = { ...sm2State };
+        const cardState = sm2State.state || 'new';
+        const isReview = cardState === 'review';
+
+        if (rating === Rating.Again) {
+          if (isReview) {
+            nextSm2State.lapses = (sm2State.lapses || 0) + 1;
+            nextSm2State.easinessFactor = Math.max(settings.sm2MinEasinessFactor, sm2State.easinessFactor - 0.20);
+            const newInterval = Math.max(settings.sm2MinimumInterval, sm2State.interval * settings.sm2LapsedIntervalMultiplier);
+            nextSm2State.interval = newInterval;
+            const relearningSteps = parseSteps(settings.relearningSteps);
+            if (relearningSteps.length > 0) {
+              nextSm2State.state = 'relearning';
+              nextSm2State.learning_step = 0;
+              const nextDue = new Date();
+              nextDue.setMinutes(nextDue.getMinutes() + relearningSteps[0]);
+              nextSm2State.due = nextDue.toISOString();
+            } else {
+              const nextDue = new Date();
+              nextDue.setDate(nextDue.getDate() + newInterval);
+              nextSm2State.due = nextDue.toISOString();
+            }
           } else {
+            nextSm2State.learning_step = 0;
+            const learningSteps = parseSteps(settings.learningSteps);
             const nextDue = new Date();
-            nextDue.setDate(nextDue.getDate() + newInterval);
+            const firstStep = learningSteps.length > 0 ? learningSteps[0] : 1;
+            nextDue.setMinutes(nextDue.getMinutes() + firstStep);
             nextSm2State.due = nextDue.toISOString();
           }
+        } else if (isReview) {
+          const qualityMap: { [key in Rating]: Sm2Quality } = { [Rating.Manual]: 0, [Rating.Again]: 1, [Rating.Hard]: 3, [Rating.Good]: 4, [Rating.Easy]: 5 };
+          const sm2Params = { 
+            startingEase: settings.sm2StartingEase,
+            minEasinessFactor: settings.sm2MinEasinessFactor,
+            easyBonus: settings.sm2EasyBonus,
+            intervalModifier: settings.sm2IntervalModifier,
+            hardIntervalMultiplier: settings.sm2HardIntervalMultiplier,
+            maximumInterval: settings.sm2MaximumInterval,
+          };
+          nextSm2State = sm2(qualityMap[rating], sm2Params, sm2State);
         } else {
-          nextSm2State.learning_step = 0;
-          const learningSteps = parseSteps(settings.learningSteps);
-          const nextDue = new Date();
-          const firstStep = learningSteps.length > 0 ? learningSteps[0] : 1;
-          nextDue.setMinutes(nextDue.getMinutes() + firstStep);
-          nextSm2State.due = nextDue.toISOString();
-        }
-      } else if (isReview) {
-        const qualityMap: { [key in Rating]: Sm2Quality } = { [Rating.Manual]: 0, [Rating.Again]: 1, [Rating.Hard]: 3, [Rating.Good]: 4, [Rating.Easy]: 5 };
-        const sm2Params = { 
-          startingEase: settings.sm2StartingEase,
-          minEasinessFactor: settings.sm2MinEasinessFactor,
-          easyBonus: settings.sm2EasyBonus,
-          intervalModifier: settings.sm2IntervalModifier,
-          hardIntervalMultiplier: settings.sm2HardIntervalMultiplier,
-          maximumInterval: settings.sm2MaximumInterval,
-        };
-        nextSm2State = sm2(qualityMap[rating], sm2Params, sm2State);
-      } else {
-        const isNewCard = cardState === 'new';
-        if (isNewCard) nextSm2State.easinessFactor = settings.sm2StartingEase;
-        
-        if (rating === Rating.Easy) {
-          nextSm2State.state = 'review';
-          nextSm2State.learning_step = undefined;
-          nextSm2State.interval = settings.sm2EasyInterval;
-          const nextDue = new Date();
-          nextDue.setDate(nextDue.getDate() + nextSm2State.interval);
-          nextSm2State.due = nextDue.toISOString();
-        } else {
-          const steps = (cardState === 'relearning') ? parseSteps(settings.relearningSteps) : parseSteps(settings.learningSteps);
-          const currentStep = sm2State.learning_step || 0;
-          const nextStep = currentStep + 1;
-
-          if (nextStep >= steps.length) {
+          const isNewCard = cardState === 'new';
+          if (isNewCard) nextSm2State.easinessFactor = settings.sm2StartingEase;
+          
+          if (rating === Rating.Easy) {
             nextSm2State.state = 'review';
             nextSm2State.learning_step = undefined;
-            const graduationInterval = cardState === 'relearning' ? sm2State.interval : settings.sm2GraduatingInterval;
-            nextSm2State.interval = graduationInterval;
+            nextSm2State.interval = settings.sm2EasyInterval;
             const nextDue = new Date();
-            nextDue.setDate(nextDue.getDate() + graduationInterval);
+            nextDue.setDate(nextDue.getDate() + nextSm2State.interval);
             nextSm2State.due = nextDue.toISOString();
           } else {
-            nextSm2State.state = isNewCard ? 'learning' : cardState;
-            nextSm2State.learning_step = nextStep;
-            const nextDue = new Date();
-            nextDue.setMinutes(nextDue.getMinutes() + steps[nextStep]);
-            nextSm2State.due = nextDue.toISOString();
+            const steps = (cardState === 'relearning') ? parseSteps(settings.relearningSteps) : parseSteps(settings.learningSteps);
+            const currentStep = sm2State.learning_step || 0;
+            const nextStep = currentStep + 1;
+
+            if (nextStep >= steps.length) {
+              nextSm2State.state = 'review';
+              nextSm2State.learning_step = undefined;
+              const graduationInterval = cardState === 'relearning' ? sm2State.interval : settings.sm2GraduatingInterval;
+              nextSm2State.interval = graduationInterval;
+              const nextDue = new Date();
+              nextDue.setDate(nextDue.getDate() + graduationInterval);
+              nextSm2State.due = nextDue.toISOString();
+            } else {
+              nextSm2State.state = isNewCard ? 'learning' : cardState;
+              nextSm2State.learning_step = nextStep;
+              const nextDue = new Date();
+              nextDue.setMinutes(nextDue.getMinutes() + steps[nextStep]);
+              nextSm2State.due = nextDue.toISOString();
+            }
+          }
+        }
+        
+        updatedCard = { ...currentCard, srs: { ...currentCard.srs, sm2: nextSm2State } };
+
+        if (isReview && rating === Rating.Again && nextSm2State.lapses! >= settings.leechThreshold) {
+          if (settings.leechAction === 'suspend') {
+            updatedCard.srs = { ...updatedCard.srs, isSuspended: true };
+          } else {
+            const newTags = [...(updatedCard.tags || [])];
+            if (!newTags.includes('leech')) newTags.push('leech');
+            updatedCard.tags = newTags;
           }
         }
       }
       
-      updatedCard = { ...currentCard, srs: { ...currentCard.srs, sm2: nextSm2State } };
+      if (wasNew) {
+        addIntroducedCard(currentCard.id);
+      }
 
-      if (isReview && rating === Rating.Again && nextSm2State.lapses! >= settings.leechThreshold) {
-        if (settings.leechAction === 'suspend') {
-          updatedCard.srs = { ...updatedCard.srs, isSuspended: true };
-        } else {
-          const newTags = [...(updatedCard.tags || [])];
-          if (!newTags.includes('leech')) newTags.push('leech');
-          updatedCard.tags = newTags;
+      setDecks(prevDecks => updateFlashcard(prevDecks, updatedCard));
+      
+      setSessionQueue(prevQueue => 
+          prevQueue.map(card => card.id === updatedCard.id ? updatedCard : card)
+      );
+      
+      if (currentCard.noteId) {
+        const cardState = settings.scheduler === 'fsrs' ? updatedCard.srs?.fsrs?.state : updatedCard.srs?.sm2?.state;
+        let shouldBury = false;
+
+        if (cardState === 'new' && settings.buryNewSiblings) {
+            shouldBury = true;
+        } else if (cardState === 'review' && settings.buryReviewSiblings) {
+            shouldBury = true;
+        } else if ((cardState === 'learning' || cardState === 'relearning') && settings.buryInterdayLearningSiblings) {
+            shouldBury = true;
+        }
+
+        if (shouldBury) {
+            setBuriedNoteIds(prev => new Set(prev).add(currentCard.noteId!));
         }
       }
     }
-    
-    if (wasNew) {
-      addIntroducedCard(currentCard.id);
-    }
 
-    setDecks(prevDecks => updateFlashcard(prevDecks, updatedCard));
-    
-    setSessionQueue(prevQueue => 
-        prevQueue.map(card => card.id === updatedCard.id ? updatedCard : card)
-    );
-    
-    if (currentCard.noteId) {
-      const cardState = settings.scheduler === 'fsrs' ? updatedCard.srs?.fsrs?.state : updatedCard.srs?.sm2?.state;
-      let shouldBury = false;
-
-      if (cardState === 'new' && settings.buryNewSiblings) {
-          shouldBury = true;
-      } else if (cardState === 'review' && settings.buryReviewSiblings) {
-          shouldBury = true;
-      } else if ((cardState === 'learning' || cardState === 'relearning') && settings.buryInterdayLearningSiblings) {
-          shouldBury = true;
-      }
-
-      if (shouldBury) {
-          setBuriedNoteIds(prev => new Set(prev).add(currentCard.noteId!));
-      }
-    }
-
+    // --- Step 2: Advance to the next state ---
+    const nextIndex = actualCardIndex + 1;
     setIsFlipped(false);
-    setCurrentCardIndex(actualCardIndex + 1);
-  }, [currentCard, sessionQueue, decks, deckId, globalSettings, setDecks, fsrsOutcomes, fsrsInstance, addIntroducedCard, isSrsEnabled, setExams]);
+
+    if (nextIndex >= sessionQueue.length) {
+      if (studyMode === 'cram' && failedCardsQueue.length > 0) {
+        toast.info(`Reviewing ${failedCardsQueue.length} card(s) you missed.`);
+        setSessionQueue(shuffle(failedCardsQueue));
+        setFailedCardsQueue([]);
+        setCurrentCardIndex(0);
+      } else {
+        setSessionCompleted(true);
+      }
+    } else {
+      setCurrentCardIndex(nextIndex);
+    }
+  }, [currentCard, sessionQueue, studyMode, isSrsEnabled, failedCardsQueue, decks, deckId, globalSettings, fsrsOutcomes, fsrsInstance, addIntroducedCard, setDecks]);
 
   useEffect(() => {
-    if (isFlipped && currentCard && isSrsEnabled) {
+    if (isFlipped && currentCard && isSrsEnabled && studyMode === 'srs') {
       const settings = getEffectiveSrsSettings(decks, deckId || 'all', globalSettings);
       if (settings.scheduler === 'fsrs' || settings.scheduler === 'fsrs6') {
         const srsData = settings.scheduler === 'fsrs6' ? currentCard.srs?.fsrs6 : currentCard.srs?.fsrs;
@@ -292,7 +321,7 @@ const StudyPage = () => {
     } else {
       setFsrsOutcomes(null);
     }
-  }, [isFlipped, currentCard, decks, deckId, globalSettings, fsrsInstance, isSrsEnabled]);
+  }, [isFlipped, currentCard, decks, deckId, globalSettings, fsrsInstance, isSrsEnabled, studyMode]);
 
   useEffect(() => {
     if (!currentCard && sessionQueue.length > 0 && !sessionCompleted) {
@@ -325,21 +354,26 @@ const StudyPage = () => {
         return;
       }
       if (isFlipped) {
+        if (studyMode === 'cram') {
+          if (event.key === '1') processAndAdvance(Rating.Again);
+          if (event.key === '2') processAndAdvance(Rating.Good);
+          return;
+        }
         if (!isSrsEnabled) {
-            handleRating(Rating.Good);
+            processAndAdvance(Rating.Good);
             return;
         }
         switch (event.key) {
-          case '1': handleRating(Rating.Again); break;
-          case '2': handleRating(Rating.Hard); break;
-          case '3': handleRating(Rating.Good); break;
-          case '4': handleRating(Rating.Easy); break;
+          case '1': processAndAdvance(Rating.Again); break;
+          case '2': processAndAdvance(Rating.Hard); break;
+          case '3': processAndAdvance(Rating.Good); break;
+          case '4': processAndAdvance(Rating.Easy); break;
         }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isFlipped, handleRating, isSrsEnabled]);
+  }, [isFlipped, processAndAdvance, isSrsEnabled, studyMode]);
 
   const pageTitle = isCustomSession ? customSessionTitle : (deckId === 'all' ? "Studying All Due Cards" : `Studying: ${findDeckById(decks, deckId || '')?.name}`);
 
@@ -442,11 +476,25 @@ const StudyPage = () => {
   };
 
   const renderFooter = () => {
+    if (studyMode === 'cram') {
+      return (
+        <div className="w-full max-w-2xl mx-auto p-4">
+          {isFlipped ? (
+            <div className="grid grid-cols-2 gap-4 w-full">
+              <Button onClick={() => processAndAdvance(Rating.Again)} className="relative bg-red-500 hover:bg-red-600 text-white font-bold h-16 text-base">Incorrect<span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">1</span></Button>
+              <Button onClick={() => processAndAdvance(Rating.Good)} className="relative bg-green-500 hover:bg-green-600 text-white font-bold h-16 text-base">Correct<span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">2</span></Button>
+            </div>
+          ) : (
+            <Button onClick={() => setIsFlipped(true)} className="w-full h-16 text-lg relative">Show Answer<span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">Space</span></Button>
+          )}
+        </div>
+      );
+    }
     if (!isSrsEnabled) {
         return (
             <div className="w-full max-w-2xl mx-auto p-4">
                 {isFlipped ? (
-                    <Button onClick={() => handleRating(Rating.Good)} className="w-full h-16 text-lg">Next Card</Button>
+                    <Button onClick={() => processAndAdvance(Rating.Good)} className="w-full h-16 text-lg">Next Card</Button>
                 ) : (
                     <Button onClick={() => setIsFlipped(true)} className="w-full h-16 text-lg relative">Show Answer<span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">Space</span></Button>
                 )}
@@ -457,10 +505,10 @@ const StudyPage = () => {
         <div className="w-full max-w-2xl mx-auto p-4">
           {isFlipped ? (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full">
-              <Button onClick={() => handleRating(Rating.Again)} className="relative bg-red-500 hover:bg-red-600 text-white font-bold h-16 text-base flex flex-col"><span>Again</span><span className="text-xs font-normal opacity-80">{getIntervalText(Rating.Again)}</span><span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">1</span></Button>
-              <Button onClick={() => handleRating(Rating.Hard)} className="relative bg-orange-400 hover:bg-orange-500 text-white font-bold h-16 text-base flex flex-col"><span>Hard</span><span className="text-xs font-normal opacity-80">{getIntervalText(Rating.Hard)}</span><span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">2</span></Button>
-              <Button onClick={() => handleRating(Rating.Good)} className="relative bg-green-500 hover:bg-green-600 text-white font-bold h-16 text-base flex flex-col"><span>Good</span><span className="text-xs font-normal opacity-80">{getIntervalText(Rating.Good)}</span><span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">3</span></Button>
-              <Button onClick={() => handleRating(Rating.Easy)} className="relative bg-blue-500 hover:bg-blue-600 text-white font-bold h-16 text-base flex flex-col"><span>Easy</span><span className="text-xs font-normal opacity-80">{getIntervalText(Rating.Easy)}</span><span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">4</span></Button>
+              <Button onClick={() => processAndAdvance(Rating.Again)} className="relative bg-red-500 hover:bg-red-600 text-white font-bold h-16 text-base flex flex-col"><span>Again</span><span className="text-xs font-normal opacity-80">{getIntervalText(Rating.Again)}</span><span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">1</span></Button>
+              <Button onClick={() => processAndAdvance(Rating.Hard)} className="relative bg-orange-400 hover:bg-orange-500 text-white font-bold h-16 text-base flex flex-col"><span>Hard</span><span className="text-xs font-normal opacity-80">{getIntervalText(Rating.Hard)}</span><span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">2</span></Button>
+              <Button onClick={() => processAndAdvance(Rating.Good)} className="relative bg-green-500 hover:bg-green-600 text-white font-bold h-16 text-base flex flex-col"><span>Good</span><span className="text-xs font-normal opacity-80">{getIntervalText(Rating.Good)}</span><span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">3</span></Button>
+              <Button onClick={() => processAndAdvance(Rating.Easy)} className="relative bg-blue-500 hover:bg-blue-600 text-white font-bold h-16 text-base flex flex-col"><span>Easy</span><span className="text-xs font-normal opacity-80">{getIntervalText(Rating.Easy)}</span><span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">4</span></Button>
             </div>
           ) : (
             <Button onClick={() => setIsFlipped(true)} className="w-full h-16 text-lg relative">Show Answer<span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">Space</span></Button>
