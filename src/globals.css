@@ -102,7 +102,7 @@
 
 @layer components {
   .prose img {
-    @apply rounded-lg max-w-full h-auto mx-auto;
+    @apply rounded-lg max-w-full h-auto mx-auto max-h-[50vh];
   }
 }
 
