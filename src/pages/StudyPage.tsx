@@ -64,7 +64,8 @@ const StudyPage = () => {
     
     setCurrentCardIndex(0);
     setBuriedNoteIds(new Set());
-  }, [deck, deckId, decks, globalSettings, introductionsToday]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deckId]);
 
   const handleRating = useCallback(async (rating: Rating) => {
     if (!currentCard) return;
