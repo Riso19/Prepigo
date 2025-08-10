@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { AddQuestionBankDialog } from "./AddQuestionBankDialog";
 import { DndContext, DragEndEvent, useDroppable } from "@dnd-kit/core";
 import { moveQuestionBank } from "@/lib/question-bank-utils";
+import { Link } from "react-router-dom";
 
 const RootDroppable = () => {
   const { setNodeRef, isOver } = useDroppable({
@@ -46,8 +47,8 @@ const QuestionBankManager = () => {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <CardTitle className="text-2xl">My Question Banks</CardTitle>
             <div className="flex items-center gap-2">
-              <Button onClick={() => {}}>
-                Practice Now
+              <Button asChild>
+                <Link to="/question-bank/all/practice">Practice Now</Link>
               </Button>
               <Button onClick={() => setIsAddBankOpen(true)}>
                 <PlusCircle className="mr-2 h-4 w-4" /> Add New Bank

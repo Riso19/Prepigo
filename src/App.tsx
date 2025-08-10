@@ -17,6 +17,7 @@ import QuestionBankPage from "./pages/QuestionBankPage";
 import CreateMcqPage from "./pages/CreateMcqPage";
 import QuestionBankViewPage from "./pages/QuestionBankViewPage";
 import EditMcqPage from "./pages/EditMcqPage";
+import PracticeMcqPage from "./pages/PracticeMcqPage";
 
 const queryClient = new QueryClient();
 
@@ -35,6 +36,7 @@ const App = () => (
                 <Route path="/question-bank/:bankId/add" element={<CreateMcqPage />} />
                 <Route path="/question-bank/:bankId/view" element={<QuestionBankViewPage />} />
                 <Route path="/question-bank/:bankId/edit/:mcqId" element={<EditMcqPage />} />
+                <Route path="/question-bank/:bankId/practice" element={<PracticeMcqPage />} />
                 <Route path="/study/:deckId" element={<StudyPage />} />
                 <Route path="/deck/:deckId/add" element={<CreateFlashcardPage />} />
                 <Route path="/deck/:deckId/view" element={<DeckViewPage />} />

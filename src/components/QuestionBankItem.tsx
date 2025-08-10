@@ -74,9 +74,11 @@ const QuestionBankItem = ({ bank }: { bank: QuestionBankData }) => {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem>
-                  <HelpCircle className="mr-2 h-4 w-4" />
-                  Practice MCQs
+                <DropdownMenuItem asChild>
+                  <Link to={`/question-bank/${bank.id}/practice`}>
+                    <HelpCircle className="mr-2 h-4 w-4" />
+                    Practice MCQs
+                  </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link to={`/question-bank/${bank.id}/view`}>
