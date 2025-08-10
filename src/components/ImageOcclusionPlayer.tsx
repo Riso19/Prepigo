@@ -42,8 +42,8 @@ const ImageOcclusionPlayer = ({ imageUrl, occlusions, questionOcclusionId, descr
     <div className="w-full h-[30rem] max-w-2xl cursor-pointer" onClick={onClick}>
       <Card className="w-full h-full flex flex-col">
         <CardContent className="p-0 h-full overflow-y-auto">
-          <div className="relative">
-            {resolvedImageUrl && <img ref={imgRef} src={resolvedImageUrl} alt="Study card" className="w-full h-auto block" />}
+          <div className="relative flex items-center justify-center h-full">
+            {resolvedImageUrl && <img ref={imgRef} src={resolvedImageUrl} alt="Study card" className="w-full h-auto block max-h-full object-contain" />}
             {imgDimensions && (
               <svg 
                 className="absolute top-0 left-0 w-full h-full"
