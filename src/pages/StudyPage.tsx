@@ -4,16 +4,17 @@ import { useDecks } from "@/contexts/DecksContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { findDeckById, updateFlashcard, getEffectiveSrsSettings, buildSessionQueue } from "@/lib/deck-utils";
 import { addReviewLog } from "@/lib/idb";
-import { FlashcardData, ReviewLog, Sm2State } from "@/data/decks";
+import { FlashcardData, ReviewLog, Sm2State, ExamData } from "@/data/decks";
 import Flashcard from "@/components/Flashcard";
 import ClozePlayer from "@/components/ClozePlayer";
 import ImageOcclusionPlayer from "@/components/ImageOcclusionPlayer";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Home } from "lucide-react";
+import { ArrowLeft, Home, Calendar } from "lucide-react";
 import { fsrs, Card, State, Rating, RecordLog, generatorParameters, createEmptyCard } from "ts-fsrs";
 import { fsrs6, Card as Fsrs6Card, generatorParameters as fsrs6GeneratorParameters } from "@/lib/fsrs6";
 import { sm2, Sm2Quality } from "@/lib/sm2";
 import { useExams } from "@/contexts/ExamsContext";
+import { differenceInDays, isPast } from "date-fns";
 
 const parseSteps = (steps: string): number[] => {
   return steps.trim().split(/\s+/).filter(s => s).map(stepStr => {
@@ -44,6 +45,7 @@ const StudyPage = () => {
   const [isCustomSession, setIsCustomSession] = useState(false);
   const [isSrsEnabled, setIsSrsEnabled] = useState(true);
   const [customSessionTitle, setCustomSessionTitle] = useState('');
+  const [cardExamMap, setCardExamMap] = useState<Map<string, ExamData>>(new Map());
   
   const fsrsInstance = useMemo(() => {
     const currentDeck = deckId ? findDeckById(decks, deckId) : null;
@@ -64,9 +66,11 @@ const StudyPage = () => {
     return null;
   }, [sessionQueue, currentCardIndex, buriedNoteIds]);
 
-  // This effect sets up the session queue. It should only run when the session identity changes.
-  // It depends on `exams` so the queue is rebuilt if an exam is added/changed.
-  // It intentionally does not depend on `decks` to prevent resetting the session every time a card's SRS data is updated.
+  const currentCardExam = useMemo(() => {
+    if (!currentCard) return null;
+    return cardExamMap.get(currentCard.id);
+  }, [currentCard, cardExamMap]);
+
   useEffect(() => {
     if (deckId === 'custom' && location.state) {
         const { queue, srsEnabled, title } = location.state;
@@ -74,6 +78,7 @@ const StudyPage = () => {
         setSessionQueue(queue || []);
         setIsSrsEnabled(srsEnabled);
         setCustomSessionTitle(title || 'Custom Study');
+        setCardExamMap(new Map());
     } else {
         setIsCustomSession(false);
         setIsSrsEnabled(true);
@@ -84,10 +89,12 @@ const StudyPage = () => {
         }
         const decksToStudy = deckId === 'all' ? decks : (currentDeck ? [currentDeck] : []);
         if (decksToStudy.length > 0) {
-            const queue = buildSessionQueue(decksToStudy, decks, globalSettings, introductionsToday, exams);
+            const { queue, cardExamMap: newCardExamMap } = buildSessionQueue(decksToStudy, decks, globalSettings, introductionsToday, exams);
             setSessionQueue(queue);
+            setCardExamMap(newCardExamMap);
         } else {
             setSessionQueue([]);
+            setCardExamMap(new Map());
         }
     }
     
@@ -446,6 +453,18 @@ const StudyPage = () => {
           </header>
 
           <main className="w-full max-w-2xl mx-auto flex flex-col items-center justify-start py-6 gap-6">
+            {currentCardExam && (
+              <div className="w-full p-2 text-sm font-semibold text-center text-primary-foreground bg-primary/90 rounded-md flex items-center justify-center gap-2">
+                <Calendar className="h-4 w-4" />
+                <span>For Exam: {currentCardExam.name} ({(() => {
+                  const examDate = new Date(currentCardExam.date);
+                  const daysLeft = differenceInDays(examDate, new Date());
+                  if (isPast(examDate) && daysLeft < 0) return "Past";
+                  if (daysLeft === 0) return "Today";
+                  return `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
+                })()})</span>
+              </div>
+            )}
             {renderCard()}
             <div className="flex items-center gap-4 text-sm text-muted-foreground flex-shrink-0">
               <span>

@@ -38,7 +38,7 @@ const DeckManager = () => {
 
   useEffect(() => {
     if (decks.length > 0) {
-      const queue = buildSessionQueue(decks, decks, settings, introductionsToday, exams);
+      const { queue } = buildSessionQueue(decks, decks, settings, introductionsToday, exams);
       setDueCount(queue.length);
     } else {
       setDueCount(0);

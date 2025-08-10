@@ -1,6 +1,7 @@
 import * as z from 'zod';
 import { State } from 'ts-fsrs';
 import { srsSettingsSchema } from '@/contexts/SettingsContext';
+import { examDataSchema } from './exams';
 
 export type FlashcardType = "basic" | "cloze" | "imageOcclusion";
 
@@ -129,6 +130,7 @@ export type Occlusion = z.infer<typeof occlusionSchema>;
 export type ImageOcclusionFlashcard = z.infer<typeof imageOcclusionFlashcardSchema>;
 export type FlashcardData = z.infer<typeof flashcardDataSchema>;
 export type ReviewLog = z.infer<typeof reviewLogSchema>;
+export type ExamData = z.infer<typeof examDataSchema>;
 export const decksSchema = z.array(deckDataSchema);
 
 

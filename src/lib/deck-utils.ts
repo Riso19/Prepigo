@@ -414,30 +414,30 @@ export const buildSessionQueue = (
   globalSettings: SrsSettings,
   introducedTodayIds: Set<string>,
   exams?: ExamData[]
-): FlashcardData[] => {
+): { queue: FlashcardData[], cardExamMap: Map<string, ExamData> } => {
   const now = new Date();
 
-  const cardExamDateMap = new Map<string, Date>();
+  const cardExamMap = new Map<string, ExamData>();
   const hasExams = exams && exams.length > 0;
   if (hasExams) {
     const sortedExams = [...exams].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     for (const exam of sortedExams) {
         const examCards = getCardsForExam(exam, allDecks, globalSettings);
         for (const card of examCards) {
-            if (!cardExamDateMap.has(card.id)) {
-                cardExamDateMap.set(card.id, new Date(exam.date));
+            if (!cardExamMap.has(card.id)) {
+                cardExamMap.set(card.id, exam);
             }
         }
     }
   }
 
   const examSort = (a: FlashcardData, b: FlashcardData): number => {
-    const dateA = cardExamDateMap.get(a.id);
-    const dateB = cardExamDateMap.get(b.id);
-    if (dateA && !dateB) return -1;
-    if (!dateA && dateB) return 1;
-    if (dateA && dateB) {
-        const diff = dateA.getTime() - dateB.getTime();
+    const examA = cardExamMap.get(a.id);
+    const examB = cardExamMap.get(b.id);
+    if (examA && !examB) return -1;
+    if (!examA && examB) return 1;
+    if (examA && examB) {
+        const diff = new Date(examA.date).getTime() - new Date(examB.date).getTime();
         if (diff !== 0) return diff;
     }
     return 0;
@@ -579,5 +579,7 @@ export const buildSessionQueue = (
                        globalSettings.newReviewOrder === 'after' ? [...sortedReviews, ...sortedNew] :
                        [...sortedNew, ...sortedReviews];
 
-  return [...learningCombined, ...finalWithNew];
+  const finalQueue = [...learningCombined, ...finalWithNew];
+
+  return { queue: finalQueue, cardExamMap };
 };
