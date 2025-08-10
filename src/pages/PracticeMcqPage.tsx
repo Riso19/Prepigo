@@ -184,15 +184,15 @@ const PracticeMcqPage = () => {
       <footer className="sticky bottom-0 w-full bg-secondary/95 backdrop-blur-sm border-t z-20">
         <div className="w-full max-w-2xl mx-auto p-4">
           {isSubmitted ? (
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 md:gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 md:gap-3">
               {gradingButtons.map(({ label, tooltip, grade, icon: Icon, color }) => (
                 <Tooltip key={grade}>
                   <TooltipTrigger asChild>
                     <Button
                       onClick={() => handleGradeAndProceed(grade)}
-                      className={`h-16 text-base flex-col gap-1 text-white font-bold relative ${color}`}
+                      className={`h-14 text-sm flex-col gap-1 text-white font-bold relative ${color}`}
                     >
-                      <Icon className="h-5 w-5" />
+                      <Icon className="h-4 w-4" />
                       <span>{label}</span>
                       <span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">{grade}</span>
                     </Button>
@@ -204,7 +204,7 @@ const PracticeMcqPage = () => {
               ))}
             </div>
           ) : (
-            <Button onClick={handleSubmit} disabled={!selectedOptionId} className="w-full h-16 text-lg relative">
+            <Button onClick={handleSubmit} disabled={!selectedOptionId} className="w-full h-14 text-base relative">
               Check Answer
               <span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">Enter</span>
             </Button>
