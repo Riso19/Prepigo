@@ -35,6 +35,17 @@ const formatInterval = (interval: number): string => {
     return `${Number.isInteger(years) ? years : years.toFixed(1)}y`;
 };
 
+const parseSteps = (steps: string): number[] => {
+  return steps.trim().split(/\s+/).filter(s => s).map(stepStr => {
+    const value = parseFloat(stepStr);
+    if (isNaN(value)) return 1;
+    if (stepStr.endsWith('d')) return value * 24 * 60;
+    if (stepStr.endsWith('h')) return value * 60;
+    if (stepStr.endsWith('s')) return Math.max(1, value / 60);
+    return value;
+  });
+};
+
 const ReviewMcqPage = () => {
   const { bankId } = useParams<{ bankId: string }>();
   const { questionBanks, setQuestionBanks, mcqIntroductionsToday, addIntroducedMcq } = useQuestionBanks();
@@ -53,7 +64,11 @@ const ReviewMcqPage = () => {
   const fsrsInstance = useMemo(() => {
     const settings = getEffectiveMcqSrsSettings(questionBanks, bankId || 'all', globalSettings);
     if (settings.scheduler === 'fsrs6') {
-      return fsrs6(fsrs6GeneratorParameters(settings.mcqFsrs6Parameters));
+      const steps = {
+        learning: parseSteps(settings.learningSteps),
+        relearning: parseSteps(settings.relearningSteps),
+      };
+      return fsrs6(fsrs6GeneratorParameters(settings.mcqFsrs6Parameters), steps);
     }
     return fsrs(settings.mcqFsrsParameters);
   }, [bankId, questionBanks, globalSettings]);

@@ -51,7 +51,11 @@ const StudyPage = () => {
     const currentDeck = deckId ? findDeckById(decks, deckId) : null;
     const settings = currentDeck ? getEffectiveSrsSettings(decks, currentDeck.id, globalSettings) : globalSettings;
     if (settings.scheduler === 'fsrs6') {
-        return fsrs6(fsrs6GeneratorParameters(settings.fsrs6Parameters));
+        const steps = {
+            learning: parseSteps(settings.learningSteps),
+            relearning: parseSteps(settings.relearningSteps),
+        };
+        return fsrs6(fsrs6GeneratorParameters(settings.fsrs6Parameters), steps);
     }
     return fsrs(generatorParameters(settings.fsrsParameters));
   }, [deckId, decks, globalSettings]);
