@@ -19,6 +19,7 @@ import { Rating, State } from 'ts-fsrs';
 import Header from '@/components/Header';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
+import { useSettings } from '@/contexts/SettingsContext';
 
 const customStudySchema = z.object({
   cardLimit: z.coerce.number().int().min(1, "Must be at least 1 card."),
@@ -35,6 +36,7 @@ type CustomStudyFormValues = z.infer<typeof customStudySchema>;
 
 const CustomStudySetupPage = () => {
   const { decks } = useDecks();
+  const { settings } = useSettings();
   const allTags = useMemo(() => getAllTags(decks), [decks]);
   const navigate = useNavigate();
   const [availableCardCount, setAvailableCardCount] = useState<number | null>(null);
@@ -95,10 +97,22 @@ const CustomStudySetupPage = () => {
       const now = new Date();
       switch (filterType) {
         case 'new':
-          cardsToFilter = cardsToFilter.filter(c => !c.srs?.fsrs || c.srs.fsrs.state === State.New);
+          cardsToFilter = cardsToFilter.filter(c => {
+            if (settings.scheduler === 'sm2') {
+              return !c.srs?.sm2 || c.srs.sm2.state === 'new' || !c.srs.sm2.state;
+            }
+            const srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
+            return !srsData || srsData.state === State.New;
+          });
           break;
         case 'due':
-          cardsToFilter = cardsToFilter.filter(c => c.srs?.fsrs && new Date(c.srs.fsrs.due) <= now);
+          cardsToFilter = cardsToFilter.filter(c => {
+            if (settings.scheduler === 'sm2') {
+              return !!c.srs?.sm2 && new Date(c.srs.sm2.due) <= now;
+            }
+            const srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
+            return !!srsData && new Date(srsData.due) <= now;
+          });
           break;
         case 'failed':
           const days = failedDays || 7;
@@ -124,7 +138,7 @@ const CustomStudySetupPage = () => {
     }, 300);
 
     return () => clearTimeout(handler);
-  }, [watchedValues, decks]);
+  }, [watchedValues, decks, settings]);
 
   const onSubmit = async (values: CustomStudyFormValues) => {
     if (availableCardCount === 0) {
@@ -134,8 +148,6 @@ const CustomStudySetupPage = () => {
     
     const loadingToast = toast.loading("Building custom study session...");
     
-    // The calculation logic is the same as in the useEffect, so we can reuse it.
-    // This is slightly inefficient but ensures consistency. A refactor could memoize the result.
     const getAllDecksFlat = (d: DeckData[]): DeckData[] => d.flatMap(deck => [deck, ...(deck.subDecks ? getAllDecksFlat(deck.subDecks) : [])]);
     const allDecks = getAllDecksFlat(decks);
     const cardSet = new Set<FlashcardData>();
@@ -156,10 +168,22 @@ const CustomStudySetupPage = () => {
     const now = new Date();
     switch (values.filterType) {
         case 'new':
-            filteredCards = filteredCards.filter(c => !c.srs?.fsrs || c.srs.fsrs.state === State.New);
+            filteredCards = filteredCards.filter(c => {
+                if (settings.scheduler === 'sm2') {
+                    return !c.srs?.sm2 || c.srs.sm2.state === 'new' || !c.srs.sm2.state;
+                }
+                const srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
+                return !srsData || srsData.state === State.New;
+            });
             break;
         case 'due':
-            filteredCards = filteredCards.filter(c => c.srs?.fsrs && new Date(c.srs.fsrs.due) <= now);
+            filteredCards = filteredCards.filter(c => {
+                if (settings.scheduler === 'sm2') {
+                    return !!c.srs?.sm2 && new Date(c.srs.sm2.due) <= now;
+                }
+                const srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
+                return !!srsData && new Date(srsData.due) <= now;
+            });
             break;
         case 'failed':
             const failedDays = values.failedDays || 7;
