@@ -1,4 +1,4 @@
-import { Stethoscope, Settings } from "lucide-react";
+import { Stethoscope, Settings, BookCopy, HelpCircle, CalendarCheck2 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { Button } from "./ui/button";
 import { cn } from "@/lib/utils";
@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 const Header = () => {
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     cn(
-      "text-base font-medium text-muted-foreground transition-colors hover:text-primary",
+      "flex items-center gap-2 text-base font-medium text-muted-foreground transition-colors hover:text-primary",
       isActive && "text-primary font-semibold"
     );
 
@@ -20,10 +20,13 @@ const Header = () => {
           </NavLink>
           <nav className="hidden md:flex items-center gap-6">
             <NavLink to="/" className={navLinkClass} end>
-              Decks
+              <BookCopy className="h-4 w-4" /> Decks
             </NavLink>
             <NavLink to="/question-bank" className={navLinkClass}>
-              Question Bank
+              <HelpCircle className="h-4 w-4" /> Question Bank
+            </NavLink>
+            <NavLink to="/exams" className={navLinkClass}>
+              <CalendarCheck2 className="h-4 w-4" /> Exams
             </NavLink>
           </nav>
         </div>
