@@ -95,6 +95,18 @@ export const deleteFlashcard = (decks: DeckData[], flashcardId: string): DeckDat
   });
 };
 
+// Immutably delete a deck from the hierarchy
+export const deleteDeck = (decks: DeckData[], deckIdToDelete: string): DeckData[] => {
+  const newDecks = decks.filter(deck => deck.id !== deckIdToDelete);
+
+  return newDecks.map(deck => {
+    if (deck.subDecks) {
+      return { ...deck, subDecks: deleteDeck(deck.subDecks, deckIdToDelete) };
+    }
+    return deck;
+  });
+};
+
 // Immutably update a flashcard in any deck/sub-deck
 export const updateFlashcard = (decks: DeckData[], updatedFlashcard: FlashcardData): DeckData[] => {
   return decks.map(deck => {
