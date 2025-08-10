@@ -28,6 +28,9 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { DeckSettingsForm } from '@/components/DeckSettingsForm';
 import { useSettings } from '@/contexts/SettingsContext';
 import { FlashcardStatus } from '@/components/FlashcardStatus';
+import { format } from 'date-fns';
+import { State } from 'ts-fsrs';
+import { cn } from '@/lib/utils';
 
 const DeckViewPage = () => {
   const { deckId } = useParams<{ deckId: string }>();
@@ -84,6 +87,7 @@ const DeckViewPage = () => {
               <TableHead>Back / Answer</TableHead>
               <TableHead>Tags</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Due Date</TableHead>
               <TableHead className="text-right w-[100px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -112,6 +116,34 @@ const DeckViewPage = () => {
                 </TableCell>
                 <TableCell>
                   <FlashcardStatus card={card} scheduler={effectiveSettings.scheduler} />
+                </TableCell>
+                <TableCell>
+                  {(() => {
+                    const scheduler = effectiveSettings.scheduler;
+                    let dueDate: string | undefined;
+                    let isNew = true;
+
+                    if (scheduler === 'sm2') {
+                      dueDate = card.srs?.sm2?.due;
+                      isNew = !card.srs?.sm2 || card.srs.sm2.state === 'new' || !card.srs.sm2.state;
+                    } else {
+                      const srsData = scheduler === 'fsrs6' ? card.srs?.fsrs6 : card.srs?.fsrs;
+                      dueDate = srsData?.due;
+                      isNew = !srsData || srsData.state === State.New;
+                    }
+
+                    if (card.srs?.isSuspended) return <Badge variant="outline">Suspended</Badge>;
+                    if (isNew || !dueDate) return <Badge variant="secondary">New</Badge>;
+                    
+                    const date = new Date(dueDate);
+                    const isDue = date <= new Date();
+                    
+                    return (
+                      <span className={cn("text-sm", isDue && "text-red-500 font-semibold")}>
+                        {format(date, 'PP')}
+                      </span>
+                    );
+                  })()}
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-2">
@@ -204,6 +236,37 @@ const DeckViewPage = () => {
               <div className="space-y-1">
                 <p className="text-sm font-medium text-muted-foreground">Status</p>
                 <FlashcardStatus card={card} scheduler={effectiveSettings.scheduler} />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">Due Date</p>
+                <div>
+                  {(() => {
+                    const scheduler = effectiveSettings.scheduler;
+                    let dueDate: string | undefined;
+                    let isNew = true;
+
+                    if (scheduler === 'sm2') {
+                      dueDate = card.srs?.sm2?.due;
+                      isNew = !card.srs?.sm2 || card.srs.sm2.state === 'new' || !card.srs.sm2.state;
+                    } else {
+                      const srsData = scheduler === 'fsrs6' ? card.srs?.fsrs6 : card.srs?.fsrs;
+                      dueDate = srsData?.due;
+                      isNew = !srsData || srsData.state === State.New;
+                    }
+
+                    if (card.srs?.isSuspended) return <Badge variant="outline">Suspended</Badge>;
+                    if (isNew || !dueDate) return <Badge variant="secondary">New</Badge>;
+                    
+                    const date = new Date(dueDate);
+                    const isDue = date <= new Date();
+                    
+                    return (
+                      <span className={cn("text-sm font-semibold", isDue && "text-red-500")}>
+                        {format(date, 'PP')}
+                      </span>
+                    );
+                  })()}
+                </div>
               </div>
             </CardContent>
           </Card>

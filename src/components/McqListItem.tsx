@@ -8,6 +8,8 @@ import { HtmlRenderer } from './HtmlRenderer';
 import { CheckCircle2, Pencil, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { McqStatus } from './McqStatus';
+import { format } from 'date-fns';
+import { State } from 'ts-fsrs';
 
 interface McqListItemProps {
   mcq: McqData;
@@ -54,6 +56,29 @@ export const McqListItem = ({ mcq, bankId, onDelete, scheduler }: McqListItemPro
             <div>
               <h4 className="text-sm font-semibold text-muted-foreground mb-2">Status</h4>
               <McqStatus mcq={mcq} scheduler={scheduler} />
+            </div>
+
+            <div>
+              <h4 className="text-sm font-semibold text-muted-foreground mb-2">Due Date</h4>
+              <div>
+                {(() => {
+                  const srsData = scheduler === 'fsrs6' ? mcq.srs?.fsrs6 : mcq.srs?.fsrs;
+                  const dueDate = srsData?.due;
+                  const isNew = !srsData || srsData.state === State.New;
+
+                  if (mcq.srs?.isSuspended) return <Badge variant="outline">Suspended</Badge>;
+                  if (isNew || !dueDate) return <Badge variant="secondary">New</Badge>;
+                  
+                  const date = new Date(dueDate);
+                  const isDue = date <= new Date();
+                  
+                  return (
+                    <span className={cn("text-sm font-semibold", isDue && "text-red-500")}>
+                      {format(date, 'PP')}
+                    </span>
+                  );
+                })()}
+              </div>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2">
