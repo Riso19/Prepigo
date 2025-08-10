@@ -20,6 +20,8 @@ import { FlashcardData } from '@/data/decks';
 import { showSuccess } from '@/utils/toast';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { MediaAwareImage } from '@/components/MediaAwareImage';
+import { HtmlRenderer } from '@/components/HtmlRenderer';
 
 const DeckViewPage = () => {
   const { deckId } = useParams<{ deckId: string }>();
@@ -67,16 +69,16 @@ const DeckViewPage = () => {
             <TableCell className="capitalize font-medium">{card.type === 'imageOcclusion' ? 'Image' : card.type}</TableCell>
             <TableCell>
               {card.type === 'imageOcclusion' ? (
-                <img src={card.imageUrl} alt="Occlusion preview" className="h-16 w-auto rounded-md object-contain bg-muted" />
+                <MediaAwareImage src={card.imageUrl} alt="Occlusion preview" className="h-16 w-auto rounded-md object-contain bg-muted" />
               ) : (
-                <div className="prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: card.type === 'basic' ? card.question : card.text }} />
+                <HtmlRenderer html={card.type === 'basic' ? card.question : card.text} className="prose dark:prose-invert max-w-none" />
               )}
             </TableCell>
             <TableCell>
               {card.type === 'basic' ? (
-                <div className="prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: card.answer }} />
+                <HtmlRenderer html={card.answer} className="prose dark:prose-invert max-w-none" />
               ) : (
-                <div className="prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: card.description || '' }} />
+                <HtmlRenderer html={card.description || ''} className="prose dark:prose-invert max-w-none" />
               )}
             </TableCell>
             <TableCell className="text-right">
@@ -145,17 +147,17 @@ const DeckViewPage = () => {
             <div className="space-y-1">
               <p className="text-sm font-medium text-muted-foreground">Front / Question</p>
               {card.type === 'imageOcclusion' ? (
-                <img src={card.imageUrl} alt="Occlusion preview" className="w-full h-auto rounded-md object-contain bg-muted" />
+                <MediaAwareImage src={card.imageUrl} alt="Occlusion preview" className="w-full h-auto rounded-md object-contain bg-muted" />
               ) : (
-                <div className="prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: card.type === 'basic' ? card.question : card.text }} />
+                <HtmlRenderer html={card.type === 'basic' ? card.question : card.text} className="prose dark:prose-invert max-w-none" />
               )}
             </div>
             <div className="space-y-1">
               <p className="text-sm font-medium text-muted-foreground">Back / Answer</p>
               {card.type === 'basic' ? (
-                <div className="prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: card.answer }} />
+                <HtmlRenderer html={card.answer} className="prose dark:prose-invert max-w-none" />
               ) : (
-                <div className="prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: card.description || '' }} />
+                <HtmlRenderer html={card.description || ''} className="prose dark:prose-invert max-w-none" />
               )}
             </div>
           </CardContent>
