@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ExamData } from '@/data/exams';
 import { useDecks } from '@/contexts/DecksContext';
@@ -21,8 +21,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useState } from 'react';
 import { useQuestionBanks } from '@/contexts/QuestionBankContext';
+import { findDeckById } from '@/lib/deck-utils';
+import { findQuestionBankById } from '@/lib/question-bank-utils';
+import { Badge } from './ui/badge';
 
 interface ExamItemProps {
   exam: ExamData;
@@ -40,6 +42,18 @@ export const ExamItem = ({ exam }: ExamItemProps) => {
   const itemsInScope = useMemo(() => [...cardsInScope, ...mcqsInScope], [cardsInScope, mcqsInScope]);
 
   const progress = useMemo(() => calculateExamProgress(exam, itemsInScope, settings), [exam, itemsInScope, settings]);
+
+  const deckNames = useMemo(() => {
+    return exam.deckIds
+      .map(id => findDeckById(decks, id)?.name)
+      .filter(Boolean) as string[];
+  }, [exam.deckIds, decks]);
+
+  const questionBankNames = useMemo(() => {
+    return (exam.questionBankIds || [])
+      .map(id => findQuestionBankById(questionBanks, id)?.name)
+      .filter(Boolean) as string[];
+  }, [exam.questionBankIds, questionBanks]);
 
   const examDate = new Date(exam.date);
   const daysLeft = differenceInDays(examDate, new Date());
@@ -86,21 +100,38 @@ export const ExamItem = ({ exam }: ExamItemProps) => {
           </div>
           <div className="mt-4 pt-4 border-t">
             <h4 className="text-sm font-semibold mb-2">Scope</h4>
-            <div className="text-sm text-muted-foreground space-y-1">
-              <div className="flex items-center gap-2">
-                <FileText className="h-4 w-4 text-green-500" />
-                <span>{exam.deckIds.length} deck(s)</span>
-              </div>
-              {exam.questionBankIds?.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <HelpCircle className="h-4 w-4 text-purple-500" />
-                  <span>{exam.questionBankIds.length} question bank(s)</span>
+            <div className="space-y-3">
+              {deckNames.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <FileText className="h-4 w-4 text-green-500 flex-shrink-0" />
+                    <span className="font-medium text-sm text-foreground/90">Decks</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1 pl-6">
+                    {deckNames.map(name => <Badge key={name} variant="outline" className="font-normal">{name}</Badge>)}
+                  </div>
+                </div>
+              )}
+              {questionBankNames.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <HelpCircle className="h-4 w-4 text-purple-500 flex-shrink-0" />
+                    <span className="font-medium text-sm text-foreground/90">Question Banks</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1 pl-6">
+                    {questionBankNames.map(name => <Badge key={name} variant="outline" className="font-normal">{name}</Badge>)}
+                  </div>
                 </div>
               )}
               {exam.tags.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <Tag className="h-4 w-4 text-blue-500" />
-                  <span>{exam.tags.length} tag(s)</span>
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Tag className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                    <span className="font-medium text-sm text-foreground/90">Tags</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1 pl-6">
+                    {exam.tags.map(tag => <Badge key={tag} variant="secondary">{tag}</Badge>)}
+                  </div>
                 </div>
               )}
             </div>
