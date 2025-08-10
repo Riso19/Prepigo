@@ -86,30 +86,39 @@ const StatisticsPage = () => {
     Suspended: '#6b7280', // gray-500
   };
 
-  const renderPieChart = (data: Record<ItemStatus, number>, title: string) => {
+  const renderPieChart = (data: Record<ItemStatus, number>) => {
     const chartData = Object.entries(data)
       .filter(([, value]) => value > 0)
       .map(([name, value]) => ({ name, value }));
 
     if (chartData.length === 0) {
-      return <div className="flex items-center justify-center h-full text-muted-foreground">No data to display</div>;
+      return <div className="flex items-center justify-center h-[250px] text-muted-foreground">No data to display</div>;
     }
 
     return (
-      <>
-        <CardTitle>{title}</CardTitle>
-        <ResponsiveContainer width="100%" height={isMobile ? 200 : 250}>
-          <PieChart>
-            <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={isMobile ? 60 : 80}>
-              {chartData.map((entry) => (
-                <Cell key={`cell-${entry.name}`} fill={PIE_COLORS[entry.name as ItemStatus]} />
-              ))}
-            </Pie>
-            <Tooltip />
-            <Legend formatter={(value, entry) => `${value} (${entry.payload.value})`} />
-          </PieChart>
-        </ResponsiveContainer>
-      </>
+      <ResponsiveContainer width="100%" height={250}>
+        <PieChart>
+          <Pie 
+            data={chartData} 
+            dataKey="value" 
+            nameKey="name" 
+            cx={isMobile ? "35%" : "50%"} 
+            cy="50%" 
+            outerRadius={isMobile ? 60 : 80}
+          >
+            {chartData.map((entry) => (
+              <Cell key={`cell-${entry.name}`} fill={PIE_COLORS[entry.name as ItemStatus]} />
+            ))}
+          </Pie>
+          <Tooltip />
+          <Legend 
+            layout={isMobile ? 'vertical' : 'horizontal'}
+            verticalAlign={isMobile ? 'middle' : 'bottom'}
+            align={isMobile ? 'right' : 'center'}
+            formatter={(value, entry) => `${value} (${entry.payload.value})`} 
+          />
+        </PieChart>
+      </ResponsiveContainer>
     );
   };
 
@@ -117,7 +126,7 @@ const StatisticsPage = () => {
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-grow container mx-auto p-4 md:p-8">
-        <h1 className="text-3xl font-bold mb-6">Statistics</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold mb-6">Statistics</h1>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
           <Card>
             <CardHeader><CardTitle>Total Decks</CardTitle></CardHeader>
@@ -162,14 +171,20 @@ const StatisticsPage = () => {
 
           <Card>
             <CardHeader>
-              {renderPieChart(maturityData.flashcardStatusCounts, "Flashcard Maturity")}
+              <CardTitle>Flashcard Maturity</CardTitle>
             </CardHeader>
+            <CardContent className="p-0">
+              {renderPieChart(maturityData.flashcardStatusCounts)}
+            </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              {renderPieChart(maturityData.mcqStatusCounts, "MCQ Maturity")}
+              <CardTitle>MCQ Maturity</CardTitle>
             </CardHeader>
+            <CardContent className="p-0">
+              {renderPieChart(maturityData.mcqStatusCounts)}
+            </CardContent>
           </Card>
         </div>
       </main>
