@@ -91,6 +91,11 @@ export const fsrs6 = (params: FSRS6Parameters, steps: FSRS6Steps) => {
                 const delay = current_steps[0];
                 next_card.scheduled_days = Math.floor(delay / 1440);
                 next_card.due = new Date(now.getTime() + delay * 60 * 1000);
+            } else if (rating === Rating.Hard) {
+                const current_step_index = next_card.learning_steps!;
+                const delay = current_steps[Math.min(current_step_index, current_steps.length - 1)];
+                next_card.scheduled_days = Math.floor(delay / 1440);
+                next_card.due = new Date(now.getTime() + delay * 60 * 1000);
             } else if (rating === Rating.Good) {
                 const next_step_index = next_card.learning_steps! + 1;
                 if (next_step_index >= current_steps.length) {
