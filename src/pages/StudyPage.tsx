@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import { useDecks } from "@/contexts/DecksContext";
+import { useExams } from "@/contexts/ExamsContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { findDeckById, updateFlashcard, getEffectiveSrsSettings, buildSessionQueue } from "@/lib/deck-utils";
 import { addReviewLog } from "@/lib/idb";
@@ -13,6 +14,7 @@ import { ArrowLeft, Home } from "lucide-react";
 import { fsrs, Card, State, Rating, RecordLog, generatorParameters, createEmptyCard } from "ts-fsrs";
 import { fsrs6, Card as Fsrs6Card, generatorParameters as fsrs6GeneratorParameters } from "@/lib/fsrs6";
 import { sm2, Sm2Quality } from "@/lib/sm2";
+import { toast } from "sonner";
 
 const parseSteps = (steps: string): number[] => {
   return steps.trim().split(/\s+/).filter(s => s).map(stepStr => {
@@ -29,6 +31,7 @@ const StudyPage = () => {
   const { deckId } = useParams<{ deckId: string }>();
   const location = useLocation();
   const { decks, setDecks, introductionsToday, addIntroducedCard } = useDecks();
+  const { setExams } = useExams();
   const { settings: globalSettings } = useSettings();
   const navigate = useNavigate();
   
@@ -36,6 +39,7 @@ const StudyPage = () => {
   const [sessionQueue, setSessionQueue] = useState<FlashcardData[]>([]);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [buriedNoteIds, setBuriedNoteIds] = useState<Set<string>>(new Set());
+  const [sessionCompleted, setSessionCompleted] = useState(false);
   
   const [fsrsOutcomes, setFsrsOutcomes] = useState<RecordLog | null>(null);
 
@@ -62,8 +66,6 @@ const StudyPage = () => {
     return null;
   }, [sessionQueue, currentCardIndex, buriedNoteIds]);
 
-  // This effect sets up the session queue. It should only run when the session identity changes (deckId or custom session state).
-  // It intentionally does not depend on `decks` to prevent resetting the session every time a card's SRS data is updated.
   useEffect(() => {
     if (deckId === 'custom' && location.state) {
         const { queue, srsEnabled, title } = location.state;
@@ -90,6 +92,7 @@ const StudyPage = () => {
     
     setCurrentCardIndex(0);
     setBuriedNoteIds(new Set());
+    setSessionCompleted(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deckId, location.state]);
 
@@ -237,7 +240,6 @@ const StudyPage = () => {
 
     setDecks(prevDecks => updateFlashcard(prevDecks, updatedCard));
     
-    // Also update the card within the current session queue to prevent stale data
     setSessionQueue(prevQueue => 
         prevQueue.map(card => card.id === updatedCard.id ? updatedCard : card)
     );
@@ -261,7 +263,7 @@ const StudyPage = () => {
 
     setIsFlipped(false);
     setCurrentCardIndex(actualCardIndex + 1);
-  }, [currentCard, sessionQueue, decks, deckId, globalSettings, setDecks, fsrsOutcomes, fsrsInstance, addIntroducedCard, isSrsEnabled]);
+  }, [currentCard, sessionQueue, decks, deckId, globalSettings, setDecks, fsrsOutcomes, fsrsInstance, addIntroducedCard, isSrsEnabled, setExams]);
 
   useEffect(() => {
     if (isFlipped && currentCard && isSrsEnabled) {
@@ -293,6 +295,29 @@ const StudyPage = () => {
   }, [isFlipped, currentCard, decks, deckId, globalSettings, fsrsInstance, isSrsEnabled]);
 
   useEffect(() => {
+    if (!currentCard && sessionQueue.length > 0 && !sessionCompleted) {
+      setSessionCompleted(true);
+      const { examId, scheduleDate, cardIdsForCompletion } = location.state || {};
+      if (examId && scheduleDate && cardIdsForCompletion) {
+        setExams(prevExams => prevExams.map(exam => {
+          if (exam.id === examId) {
+            const newSchedule = exam.schedule.map(day => {
+              if (day.date === scheduleDate) {
+                const completedIds = new Set([...day.completedCardIds, ...cardIdsForCompletion]);
+                return { ...day, completedCardIds: Array.from(completedIds) };
+              }
+              return day;
+            });
+            return { ...exam, schedule: newSchedule };
+          }
+          return exam;
+        }));
+        toast.success("Daily exam progress saved!");
+      }
+    }
+  }, [currentCard, location.state, sessionQueue.length, setExams, sessionCompleted]);
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.code === 'Space' && !isFlipped) {
         event.preventDefault();
@@ -301,7 +326,7 @@ const StudyPage = () => {
       }
       if (isFlipped) {
         if (!isSrsEnabled) {
-            handleRating(Rating.Good); // Just advances to next card
+            handleRating(Rating.Good);
             return;
         }
         switch (event.key) {
@@ -325,7 +350,22 @@ const StudyPage = () => {
     return <div className="min-h-screen flex flex-col items-center justify-center text-center p-4"><h2 className="text-2xl font-bold mb-4">All caught up!</h2><p className="text-muted-foreground mb-6">You have no cards due for review in this deck.</p><Button asChild><Link to="/"><Home className="mr-2 h-4 w-4" /> Go back to My Decks</Link></Button></div>;
   }
   if (!currentCard) {
-    return <div className="min-h-screen flex flex-col items-center justify-center text-center p-4"><h2 className="text-2xl font-bold mb-4">Session Complete!</h2><p className="text-muted-foreground mb-6">You've reviewed all available cards for this session.</p><Button asChild><Link to="/"><Home className="mr-2 h-4 w-4" /> Go back to My Decks</Link></Button></div>;
+    const { examId } = location.state || {};
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center text-center p-4">
+        <h2 className="text-2xl font-bold mb-4">Session Complete!</h2>
+        <p className="text-muted-foreground mb-6">You've reviewed all available cards for this session.</p>
+        {examId ? (
+          <Button asChild>
+            <Link to={`/exams/${examId}`}><ArrowLeft className="mr-2 h-4 w-4" /> Back to Exam Schedule</Link>
+          </Button>
+        ) : (
+          <Button asChild>
+            <Link to="/"><Home className="mr-2 h-4 w-4" /> Go back to My Decks</Link>
+          </Button>
+        )}
+      </div>
+    );
   }
 
   const handleCardClick = () => !isFlipped && setIsFlipped(true);
@@ -376,7 +416,7 @@ const StudyPage = () => {
             }
             const result = sm2(qualityMap[rating], sm2Params, sm2State);
             return formatInterval(result.interval);
-        } else { // This is for 'new', 'learning', 'relearning' states
+        } else {
             const steps = cardState === 'relearning' ? parseSteps(settings.relearningSteps) : parseSteps(settings.learningSteps);
             const currentStep = sm2State.learning_step || 0;
 
@@ -390,7 +430,6 @@ const StudyPage = () => {
             if (rating === Rating.Good || rating === Rating.Hard) {
                 const nextStepIndex = currentStep + 1;
                 if (nextStepIndex >= steps.length) {
-                    // Card graduates
                     const graduationInterval = cardState === 'relearning' ? sm2State.interval : settings.sm2GraduatingInterval;
                     return formatInterval(graduationInterval);
                 }
@@ -432,7 +471,7 @@ const StudyPage = () => {
 
   return (
     <div className="min-h-screen w-full bg-secondary/50 flex flex-col">
-      <div className="flex-grow w-full pb-32"> {/* Padding bottom to clear sticky footer */}
+      <div className="flex-grow w-full pb-32">
         <div className="relative p-4 sm:p-6 md:p-8">
           <Button variant="ghost" onClick={() => navigate("/")} className="absolute top-4 left-4 z-10">
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Decks

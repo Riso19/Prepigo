@@ -4,6 +4,7 @@ import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Calendar, Trash2 } from 'lucide-react';
 import { format, differenceInDays, parseISO } from 'date-fns';
+import { Link } from 'react-router-dom';
 
 interface ExamItemProps {
   exam: ExamData;
@@ -43,7 +44,9 @@ export const ExamItem = ({ exam, onDelete }: ExamItemProps) => {
         </div>
       </CardContent>
       <CardFooter>
-        <Button className="w-full" disabled>View Schedule & Study</Button>
+        <Button className="w-full" asChild>
+          <Link to={`/exams/${exam.id}`}>View Schedule & Study</Link>
+        </Button>
       </CardFooter>
     </Card>
   );
