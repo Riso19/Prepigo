@@ -45,6 +45,7 @@ const PracticeMcqPage = () => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isAnswerCorrect, setIsAnswerCorrect] = useState<boolean | null>(null);
   const [sessionStats, setSessionStats] = useState({ correct: 0, incorrect: 0 });
   const [isFinished, setIsFinished] = useState(false);
   const [dueTimeStrings, setDueTimeStrings] = useState<Record<string, string> | null>(null);
@@ -68,55 +69,6 @@ const PracticeMcqPage = () => {
       setSessionQueue(shuffle(allMcqs));
     }
   }, [bankId, bank, questionBanks]);
-
-  useEffect(() => {
-    if (isSubmitted && currentQuestion) {
-        const srsData = settings.scheduler === 'fsrs6' ? currentQuestion.srs?.fsrs6 : currentQuestion.srs?.fsrs;
-        const card: FsrsCard | Fsrs6Card = srsData
-            ? {
-                due: new Date(srsData.due),
-                stability: srsData.stability,
-                difficulty: srsData.difficulty,
-                elapsed_days: srsData.elapsed_days,
-                scheduled_days: srsData.scheduled_days,
-                reps: srsData.reps,
-                lapses: srsData.lapses,
-                state: srsData.state,
-                last_review: srsData.last_review ? new Date(srsData.last_review) : undefined,
-                learning_steps: srsData.learning_steps ?? 0,
-            }
-            : createEmptyCard(new Date());
-
-        const outcomes = fsrsInstance.repeat(card, new Date());
-        const now = new Date();
-        const newDueStrings: Record<string, string> = {};
-
-        const ratings = [Rating.Again, Rating.Hard, Rating.Good, Rating.Easy];
-        ratings.forEach(rating => {
-            const nextDueDate = outcomes[rating].card.due;
-            const diffDays = (nextDueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
-            newDueStrings[rating] = formatInterval(diffDays);
-        });
-        
-        setDueTimeStrings(newDueStrings);
-    } else {
-        setDueTimeStrings(null);
-    }
-  }, [isSubmitted, currentQuestion, fsrsInstance, settings.scheduler]);
-
-  const handleSelectAndSubmit = useCallback((optionId: string) => {
-    if (isSubmitted) return;
-
-    setSelectedOptionId(optionId);
-
-    const correctOption = currentQuestion.options.find(opt => opt.isCorrect);
-    if (optionId === correctOption?.id) {
-      setSessionStats(prev => ({ ...prev, correct: prev.correct + 1 }));
-    } else {
-      setSessionStats(prev => ({ ...prev, incorrect: prev.incorrect + 1 }));
-    }
-    setIsSubmitted(true);
-  }, [isSubmitted, currentQuestion]);
 
   const handleGradeAndProceed = useCallback(async (rating: Rating) => {
     if (!currentQuestion) return;
@@ -173,16 +125,73 @@ const PracticeMcqPage = () => {
       setCurrentQuestionIndex(prev => prev + 1);
       setSelectedOptionId(null);
       setIsSubmitted(false);
+      setIsAnswerCorrect(null);
     } else {
       setIsFinished(true);
     }
   }, [currentQuestion, currentQuestionIndex, sessionQueue.length, fsrsInstance, setQuestionBanks, settings.scheduler]);
+
+  const handleSelectAndSubmit = useCallback((optionId: string) => {
+    if (isSubmitted) return;
+
+    setSelectedOptionId(optionId);
+    setIsSubmitted(true);
+
+    const correctOption = currentQuestion.options.find(opt => opt.isCorrect);
+    const isCorrect = optionId === correctOption?.id;
+    setIsAnswerCorrect(isCorrect);
+
+    if (isCorrect) {
+      setSessionStats(prev => ({ ...prev, correct: prev.correct + 1 }));
+    } else {
+      setSessionStats(prev => ({ ...prev, incorrect: prev.incorrect + 1 }));
+      setTimeout(() => {
+        handleGradeAndProceed(Rating.Again);
+      }, 3000);
+    }
+  }, [isSubmitted, currentQuestion, handleGradeAndProceed]);
+
+  useEffect(() => {
+    if (isSubmitted && currentQuestion && isAnswerCorrect) {
+        const srsData = settings.scheduler === 'fsrs6' ? currentQuestion.srs?.fsrs6 : currentQuestion.srs?.fsrs;
+        const card: FsrsCard | Fsrs6Card = srsData
+            ? {
+                due: new Date(srsData.due),
+                stability: srsData.stability,
+                difficulty: srsData.difficulty,
+                elapsed_days: srsData.elapsed_days,
+                scheduled_days: srsData.scheduled_days,
+                reps: srsData.reps,
+                lapses: srsData.lapses,
+                state: srsData.state,
+                last_review: srsData.last_review ? new Date(srsData.last_review) : undefined,
+                learning_steps: srsData.learning_steps ?? 0,
+            }
+            : createEmptyCard(new Date());
+
+        const outcomes = fsrsInstance.repeat(card, new Date());
+        const now = new Date();
+        const newDueStrings: Record<string, string> = {};
+
+        const ratings = [Rating.Again, Rating.Hard, Rating.Good, Rating.Easy];
+        ratings.forEach(rating => {
+            const nextDueDate = outcomes[rating].card.due;
+            const diffDays = (nextDueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+            newDueStrings[rating] = formatInterval(diffDays);
+        });
+        
+        setDueTimeStrings(newDueStrings);
+    } else {
+        setDueTimeStrings(null);
+    }
+  }, [isSubmitted, currentQuestion, fsrsInstance, settings.scheduler, isAnswerCorrect]);
 
   const handleRestart = useCallback(() => {
     setSessionQueue(shuffle(sessionQueue));
     setCurrentQuestionIndex(0);
     setSelectedOptionId(null);
     setIsSubmitted(false);
+    setIsAnswerCorrect(null);
     setSessionStats({ correct: 0, incorrect: 0 });
     setIsFinished(false);
   }, [sessionQueue]);
@@ -196,7 +205,7 @@ const PracticeMcqPage = () => {
         }
       }
 
-      if (isSubmitted) {
+      if (isSubmitted && isAnswerCorrect) {
         const ratingMap: { [key: string]: Rating } = {
             '1': Rating.Again, '2': Rating.Hard, '3': Rating.Good, '4': Rating.Easy, '5': Rating.Easy,
         };
@@ -205,7 +214,7 @@ const PracticeMcqPage = () => {
             event.preventDefault();
             handleGradeAndProceed(rating);
         }
-      } else {
+      } else if (!isSubmitted) {
         const keyNumber = parseInt(event.key, 10);
         if (currentQuestion && !isNaN(keyNumber) && keyNumber > 0 && keyNumber <= currentQuestion.options.length) {
           const optionIndex = keyNumber - 1;
@@ -220,7 +229,7 @@ const PracticeMcqPage = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isSubmitted, currentQuestion, handleSelectAndSubmit, handleGradeAndProceed]);
+  }, [isSubmitted, isAnswerCorrect, currentQuestion, handleSelectAndSubmit, handleGradeAndProceed]);
 
   const pageTitle = bankId === 'all' ? "Practicing All MCQs" : `Practicing: ${bank?.name}`;
 
@@ -292,26 +301,32 @@ const PracticeMcqPage = () => {
       <footer className="sticky bottom-0 w-full bg-secondary/95 backdrop-blur-sm border-t z-20">
         <div className="w-full max-w-2xl mx-auto p-4">
           {isSubmitted ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 md:gap-3">
-              {gradingButtons.map(({ label, tooltip, grade, rating, icon: Icon, color }) => (
-                <Tooltip key={grade}>
-                  <TooltipTrigger asChild>
-                    <Button
-                      onClick={() => handleGradeAndProceed(rating)}
-                      className={`h-16 text-sm flex-col gap-1 text-white font-bold relative ${color}`}
-                    >
-                      <Icon className="h-4 w-4" />
-                      <span>{label}</span>
-                      {dueTimeStrings && <span className="text-xs font-normal opacity-80">{dueTimeStrings[rating]}</span>}
-                      <span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">{grade}</span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>{tooltip}</p>
-                  </TooltipContent>
-                </Tooltip>
-              ))}
-            </div>
+            isAnswerCorrect ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 md:gap-3">
+                {gradingButtons.map(({ label, tooltip, grade, rating, icon: Icon, color }) => (
+                  <Tooltip key={grade}>
+                    <TooltipTrigger asChild>
+                      <Button
+                        onClick={() => handleGradeAndProceed(rating)}
+                        className={`h-16 text-sm flex-col gap-1 text-white font-bold relative ${color}`}
+                      >
+                        <Icon className="h-4 w-4" />
+                        <span>{label}</span>
+                        {dueTimeStrings && <span className="text-xs font-normal opacity-80">{dueTimeStrings[rating]}</span>}
+                        <span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">{grade}</span>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{tooltip}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                ))}
+              </div>
+            ) : (
+              <div className="h-16 flex items-center justify-center">
+                <p className="text-red-500 font-semibold animate-pulse">Incorrect. Moving to the next question...</p>
+              </div>
+            )
           ) : (
             <div className="h-16" />
           )}
