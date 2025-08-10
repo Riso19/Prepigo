@@ -142,3 +142,134 @@ export const calculateForecast = (items: (FlashcardData | McqData)[], settings: 
     reviews: count,
   }));
 };
+
+export const calculateAverageRetention = (items: (FlashcardData | McqData)[], settings: SrsSettings) => {
+    const scheduler = settings.scheduler;
+    if (scheduler === 'sm2') return null;
+
+    const w = scheduler === 'fsrs6' ? settings.fsrs6Parameters.w : settings.fsrsParameters.w;
+    const factor = Math.pow(0.9, -1 / w[20]) - 1;
+    const retrievability = (t: number, s: number): number => Math.pow(1 + factor * t / s, -w[20]);
+
+    const now = new Date();
+    let totalRetention = 0;
+    let reviewedCount = 0;
+
+    items.forEach(item => {
+        const srsData = scheduler === 'fsrs6' ? item.srs?.fsrs6 : item.srs?.fsrs;
+        if (srsData && srsData.state === State.Review && srsData.last_review) {
+            reviewedCount++;
+            const elapsed_days = differenceInDays(now, new Date(srsData.last_review));
+            totalRetention += retrievability(elapsed_days, srsData.stability);
+        }
+    });
+
+    if (reviewedCount === 0) return 0;
+    return (totalRetention / reviewedCount) * 100;
+};
+
+export const calculateAtRiskItems = (items: (FlashcardData | McqData)[], settings: SrsSettings, riskThreshold = 0.4) => {
+    const scheduler = settings.scheduler;
+    if (scheduler === 'sm2') return null;
+
+    const w = scheduler === 'fsrs6' ? settings.fsrs6Parameters.w : settings.fsrsParameters.w;
+    const factor = Math.pow(0.9, -1 / w[20]) - 1;
+    const retrievability = (t: number, s: number): number => Math.pow(1 + factor * t / s, -w[20]);
+
+    const now = new Date();
+    let atRiskCount = 0;
+
+    items.forEach(item => {
+        const srsData = scheduler === 'fsrs6' ? item.srs?.fsrs6 : item.srs?.fsrs;
+        if (srsData && srsData.state === State.Review && srsData.last_review) {
+            const elapsed_days = differenceInDays(now, new Date(srsData.last_review));
+            const r = retrievability(elapsed_days, srsData.stability);
+            if ((1 - r) > riskThreshold) {
+                atRiskCount++;
+            }
+        }
+    });
+    return atRiskCount;
+};
+
+export const calculateCumulativeStabilityGrowth = (logs: (ReviewLog | McqReviewLog)[]) => {
+    let totalGrowth = 0;
+    const logsByItem = new Map<string, (ReviewLog | McqReviewLog)[]>();
+
+    logs.forEach(log => {
+        const id = 'cardId' in log ? log.cardId : (log as McqReviewLog).mcqId;
+        if (!logsByItem.has(id)) {
+            logsByItem.set(id, []);
+        }
+        logsByItem.get(id)!.push(log);
+    });
+
+    logsByItem.forEach(itemLogs => {
+        itemLogs.sort((a, b) => new Date(a.review).getTime() - new Date(b.review).getTime());
+        let lastStability = 0;
+        itemLogs.forEach(log => {
+            if (log.rating > Rating.Again) {
+                const growth = log.stability - lastStability;
+                if (growth > 0) {
+                    totalGrowth += growth;
+                }
+            }
+            lastStability = log.stability;
+        });
+    });
+
+    return totalGrowth;
+};
+
+export const calculateSuspectedGuesses = (logs: (ReviewLog | McqReviewLog)[]) => {
+    const correctLogs = logs.filter(log => log.rating > Rating.Again && log.duration);
+    if (correctLogs.length < 10) return 0;
+
+    const durations = correctLogs.map(log => log.duration!);
+    const avgDuration = durations.reduce((a, b) => a + b, 0) / durations.length;
+    const stdDev = Math.sqrt(durations.map(x => Math.pow(x - avgDuration, 2)).reduce((a, b) => a + b) / durations.length);
+    
+    const fastThreshold = avgDuration - stdDev;
+
+    let suspectedGuesses = 0;
+    correctLogs.forEach(log => {
+        if (log.duration! < fastThreshold && log.rating === Rating.Hard) {
+            suspectedGuesses++;
+        }
+    });
+
+    return suspectedGuesses;
+};
+
+export const calculateLearningCurve = (logs: (ReviewLog | McqReviewLog)[]) => {
+    const reviewsByItem = new Map<string, { rating: Rating }[]>();
+    logs.forEach(log => {
+        const id = 'cardId' in log ? log.cardId : (log as McqReviewLog).mcqId;
+        if (!reviewsByItem.has(id)) {
+            reviewsByItem.set(id, []);
+        }
+        reviewsByItem.get(id)!.push({ rating: log.rating });
+    });
+
+    const maxReviews = 10;
+    const accuracyByReviewNum = Array.from({ length: maxReviews }, () => ({ correct: 0, total: 0 }));
+
+    reviewsByItem.forEach(reviews => {
+        reviews.forEach((review, index) => {
+            if (index < maxReviews) {
+                accuracyByReviewNum[index].total++;
+                if (review.rating > Rating.Again) {
+                    accuracyByReviewNum[index].correct++;
+                }
+            }
+        });
+    });
+
+    return accuracyByReviewNum
+        .map((data, index) => ({
+            review: index + 1,
+            accuracy: data.total > 0 ? (data.correct / data.total) * 100 : 0,
+            reviews: data.total,
+        }))
+        .filter(d => d.reviews > 0);
+};

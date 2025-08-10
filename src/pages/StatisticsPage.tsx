@@ -3,7 +3,7 @@ import { useDecks } from '@/contexts/DecksContext';
 import { useQuestionBanks } from '@/contexts/QuestionBankContext';
 import Header from '@/components/Header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, CartesianGrid, LabelList } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, CartesianGrid, LabelList, LineChart, Line } from 'recharts';
 import { getAllFlashcardsFromDeck } from '@/lib/card-utils';
 import { getAllMcqsFromBank } from '@/lib/question-bank-utils';
 import { getItemStatus, ItemStatus } from '@/lib/srs-utils';
@@ -11,14 +11,14 @@ import { useSettings } from '@/contexts/SettingsContext';
 import { useQuery } from '@tanstack/react-query';
 import { getAllReviewLogsFromDB, getAllMcqReviewLogsFromDB, McqReviewLog } from '@/lib/idb';
 import { format, subDays, startOfDay, isSameDay, differenceInDays } from 'date-fns';
-import { Loader2, TrendingUp, CalendarDays, Flame, BookOpen, Clock, Zap, HelpCircle, AlertTriangle } from 'lucide-react';
+import { Loader2, TrendingUp, CalendarDays, Flame, BookOpen, Clock, Zap, HelpCircle, AlertTriangle, BrainCircuit, ShieldAlert, BarChartBig, Lightbulb } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { State } from 'ts-fsrs';
 import { DeckData, FlashcardData, ReviewLog } from '@/data/decks';
 import { McqData, QuestionBankData } from '@/data/questionBanks';
 import { PerformanceAnalytics } from '@/components/PerformanceAnalytics';
 import { PerformanceGraph } from '@/components/PerformanceGraph';
-import { calculateAccuracy, calculateDueStats, calculateIntervalGrowth, calculateRetentionDistribution, calculateForecast } from '@/lib/analytics-utils';
+import { calculateAccuracy, calculateDueStats, calculateIntervalGrowth, calculateRetentionDistribution, calculateForecast, calculateAverageRetention, calculateAtRiskItems, calculateCumulativeStabilityGrowth, calculateSuspectedGuesses, calculateLearningCurve } from '@/lib/analytics-utils';
 
 const StatisticsPage = () => {
   const { decks } = useDecks();
@@ -95,40 +95,6 @@ const StatisticsPage = () => {
     return { reviewsToday, reviewsPast7Days, reviewsPast30Days, currentStreak, longestStreak };
   }, [logs]);
 
-  const timeStats = useMemo(() => {
-    const calculateMetrics = (logSet: (ReviewLog | McqReviewLog)[]) => {
-      if (!logSet || logSet.length === 0) {
-        return {
-          totalTimeFormatted: "0h 0m",
-          avgPerHour: 0,
-        };
-      }
-
-      const totalDurationMs = logSet.reduce((acc, log) => acc + (log.duration || 0), 0);
-      const totalDurationHours = totalDurationMs / (1000 * 60 * 60);
-
-      const hours = Math.floor(totalDurationHours);
-      const minutes = Math.round((totalDurationHours - hours) * 60);
-      const totalTimeFormatted = `${hours}h ${minutes}m`;
-
-      const avgPerHour = totalDurationHours > 0 ? Math.round(logSet.length / totalDurationHours) : 0;
-
-      return { totalTimeFormatted, avgPerHour };
-    };
-
-    if (!logs) {
-      return {
-        flashcards: { totalTimeFormatted: "0h 0m", avgPerHour: 0 },
-        mcqs: { totalTimeFormatted: "0h 0m", avgPerHour: 0 },
-      };
-    }
-
-    return {
-      flashcards: calculateMetrics(logs.cardLogs),
-      mcqs: calculateMetrics(logs.mcqLogs),
-    };
-  }, [logs]);
-
   const maturityData = useMemo(() => {
     const flashcardStatusCounts: Record<ItemStatus, number> = { New: 0, Learning: 0, Relearning: 0, Young: 0, Mature: 0, Suspended: 0 };
     collectionStats.allFlashcards.forEach(card => {
@@ -144,21 +110,6 @@ const StatisticsPage = () => {
 
     return { flashcardStatusCounts, mcqStatusCounts };
   }, [collectionStats, settings.scheduler]);
-
-  const reviewHistoryData = useMemo(() => {
-    if (!logs) return [];
-    const reviewLogs = [...logs.cardLogs, ...logs.mcqLogs];
-    const today = startOfDay(new Date());
-    const days = Array.from({ length: 30 }, (_, i) => subDays(today, i)).reverse();
-    
-    return days.map(day => {
-      const count = reviewLogs.filter(log => isSameDay(new Date(log.review), day)).length;
-      return {
-        date: format(day, 'MMM d'),
-        reviews: count,
-      };
-    });
-  }, [logs]);
 
   const performanceGraphData = useMemo(() => {
     if (!logs) return { deckPerformance: [], qBankPerformance: [] };
@@ -285,6 +236,32 @@ const StatisticsPage = () => {
       return calculateForecast(combinedItems, settings);
   }, [collectionStats, settings]);
 
+  const advancedStats = useMemo(() => {
+    if (!logs) return null;
+    const mcqScheduler = settings.scheduler === 'sm2' ? 'fsrs' : settings.scheduler;
+    const mcqSettings = {...settings, scheduler: mcqScheduler};
+    return {
+        flashcards: {
+            avgRetention: calculateAverageRetention(collectionStats.allFlashcards, settings),
+            atRisk: calculateAtRiskItems(collectionStats.allFlashcards, settings),
+            stabilityGrowth: calculateCumulativeStabilityGrowth(logs.cardLogs),
+            guesses: calculateSuspectedGuesses(logs.cardLogs),
+        },
+        mcqs: {
+            avgRetention: calculateAverageRetention(collectionStats.allMcqs, mcqSettings),
+            atRisk: calculateAtRiskItems(collectionStats.allMcqs, mcqSettings),
+            stabilityGrowth: calculateCumulativeStabilityGrowth(logs.mcqLogs),
+            guesses: calculateSuspectedGuesses(logs.mcqLogs),
+        },
+    };
+  }, [logs, collectionStats, settings]);
+
+  const learningCurveData = useMemo(() => {
+    if (!logs) return null;
+    const combinedLogs = [...logs.cardLogs, ...logs.mcqLogs];
+    return calculateLearningCurve(combinedLogs);
+  }, [logs]);
+
   // --- Charting Constants ---
   const PIE_COLORS: Record<ItemStatus, string> = {
     New: '#3b82f6', // blue-500
@@ -407,6 +384,46 @@ const StatisticsPage = () => {
         <h2 className="text-xl sm:text-2xl font-bold mt-8 mb-4">Performance Analytics</h2>
         <PerformanceAnalytics />
 
+        <h2 className="text-xl sm:text-2xl font-bold mt-8 mb-4">Advanced Memory Stats</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+            <Card>
+                <CardHeader><CardTitle>Avg. Predicted Retention</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                    {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
+                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><BrainCircuit className="h-4 w-4" />Flashcards</span><span className="font-bold">{advancedStats?.flashcards.avgRetention?.toFixed(2) ?? 'N/A'}%</span></div>
+                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><BrainCircuit className="h-4 w-4" />MCQs</span><span className="font-bold">{advancedStats?.mcqs.avgRetention?.toFixed(2) ?? 'N/A'}%</span></div>
+                    </>}
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader><CardTitle>At-Risk Items</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                    {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
+                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><ShieldAlert className="h-4 w-4" />Flashcards</span><span className="font-bold">{advancedStats?.flashcards.atRisk ?? 'N/A'}</span></div>
+                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><ShieldAlert className="h-4 w-4" />MCQs</span><span className="font-bold">{advancedStats?.mcqs.atRisk ?? 'N/A'}</span></div>
+                    </>}
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader><CardTitle>Stability Growth</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                    {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
+                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><BarChartBig className="h-4 w-4" />Flashcards</span><span className="font-bold">{Math.round(advancedStats?.flashcards.stabilityGrowth ?? 0)}</span></div>
+                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><BarChartBig className="h-4 w-4" />MCQs</span><span className="font-bold">{Math.round(advancedStats?.mcqs.stabilityGrowth ?? 0)}</span></div>
+                    </>}
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader><CardTitle>Suspected Guesses</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                    {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
+                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Lightbulb className="h-4 w-4" />Flashcards</span><span className="font-bold">{advancedStats?.flashcards.guesses}</span></div>
+                        <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Lightbulb className="h-4 w-4" />MCQs</span><span className="font-bold">{advancedStats?.mcqs.guesses}</span></div>
+                    </>}
+                </CardContent>
+            </Card>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mt-6">
           <Card>
             <CardHeader>
@@ -449,6 +466,28 @@ const StatisticsPage = () => {
                   </BarChart>
                 </ResponsiveContainer>
               )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Learning Curve</CardTitle>
+              <CardDescription>Accuracy by review number for all items.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : 
+                !learningCurveData || learningCurveData.length === 0 ? <p className="text-sm text-muted-foreground">Not enough data for a learning curve.</p> :
+                <ResponsiveContainer width="100%" height={250}>
+                  <LineChart data={learningCurveData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="review" allowDecimals={false} />
+                    <YAxis domain={[0, 100]} tickFormatter={(tick) => `${tick}%`} />
+                    <Tooltip formatter={(value) => [`${(value as number).toFixed(1)}%`, 'Accuracy']} />
+                    <Legend />
+                    <Line type="monotone" dataKey="accuracy" stroke="#8884d8" strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              }
             </CardContent>
           </Card>
 
