@@ -1,7 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useResolvedHtml } from "@/hooks/use-resolved-html";
-import { useState, useLayoutEffect, useRef } from "react";
 
 interface ClozePlayerProps {
   text: string;
@@ -13,13 +12,6 @@ interface ClozePlayerProps {
 const ClozePlayer = ({ text, description, isFlipped, onClick }: ClozePlayerProps) => {
   const resolvedText = useResolvedHtml(text);
   const resolvedDescription = useResolvedHtml(description);
-  const cardRef = useRef<HTMLDivElement>(null);
-  const [height, setHeight] = useState<number | 'auto'>('auto');
-
-  useLayoutEffect(() => {
-    const cardHeight = cardRef.current?.scrollHeight || 0;
-    setHeight(Math.max(cardHeight, 320));
-  }, [isFlipped, resolvedText, resolvedDescription]);
 
   const renderClozeText = (isRevealed: boolean) => {
     const clozeRegex = /{{c(\d+)::(.+?)}}/g;
@@ -40,13 +32,12 @@ const ClozePlayer = ({ text, description, isFlipped, onClick }: ClozePlayerProps
 
   return (
     <div
-      className="w-full cursor-pointer"
-      style={{ height: height === 'auto' ? undefined : `${height}px`, transition: 'height 0.5s ease-in-out' }}
+      className="w-full min-h-[20rem] cursor-pointer"
       onClick={onClick}
     >
-      <Card ref={cardRef} className="w-full h-full flex flex-col">
+      <Card className="w-full h-full flex flex-col">
         <CardContent className="p-6 text-center w-full flex-grow flex flex-col items-center justify-center">
-          <div className="text-xl md:text-2xl font-semibold w-full">
+          <div className="text-lg md:text-xl font-semibold w-full">
             {renderClozeText(isFlipped)}
           </div>
           {isFlipped && description && (
