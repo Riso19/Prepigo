@@ -14,7 +14,7 @@ import { Separator } from '@/components/ui/separator';
 import { useRef, useState } from 'react';
 import { useDecks } from '@/contexts/DecksContext';
 import { DeckData, decksSchema, FlashcardData } from '@/data/decks';
-import { clearDecksDB, getReviewLogsForCard, saveMediaToDB, clearMediaDB, clearQuestionBanksDB, clearMcqReviewLogsDB } from '@/lib/idb';
+import { clearDecksDB, getReviewLogsForCard, saveMediaToDB, clearMediaDB, clearQuestionBanksDB, clearMcqReviewLogsDB, getMediaFromDB, saveSingleMediaToDB } from '@/lib/idb';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,7 +35,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { importAnkiTxtFile } from '@/lib/anki-txt-importer';
 import { useQuestionBanks } from '@/contexts/QuestionBankContext';
-import { questionBanksSchema } from '@/data/questionBanks';
+import { QuestionBankData, questionBanksSchema } from '@/data/questionBanks';
 import { mergeQuestionBanks } from '@/lib/question-bank-utils';
 
 const SettingsPage = () => {
@@ -66,6 +66,57 @@ const SettingsPage = () => {
   });
 
   const scheduler = form.watch('scheduler');
+
+  const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  const base64ToBlob = (base64: string): Blob => {
+    const parts = base64.split(';base64,');
+    const contentType = parts[0].split(':')[1];
+    const raw = window.atob(parts[1]);
+    const rawLength = raw.length;
+    const uInt8Array = new Uint8Array(rawLength);
+    for (let i = 0; i < rawLength; ++i) {
+      uInt8Array[i] = raw.charCodeAt(i);
+    }
+    return new Blob([uInt8Array], { type: contentType });
+  };
+
+  const collectMediaFilenamesFromMcqs = (banks: QuestionBankData[]): Set<string> => {
+    const filenames = new Set<string>();
+    const mediaRegex = /src="media:\/\/([^"]+)"/g;
+  
+    const searchHtml = (html: string) => {
+      if (!html) return;
+      const localRegex = new RegExp(mediaRegex);
+      let match;
+      while ((match = localRegex.exec(html)) !== null) {
+        filenames.add(match[1]);
+      }
+    };
+  
+    const traverse = (currentBanks: QuestionBankData[]) => {
+      for (const bank of currentBanks) {
+        for (const mcq of bank.mcqs) {
+          searchHtml(mcq.question);
+          searchHtml(mcq.explanation);
+          mcq.options.forEach(opt => searchHtml(opt.text));
+        }
+        if (bank.subBanks) {
+          traverse(bank.subBanks);
+        }
+      }
+    };
+  
+    traverse(banks);
+    return filenames;
+  };
 
   const onSubmit = async (data: SrsSettings) => {
     if (data.newCardInsertionOrder !== settings.newCardInsertionOrder) {
@@ -238,18 +289,41 @@ const SettingsPage = () => {
     }
   };
 
-  const handleExportMcqs = () => {
-    const dataStr = JSON.stringify(questionBanks, null, 2);
-    const blob = new Blob([dataStr], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `prepigo_mcq_backup_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    showSuccess("MCQ data exported successfully!");
+  const handleExportMcqs = async () => {
+    const toastId = toast.loading("Preparing MCQ export...");
+    try {
+      const mediaFilenames = collectMediaFilenamesFromMcqs(questionBanks);
+      const mediaToExport: { [key: string]: string } = {};
+  
+      for (const filename of mediaFilenames) {
+        const blob = await getMediaFromDB(filename);
+        if (blob) {
+          const base64 = await blobToBase64(blob);
+          mediaToExport[filename] = base64;
+        }
+      }
+  
+      const exportData = {
+        version: 2,
+        questionBanks: questionBanks,
+        media: mediaToExport,
+      };
+  
+      const dataStr = JSON.stringify(exportData, null, 2);
+      const blob = new Blob([dataStr], { type: "application/json" });
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `prepigo_mcq_backup_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(downloadUrl);
+      toast.success("MCQ data exported successfully!", { id: toastId });
+    } catch (error) {
+      console.error("Export failed", error);
+      toast.error("Failed to export MCQ data.", { id: toastId });
+    }
   };
 
   const handleMcqFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -280,19 +354,39 @@ const SettingsPage = () => {
             throw new Error(`Invalid JSON format. Parser error: ${(jsonError as Error).message}`);
         }
         
-        const validation = questionBanksSchema.safeParse(parsedData);
+        let importedBanks: QuestionBankData[];
+        
+        if (parsedData.version === 2 && parsedData.questionBanks && parsedData.media) {
+          toast.loading("Importing media files...", { id: toastId });
+          const mediaMap = parsedData.media as { [key: string]: string };
+          for (const fileName in mediaMap) {
+            const base64Data = mediaMap[fileName];
+            const blob = base64ToBlob(base64Data);
+            await saveSingleMediaToDB(fileName, blob);
+          }
+          importedBanks = parsedData.questionBanks;
+        } else {
+          importedBanks = Array.isArray(parsedData) ? parsedData : parsedData.questionBanks;
+        }
+
+        if (!importedBanks) {
+            throw new Error("Could not find question bank data in the file.");
+        }
+
+        const validation = questionBanksSchema.safeParse(importedBanks);
         if (!validation.success) {
             const errorDetails = validation.error.flatten().formErrors.join(', ');
             console.error("MCQ JSON validation failed:", validation.error.flatten());
             throw new Error(`Backup file has incorrect data structure. Details: ${errorDetails}`);
         }
         
-        const importedBanks = validation.data;
+        const validBanks = validation.data;
 
+        toast.loading("Saving question banks...", { id: toastId });
         if (replaceOnMcqImport) {
-            setQuestionBanks(importedBanks);
+            setQuestionBanks(validBanks);
         } else {
-            setQuestionBanks(prevBanks => mergeQuestionBanks(prevBanks, importedBanks));
+            setQuestionBanks(prevBanks => mergeQuestionBanks(prevBanks, validBanks));
         }
         
         toast.success("MCQ data imported successfully!", { id: toastId });
