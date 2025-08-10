@@ -49,6 +49,7 @@ const StudyPage = () => {
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [buriedNoteIds, setBuriedNoteIds] = useState<Set<string>>(new Set());
   const [sessionCompleted, setSessionCompleted] = useState(false);
+  const [completedInSessionIds, setCompletedInSessionIds] = useState<Set<string>>(new Set());
   
   const [fsrsOutcomes, setFsrsOutcomes] = useState<RecordLog | null>(null);
 
@@ -107,6 +108,7 @@ const StudyPage = () => {
     setBuriedNoteIds(new Set());
     setSessionCompleted(false);
     setFailedCardsQueue([]);
+    setCompletedInSessionIds(new Set());
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deckId, location.state]);
 
@@ -116,7 +118,10 @@ const StudyPage = () => {
     const actualCardIndex = sessionQueue.findIndex(c => c.id === currentCard.id);
     if (actualCardIndex === -1) return;
 
-    // --- Step 1: Process the current card ---
+    if (rating && rating !== Rating.Again) {
+      setCompletedInSessionIds(prev => new Set(prev).add(currentCard.id));
+    }
+
     if (studyMode === 'cram') {
       if (rating === Rating.Again) {
         setFailedCardsQueue(prev => [...prev, currentCard]);
@@ -276,7 +281,6 @@ const StudyPage = () => {
       }
     }
 
-    // --- Step 2: Advance to the next state ---
     const nextIndex = actualCardIndex + 1;
     setIsFlipped(false);
 
@@ -326,14 +330,19 @@ const StudyPage = () => {
   useEffect(() => {
     if (!currentCard && sessionQueue.length > 0 && !sessionCompleted) {
       setSessionCompleted(true);
-      const { examId, scheduleDate, cardIdsForCompletion } = location.state || {};
-      if (examId && scheduleDate && cardIdsForCompletion) {
+    }
+  }, [currentCard, sessionQueue.length, sessionCompleted]);
+
+  useEffect(() => {
+    return () => {
+      const { examId, scheduleDate } = location.state || {};
+      if (examId && scheduleDate && completedInSessionIds.size > 0) {
         setExams(prevExams => prevExams.map(exam => {
           if (exam.id === examId) {
             const newSchedule = exam.schedule.map(day => {
               if (day.date === scheduleDate) {
-                const completedIds = new Set([...day.completedCardIds, ...cardIdsForCompletion]);
-                return { ...day, completedCardIds: Array.from(completedIds) };
+                const updatedCompletedIds = new Set([...day.completedCardIds, ...completedInSessionIds]);
+                return { ...day, completedCardIds: Array.from(updatedCompletedIds) };
               }
               return day;
             });
@@ -341,10 +350,10 @@ const StudyPage = () => {
           }
           return exam;
         }));
-        toast.success("Daily exam progress saved!");
+        toast.success("Exam progress saved!");
       }
-    }
-  }, [currentCard, location.state, sessionQueue.length, setExams, sessionCompleted]);
+    };
+  }, [completedInSessionIds, location.state, setExams]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
