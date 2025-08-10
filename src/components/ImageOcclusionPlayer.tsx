@@ -1,7 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Occlusion } from "@/data/decks";
 import { useState, useRef, useEffect } from 'react';
-import { getMediaFromDB } from "@/lib/idb";
+import { useResolvedMediaUrl } from '@/hooks/use-resolved-media-url';
 import { useResolvedHtml } from "@/hooks/use-resolved-html";
 
 interface ImageOcclusionPlayerProps {
@@ -15,31 +15,9 @@ interface ImageOcclusionPlayerProps {
 
 const ImageOcclusionPlayer = ({ imageUrl, occlusions, questionOcclusionId, description, isFlipped, onClick }: ImageOcclusionPlayerProps) => {
   const [imgDimensions, setImgDimensions] = useState<{ width: number; height: number } | null>(null);
-  const [resolvedImageUrl, setResolvedImageUrl] = useState<string | null>(null);
+  const resolvedImageUrl = useResolvedMediaUrl(imageUrl);
   const imgRef = useRef<HTMLImageElement>(null);
   const resolvedDescription = useResolvedHtml(description);
-
-  useEffect(() => {
-    let objectUrl: string | null = null;
-    const resolveUrl = async () => {
-      if (imageUrl?.startsWith('media://')) {
-        const fileName = imageUrl.substring('media://'.length);
-        const blob = await getMediaFromDB(fileName);
-        if (blob) {
-          objectUrl = URL.createObjectURL(blob);
-          setResolvedImageUrl(objectUrl);
-        }
-      } else {
-        setResolvedImageUrl(imageUrl);
-      }
-    };
-    resolveUrl();
-    return () => {
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
-    };
-  }, [imageUrl]);
 
   useEffect(() => {
     if (resolvedImageUrl && imgRef.current) {
@@ -61,11 +39,11 @@ const ImageOcclusionPlayer = ({ imageUrl, occlusions, questionOcclusionId, descr
   }, [resolvedImageUrl]);
 
   return (
-    <div className="w-full h-auto max-w-2xl cursor-pointer" onClick={onClick}>
-      <Card>
-        <CardContent className="p-0">
+    <div className="w-full h-[30rem] max-w-2xl cursor-pointer" onClick={onClick}>
+      <Card className="w-full h-full flex flex-col">
+        <CardContent className="p-0 h-full overflow-y-auto">
           <div className="relative">
-            {resolvedImageUrl && <img ref={imgRef} src={resolvedImageUrl} alt="Study card" className="w-full h-auto block rounded-t-lg" />}
+            {resolvedImageUrl && <img ref={imgRef} src={resolvedImageUrl} alt="Study card" className="w-full h-auto block" />}
             {imgDimensions && (
               <svg 
                 className="absolute top-0 left-0 w-full h-full"

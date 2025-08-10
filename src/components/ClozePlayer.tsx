@@ -27,21 +27,21 @@ const ClozePlayer = ({ text, description, isFlipped, onClick }: ClozePlayerProps
       });
     }
 
-    return <div className="prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: processedText }} />;
+    return <div className="prose dark:prose-invert max-w-none w-full" dangerouslySetInnerHTML={{ __html: processedText }} />;
   };
 
   return (
-    <div className="w-full min-h-[20rem] cursor-pointer" onClick={onClick}>
+    <div className="w-full h-[25rem] cursor-pointer" onClick={onClick}>
       <Card className="w-full h-full flex flex-col">
-        <CardContent className="p-6 text-center w-full flex-grow flex flex-col items-center justify-center">
-          <div className="text-2xl font-semibold">
+        <CardContent className="p-6 text-center w-full flex-grow flex flex-col items-center justify-center overflow-y-auto">
+          <div className="text-2xl font-semibold w-full">
             {renderClozeText(isFlipped)}
           </div>
           {isFlipped && description && (
-            <>
+            <div className="w-full">
               <Separator className="my-4" />
-              <div className="text-sm text-muted-foreground prose dark:prose-invert max-w-none text-left" dangerouslySetInnerHTML={{ __html: resolvedDescription }} />
-            </>
+              <div className="text-sm text-muted-foreground prose dark:prose-invert max-w-none text-left w-full" dangerouslySetInnerHTML={{ __html: resolvedDescription }} />
+            </div>
           )}
         </CardContent>
       </Card>
