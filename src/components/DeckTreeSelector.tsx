@@ -38,11 +38,11 @@ const DeckNode = ({ deck, selectedDeckIds, onSelectionChange, isRoot = false }: 
   };
 
   return (
-    <div className={cn(!isRoot && "ml-4")}>
+    <Collapsible open={isOpen} onOpenChange={setIsOpen} className={cn(!isRoot && "ml-4")}>
       <div className="flex items-center space-x-2 py-1">
         {deck.subDecks && deck.subDecks.length > 0 ? (
           <CollapsibleTrigger asChild>
-            <button onClick={() => setIsOpen(prev => !prev)} className="p-1">
+            <button className="p-1">
               <ChevronRight className={cn("h-4 w-4 transition-transform", isOpen && "rotate-90")} />
             </button>
           </CollapsibleTrigger>
@@ -60,15 +60,13 @@ const DeckNode = ({ deck, selectedDeckIds, onSelectionChange, isRoot = false }: 
         </label>
       </div>
       {deck.subDecks && deck.subDecks.length > 0 && (
-        <Collapsible open={isOpen}>
-          <CollapsibleContent className="border-l-2 border-dashed ml-5">
-            {deck.subDecks.map(subDeck => (
-              <DeckNode key={subDeck.id} deck={subDeck} selectedDeckIds={selectedDeckIds} onSelectionChange={onSelectionChange} />
-            ))}
-          </CollapsibleContent>
-        </Collapsible>
+        <CollapsibleContent className="border-l-2 border-dashed ml-5">
+          {deck.subDecks.map(subDeck => (
+            <DeckNode key={subDeck.id} deck={subDeck} selectedDeckIds={selectedDeckIds} onSelectionChange={onSelectionChange} />
+          ))}
+        </CollapsibleContent>
       )}
-    </div>
+    </Collapsible>
   );
 };
 
