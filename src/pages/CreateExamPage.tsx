@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useDecks } from '@/contexts/DecksContext';
 import { useExams } from '@/contexts/ExamsContext';
 import { useSettings } from '@/contexts/SettingsContext';
@@ -10,25 +10,26 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DeckTreeSelector } from '@/components/DeckTreeSelector';
 import { TagEditor } from '@/components/TagEditor';
-import { getAllFlashcardsFromDeck, getAllTags, findDeckById } from '@/lib/deck-utils';
-import { filterCardsForExam, generateSchedule } from '@/lib/exam-scheduler-utils';
+import { getAllTags } from '@/lib/deck-utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CalendarIcon, ArrowLeft } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Slider } from '@/components/ui/slider';
+import { ExamData } from '@/data/exams';
 
 const createExamSchema = z.object({
   name: z.string().min(1, "Exam name is required."),
   examDate: z.date({ required_error: "Exam date is required." }),
   selectedDeckIds: z.set(z.string()).min(1, "Please select at least one deck."),
   tags: z.array(z.string()),
-  filterMode: z.enum(['all', 'due']),
-  studyMode: z.enum(['srs', 'cram']),
+  filterMode: z.enum(['all', 'due', 'difficulty']),
+  filterDifficulty: z.array(z.number()).optional(),
 });
 
 type CreateExamFormValues = z.infer<typeof createExamSchema>;
@@ -36,7 +37,6 @@ type CreateExamFormValues = z.infer<typeof createExamSchema>;
 const CreateExamPage = () => {
   const { decks } = useDecks();
   const { setExams } = useExams();
-  const { settings } = useSettings();
   const allTags = useMemo(() => getAllTags(decks), [decks]);
   const navigate = useNavigate();
 
@@ -47,54 +47,27 @@ const CreateExamPage = () => {
       selectedDeckIds: new Set(),
       tags: [],
       filterMode: 'all',
-      studyMode: 'srs',
+      filterDifficulty: [7, 10],
     },
   });
 
+  const filterMode = form.watch('filterMode');
+
   const onSubmit = (values: CreateExamFormValues) => {
-    const loadingToast = toast.loading("Generating exam schedule...");
+    const newExam: ExamData = {
+      id: `exam-${Date.now()}`,
+      name: values.name,
+      examDate: format(values.examDate, 'yyyy-MM-dd'),
+      targetDeckIds: Array.from(values.selectedDeckIds),
+      targetTags: values.tags,
+      filterMode: values.filterMode,
+      filterDifficultyMin: values.filterMode === 'difficulty' ? values.filterDifficulty?.[0] : undefined,
+      filterDifficultyMax: values.filterMode === 'difficulty' ? values.filterDifficulty?.[1] : undefined,
+    };
 
-    try {
-      const allSelectedCards = Array.from(values.selectedDeckIds).flatMap(deckId => {
-        const deck = findDeckById(decks, deckId);
-        return deck ? getAllFlashcardsFromDeck(deck) : [];
-      });
-      
-      let cards = [...new Map(allSelectedCards.map(item => [item.id, item])).values()];
-
-      if (values.tags.length > 0) {
-        cards = cards.filter(card => 
-          values.tags.every(tag => card.tags?.includes(tag))
-        );
-      }
-
-      const filteredCards = filterCardsForExam(cards, values.filterMode, settings);
-
-      if (filteredCards.length === 0) {
-        toast.error("No cards match the selected criteria.", { id: loadingToast });
-        return;
-      }
-
-      const schedule = generateSchedule(filteredCards, values.examDate, values.studyMode);
-
-      const newExam = {
-        id: `exam-${Date.now()}`,
-        name: values.name,
-        examDate: format(values.examDate, 'yyyy-MM-dd'),
-        targetDeckIds: Array.from(values.selectedDeckIds),
-        targetTags: values.tags,
-        filterMode: values.filterMode,
-        studyMode: values.studyMode,
-        schedule: schedule,
-      };
-
-      setExams(prev => [...prev, newExam]);
-      toast.success("Exam schedule created successfully!", { id: loadingToast });
-      navigate('/exams');
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to create schedule.", { id: loadingToast });
-    }
+    setExams(prev => [...prev, newExam]);
+    toast.success("Exam schedule created successfully!");
+    navigate('/exams');
   };
 
   return (
@@ -144,31 +117,49 @@ const CreateExamPage = () => {
                   <FormMessage /></FormItem>
                 )} />
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField control={form.control} name="filterMode" render={({ field }) => (
-                    <FormItem><FormLabel>Card Filter</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          <SelectItem value="all">All selected cards</SelectItem>
-                          <SelectItem value="due">Due cards only</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    <FormMessage /></FormItem>
+                <FormField control={form.control} name="filterMode" render={({ field }) => (
+                  <FormItem className="space-y-3">
+                    <FormLabel>Card Filter</FormLabel>
+                    <FormControl>
+                      <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <FormItem className="flex items-center space-x-3 space-y-0 p-4 border rounded-md has-[:checked]:border-primary">
+                          <FormControl><RadioGroupItem value="all" /></FormControl>
+                          <FormLabel className="font-normal">All Cards</FormLabel>
+                        </FormItem>
+                        <FormItem className="flex items-center space-x-3 space-y-0 p-4 border rounded-md has-[:checked]:border-primary">
+                          <FormControl><RadioGroupItem value="due" /></FormControl>
+                          <FormLabel className="font-normal">Due Cards Only</FormLabel>
+                        </FormItem>
+                        <FormItem className="flex items-center space-x-3 space-y-0 p-4 border rounded-md has-[:checked]:border-primary">
+                          <FormControl><RadioGroupItem value="difficulty" /></FormControl>
+                          <FormLabel className="font-normal">By Difficulty</FormLabel>
+                        </FormItem>
+                      </RadioGroup>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+
+                {filterMode === 'difficulty' && (
+                  <FormField control={form.control} name="filterDifficulty" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Difficulty Range (1=Easy, 10=Hard)</FormLabel>
+                      <FormControl>
+                        <Slider
+                          defaultValue={field.value}
+                          onValueChange={field.onChange}
+                          max={10}
+                          min={1}
+                          step={1}
+                          className="py-4"
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Selected range: {field.value?.[0]} - {field.value?.[1]}
+                      </FormDescription>
+                    </FormItem>
                   )} />
-                  <FormField control={form.control} name="studyMode" render={({ field }) => (
-                    <FormItem><FormLabel>Study Mode</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          <SelectItem value="srs">Standard SRS</SelectItem>
-                          <SelectItem value="cram">Cram Mode</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormDescription>Cram mode ensures you see every card before the exam.</FormDescription>
-                    <FormMessage /></FormItem>
-                  )} />
-                </div>
+                )}
 
                 <div className="flex justify-end">
                   <Button type="submit">Create Schedule</Button>

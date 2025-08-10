@@ -10,11 +10,12 @@ import Flashcard from "@/components/Flashcard";
 import ClozePlayer from "@/components/ClozePlayer";
 import ImageOcclusionPlayer from "@/components/ImageOcclusionPlayer";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Home } from "lucide-react";
+import { ArrowLeft, Home, Calendar } from "lucide-react";
 import { fsrs, Card, State, Rating, RecordLog, generatorParameters, createEmptyCard } from "ts-fsrs";
 import { fsrs6, Card as Fsrs6Card, generatorParameters as fsrs6GeneratorParameters } from "@/lib/fsrs6";
 import { sm2, Sm2Quality } from "@/lib/sm2";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 
 const parseSteps = (steps: string): number[] => {
   return steps.trim().split(/\s+/).filter(s => s).map(stepStr => {
@@ -40,7 +41,7 @@ const StudyPage = () => {
   const { deckId } = useParams<{ deckId: string }>();
   const location = useLocation();
   const { decks, setDecks, introductionsToday, addIntroducedCard } = useDecks();
-  const { setExams } = useExams();
+  const { exams, setExams } = useExams();
   const { settings: globalSettings } = useSettings();
   const navigate = useNavigate();
   
@@ -49,14 +50,12 @@ const StudyPage = () => {
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [buriedNoteIds, setBuriedNoteIds] = useState<Set<string>>(new Set());
   const [sessionCompleted, setSessionCompleted] = useState(false);
-  const [completedInSessionIds, setCompletedInSessionIds] = useState<Set<string>>(new Set());
   
   const [fsrsOutcomes, setFsrsOutcomes] = useState<RecordLog | null>(null);
 
   const [isCustomSession, setIsCustomSession] = useState(false);
   const [isSrsEnabled, setIsSrsEnabled] = useState(true);
   const [customSessionTitle, setCustomSessionTitle] = useState('');
-  const [studyMode, setStudyMode] = useState<'srs' | 'cram'>('srs');
   const [failedCardsQueue, setFailedCardsQueue] = useState<FlashcardData[]>([]);
   
   const fsrsInstance = useMemo(() => {
@@ -80,16 +79,14 @@ const StudyPage = () => {
 
   useEffect(() => {
     if (deckId === 'custom' && location.state) {
-        const { queue, srsEnabled, title, studyMode: mode } = location.state;
+        const { queue, srsEnabled, title } = location.state;
         setIsCustomSession(true);
         setSessionQueue(queue || []);
         setIsSrsEnabled(srsEnabled);
         setCustomSessionTitle(title || 'Custom Study');
-        setStudyMode(mode || 'srs');
     } else {
         setIsCustomSession(false);
         setIsSrsEnabled(true);
-        setStudyMode('srs');
         const currentDeck = deckId && deckId !== 'all' ? findDeckById(decks, deckId) : null;
         if (!currentDeck && deckId !== 'all' && deckId !== 'custom') {
             setSessionQueue([]);
@@ -97,7 +94,7 @@ const StudyPage = () => {
         }
         const decksToStudy = deckId === 'all' ? decks : (currentDeck ? [currentDeck] : []);
         if (decksToStudy.length > 0) {
-            const queue = buildSessionQueue(decksToStudy, decks, globalSettings, introductionsToday);
+            const queue = buildSessionQueue(decksToStudy, decks, globalSettings, introductionsToday, exams);
             setSessionQueue(queue);
         } else {
             setSessionQueue([]);
@@ -108,9 +105,8 @@ const StudyPage = () => {
     setBuriedNoteIds(new Set());
     setSessionCompleted(false);
     setFailedCardsQueue([]);
-    setCompletedInSessionIds(new Set());
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deckId, location.state]);
+  }, [deckId, location.state, decks, globalSettings, introductionsToday, exams]);
 
   const processAndAdvance = useCallback(async (rating?: Rating) => {
     if (!currentCard) return;
@@ -118,15 +114,7 @@ const StudyPage = () => {
     const actualCardIndex = sessionQueue.findIndex(c => c.id === currentCard.id);
     if (actualCardIndex === -1) return;
 
-    if (rating && rating !== Rating.Again) {
-      setCompletedInSessionIds(prev => new Set(prev).add(currentCard.id));
-    }
-
-    if (studyMode === 'cram') {
-      if (rating === Rating.Again) {
-        setFailedCardsQueue(prev => [...prev, currentCard]);
-      }
-    } else if (isSrsEnabled && rating) {
+    if (isSrsEnabled && rating) {
       const settings = getEffectiveSrsSettings(decks, deckId || 'all', globalSettings);
       const wasNew = (currentCard.srs?.fsrs?.reps === 0 || !currentCard.srs?.fsrs) || (currentCard.srs?.sm2?.repetitions === 0 || !currentCard.srs?.sm2);
       let updatedCard: FlashcardData = currentCard;
@@ -285,21 +273,14 @@ const StudyPage = () => {
     setIsFlipped(false);
 
     if (nextIndex >= sessionQueue.length) {
-      if (studyMode === 'cram' && failedCardsQueue.length > 0) {
-        toast.info(`Reviewing ${failedCardsQueue.length} card(s) you missed.`);
-        setSessionQueue(shuffle(failedCardsQueue));
-        setFailedCardsQueue([]);
-        setCurrentCardIndex(0);
-      } else {
-        setSessionCompleted(true);
-      }
+      setSessionCompleted(true);
     } else {
       setCurrentCardIndex(nextIndex);
     }
-  }, [currentCard, sessionQueue, studyMode, isSrsEnabled, failedCardsQueue, decks, deckId, globalSettings, fsrsOutcomes, fsrsInstance, addIntroducedCard, setDecks]);
+  }, [currentCard, sessionQueue, isSrsEnabled, decks, deckId, globalSettings, fsrsOutcomes, addIntroducedCard, setDecks]);
 
   useEffect(() => {
-    if (isFlipped && currentCard && isSrsEnabled && studyMode === 'srs') {
+    if (isFlipped && currentCard && isSrsEnabled) {
       const settings = getEffectiveSrsSettings(decks, deckId || 'all', globalSettings);
       if (settings.scheduler === 'fsrs' || settings.scheduler === 'fsrs6') {
         const srsData = settings.scheduler === 'fsrs6' ? currentCard.srs?.fsrs6 : currentCard.srs?.fsrs;
@@ -325,35 +306,13 @@ const StudyPage = () => {
     } else {
       setFsrsOutcomes(null);
     }
-  }, [isFlipped, currentCard, decks, deckId, globalSettings, fsrsInstance, isSrsEnabled, studyMode]);
+  }, [isFlipped, currentCard, decks, deckId, globalSettings, fsrsInstance, isSrsEnabled]);
 
   useEffect(() => {
     if (!currentCard && sessionQueue.length > 0 && !sessionCompleted) {
       setSessionCompleted(true);
     }
   }, [currentCard, sessionQueue.length, sessionCompleted]);
-
-  useEffect(() => {
-    return () => {
-      const { examId, scheduleDate } = location.state || {};
-      if (examId && scheduleDate && completedInSessionIds.size > 0) {
-        setExams(prevExams => prevExams.map(exam => {
-          if (exam.id === examId) {
-            const newSchedule = exam.schedule.map(day => {
-              if (day.date === scheduleDate) {
-                const updatedCompletedIds = new Set([...day.completedCardIds, ...completedInSessionIds]);
-                return { ...day, completedCardIds: Array.from(updatedCompletedIds) };
-              }
-              return day;
-            });
-            return { ...exam, schedule: newSchedule };
-          }
-          return exam;
-        }));
-        toast.success("Exam progress saved!");
-      }
-    };
-  }, [completedInSessionIds, location.state, setExams]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -363,11 +322,6 @@ const StudyPage = () => {
         return;
       }
       if (isFlipped) {
-        if (studyMode === 'cram') {
-          if (event.key === '1') processAndAdvance(Rating.Again);
-          if (event.key === '2') processAndAdvance(Rating.Good);
-          return;
-        }
         if (!isSrsEnabled) {
             processAndAdvance(Rating.Good);
             return;
@@ -382,7 +336,7 @@ const StudyPage = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isFlipped, processAndAdvance, isSrsEnabled, studyMode]);
+  }, [isFlipped, processAndAdvance, isSrsEnabled]);
 
   const pageTitle = isCustomSession ? customSessionTitle : (deckId === 'all' ? "Studying All Due Cards" : `Studying: ${findDeckById(decks, deckId || '')?.name}`);
 
@@ -393,32 +347,28 @@ const StudyPage = () => {
     return <div className="min-h-screen flex flex-col items-center justify-center text-center p-4"><h2 className="text-2xl font-bold mb-4">All caught up!</h2><p className="text-muted-foreground mb-6">You have no cards due for review in this deck.</p><Button asChild><Link to="/"><Home className="mr-2 h-4 w-4" /> Go back to My Decks</Link></Button></div>;
   }
   if (!currentCard) {
-    const { examId } = location.state || {};
     return (
       <div className="min-h-screen flex flex-col items-center justify-center text-center p-4">
         <h2 className="text-2xl font-bold mb-4">Session Complete!</h2>
         <p className="text-muted-foreground mb-6">You've reviewed all available cards for this session.</p>
-        {examId ? (
-          <Button asChild>
-            <Link to={`/exams/${examId}`}><ArrowLeft className="mr-2 h-4 w-4" /> Back to Exam Schedule</Link>
-          </Button>
-        ) : (
-          <Button asChild>
-            <Link to="/"><Home className="mr-2 h-4 w-4" /> Go back to My Decks</Link>
-          </Button>
-        )}
+        <Button asChild>
+          <Link to="/"><Home className="mr-2 h-4 w-4" /> Go back to My Decks</Link>
+        </Button>
       </div>
     );
   }
 
   const handleCardClick = () => !isFlipped && setIsFlipped(true);
 
+  const { studyReason } = (currentCard || {}) as FlashcardData & { studyReason?: { type: 'exam', name: string } };
+
   const renderCard = () => {
     if (!currentCard) return null;
+    const cardProps = { isFlipped, onClick: handleCardClick };
     switch (currentCard.type) {
-      case 'basic': return <Flashcard question={currentCard.question} answer={currentCard.answer} isFlipped={isFlipped} onClick={handleCardClick} />;
-      case 'cloze': return <ClozePlayer text={currentCard.text} description={currentCard.description} isFlipped={isFlipped} onClick={handleCardClick} />;
-      case 'imageOcclusion': return <ImageOcclusionPlayer imageUrl={currentCard.imageUrl} occlusions={currentCard.occlusions} questionOcclusionId={currentCard.questionOcclusionId} description={currentCard.description} isFlipped={isFlipped} onClick={handleCardClick} />;
+      case 'basic': return <Flashcard question={currentCard.question} answer={currentCard.answer} {...cardProps} />;
+      case 'cloze': return <ClozePlayer text={currentCard.text} description={currentCard.description} {...cardProps} />;
+      case 'imageOcclusion': return <ImageOcclusionPlayer imageUrl={currentCard.imageUrl} occlusions={currentCard.occlusions} questionOcclusionId={currentCard.questionOcclusionId} description={currentCard.description} {...cardProps} />;
       default: return null;
     }
   };
@@ -485,20 +435,6 @@ const StudyPage = () => {
   };
 
   const renderFooter = () => {
-    if (studyMode === 'cram') {
-      return (
-        <div className="w-full max-w-2xl mx-auto p-4">
-          {isFlipped ? (
-            <div className="grid grid-cols-2 gap-4 w-full">
-              <Button onClick={() => processAndAdvance(Rating.Again)} className="relative bg-red-500 hover:bg-red-600 text-white font-bold h-16 text-base">Incorrect<span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">1</span></Button>
-              <Button onClick={() => processAndAdvance(Rating.Good)} className="relative bg-green-500 hover:bg-green-600 text-white font-bold h-16 text-base">Correct<span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">2</span></Button>
-            </div>
-          ) : (
-            <Button onClick={() => setIsFlipped(true)} className="w-full h-16 text-lg relative">Show Answer<span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">Space</span></Button>
-          )}
-        </div>
-      );
-    }
     if (!isSrsEnabled) {
         return (
             <div className="w-full max-w-2xl mx-auto p-4">
@@ -538,7 +474,15 @@ const StudyPage = () => {
             <h1 className="text-3xl font-bold">{pageTitle}</h1>
           </header>
 
-          <main className="w-full max-w-2xl mx-auto flex flex-col items-center justify-start py-6 gap-6">
+          <main className="w-full max-w-2xl mx-auto flex flex-col items-center justify-start py-6 gap-6 relative">
+            {studyReason && studyReason.type === 'exam' && (
+              <div className="absolute -top-2 right-0">
+                <Badge variant="secondary" className="text-base py-1 px-3">
+                  <Calendar className="h-4 w-4 mr-2" />
+                  {studyReason.name} Prep
+                </Badge>
+              </div>
+            )}
             {renderCard()}
             <div className="flex items-center gap-4 text-sm text-muted-foreground flex-shrink-0">
               <span>

@@ -1,7 +1,6 @@
 import { useMemo, useEffect } from 'react';
 import { useDecks } from '@/contexts/DecksContext';
 import { useExams } from '@/contexts/ExamsContext';
-import { useSettings } from '@/contexts/SettingsContext';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -10,27 +9,26 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DeckTreeSelector } from '@/components/DeckTreeSelector';
 import { TagEditor } from '@/components/TagEditor';
-import { getAllFlashcardsFromDeck, getAllTags, findDeckById } from '@/lib/deck-utils';
-import { filterCardsForExam, generateSchedule } from '@/lib/exam-scheduler-utils';
+import { getAllTags } from '@/lib/deck-utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CalendarIcon, ArrowLeft } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { Checkbox } from '@/components/ui/checkbox';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Slider } from '@/components/ui/slider';
+import { ExamData } from '@/data/exams';
 
 const editExamSchema = z.object({
   name: z.string().min(1, "Exam name is required."),
   examDate: z.date({ required_error: "Exam date is required." }),
   selectedDeckIds: z.set(z.string()).min(1, "Please select at least one deck."),
   tags: z.array(z.string()),
-  filterMode: z.enum(['all', 'due']),
-  studyMode: z.enum(['srs', 'cram']),
-  regenerateSchedule: z.boolean(),
+  filterMode: z.enum(['all', 'due', 'difficulty']),
+  filterDifficulty: z.array(z.number()).optional(),
 });
 
 type EditExamFormValues = z.infer<typeof editExamSchema>;
@@ -39,7 +37,6 @@ const EditExamPage = () => {
   const { examId } = useParams<{ examId: string }>();
   const { exams, setExams } = useExams();
   const { decks } = useDecks();
-  const { settings } = useSettings();
   const allTags = useMemo(() => getAllTags(decks), [decks]);
   const navigate = useNavigate();
 
@@ -47,10 +44,9 @@ const EditExamPage = () => {
 
   const form = useForm<EditExamFormValues>({
     resolver: zodResolver(editExamSchema),
-    defaultValues: {
-      regenerateSchedule: true,
-    },
   });
+
+  const filterMode = form.watch('filterMode');
 
   useEffect(() => {
     if (examToEdit) {
@@ -60,8 +56,7 @@ const EditExamPage = () => {
         selectedDeckIds: new Set(examToEdit.targetDeckIds),
         tags: examToEdit.targetTags,
         filterMode: examToEdit.filterMode,
-        studyMode: examToEdit.studyMode,
-        regenerateSchedule: true,
+        filterDifficulty: [examToEdit.filterDifficultyMin ?? 7, examToEdit.filterDifficultyMax ?? 10],
       });
     }
   }, [examToEdit, form]);
@@ -72,41 +67,16 @@ const EditExamPage = () => {
     const loadingToast = toast.loading("Updating exam schedule...");
 
     try {
-      let updatedExam = { ...examToEdit, name: values.name };
-
-      if (values.regenerateSchedule) {
-        const allSelectedCards = Array.from(values.selectedDeckIds).flatMap(deckId => {
-          const deck = findDeckById(decks, deckId);
-          return deck ? getAllFlashcardsFromDeck(deck) : [];
-        });
-        
-        let cards = [...new Map(allSelectedCards.map(item => [item.id, item])).values()];
-
-        if (values.tags.length > 0) {
-          cards = cards.filter(card => 
-            values.tags.every(tag => card.tags?.includes(tag))
-          );
-        }
-
-        const filteredCards = filterCardsForExam(cards, values.filterMode, settings);
-
-        if (filteredCards.length === 0) {
-          toast.error("No cards match the selected criteria.", { id: loadingToast });
-          return;
-        }
-
-        const schedule = generateSchedule(filteredCards, values.examDate, values.studyMode);
-
-        updatedExam = {
-          ...updatedExam,
-          examDate: format(values.examDate, 'yyyy-MM-dd'),
-          targetDeckIds: Array.from(values.selectedDeckIds),
-          targetTags: values.tags,
-          filterMode: values.filterMode,
-          studyMode: values.studyMode,
-          schedule: schedule,
-        };
-      }
+      const updatedExam: ExamData = {
+        ...examToEdit,
+        name: values.name,
+        examDate: format(values.examDate, 'yyyy-MM-dd'),
+        targetDeckIds: Array.from(values.selectedDeckIds),
+        targetTags: values.tags,
+        filterMode: values.filterMode,
+        filterDifficultyMin: values.filterMode === 'difficulty' ? values.filterDifficulty?.[0] : undefined,
+        filterDifficultyMax: values.filterMode === 'difficulty' ? values.filterDifficulty?.[1] : undefined,
+      };
 
       setExams(prev => prev.map(e => e.id === examId ? updatedExam : e));
       toast.success("Exam schedule updated successfully!", { id: loadingToast });
@@ -168,43 +138,49 @@ const EditExamPage = () => {
                   <FormMessage /></FormItem>
                 )} />
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField control={form.control} name="filterMode" render={({ field }) => (
-                    <FormItem><FormLabel>Card Filter</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          <SelectItem value="all">All selected cards</SelectItem>
-                          <SelectItem value="due">Due cards only</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    <FormMessage /></FormItem>
-                  )} />
-                  <FormField control={form.control} name="studyMode" render={({ field }) => (
-                    <FormItem><FormLabel>Study Mode</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          <SelectItem value="srs">Standard SRS</SelectItem>
-                          <SelectItem value="cram">Cram Mode</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormDescription>Cram mode ensures you see every card before the exam.</FormDescription>
-                    <FormMessage /></FormItem>
-                  )} />
-                </div>
-
-                <FormField control={form.control} name="regenerateSchedule" render={({ field }) => (
-                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
-                    <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel>Regenerate schedule</FormLabel>
-                      <FormDescription>
-                        If checked, a new daily schedule will be generated based on the settings above. Uncheck this if you only want to change the exam name.
-                      </FormDescription>
-                    </div>
+                <FormField control={form.control} name="filterMode" render={({ field }) => (
+                  <FormItem className="space-y-3">
+                    <FormLabel>Card Filter</FormLabel>
+                    <FormControl>
+                      <RadioGroup onValueChange={field.onChange} value={field.value} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <FormItem className="flex items-center space-x-3 space-y-0 p-4 border rounded-md has-[:checked]:border-primary">
+                          <FormControl><RadioGroupItem value="all" /></FormControl>
+                          <FormLabel className="font-normal">All Cards</FormLabel>
+                        </FormItem>
+                        <FormItem className="flex items-center space-x-3 space-y-0 p-4 border rounded-md has-[:checked]:border-primary">
+                          <FormControl><RadioGroupItem value="due" /></FormControl>
+                          <FormLabel className="font-normal">Due Cards Only</FormLabel>
+                        </FormItem>
+                        <FormItem className="flex items-center space-x-3 space-y-0 p-4 border rounded-md has-[:checked]:border-primary">
+                          <FormControl><RadioGroupItem value="difficulty" /></FormControl>
+                          <FormLabel className="font-normal">By Difficulty</FormLabel>
+                        </FormItem>
+                      </RadioGroup>
+                    </FormControl>
+                    <FormMessage />
                   </FormItem>
                 )} />
+
+                {filterMode === 'difficulty' && (
+                  <FormField control={form.control} name="filterDifficulty" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Difficulty Range (1=Easy, 10=Hard)</FormLabel>
+                      <FormControl>
+                        <Slider
+                          value={field.value}
+                          onValueChange={field.onChange}
+                          max={10}
+                          min={1}
+                          step={1}
+                          className="py-4"
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Selected range: {field.value?.[0]} - {field.value?.[1]}
+                      </FormDescription>
+                    </FormItem>
+                  )} />
+                )}
 
                 <div className="flex justify-end">
                   <Button type="submit">Update Schedule</Button>

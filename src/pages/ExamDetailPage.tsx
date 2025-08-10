@@ -4,76 +4,45 @@ import { useDecks } from '@/contexts/DecksContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { ArrowLeft, Home, Calendar as CalendarIcon, BookOpen, List } from 'lucide-react';
-import { format, parseISO, isToday, isPast } from 'date-fns';
-import { ExamData, ExamScheduleItem } from '@/data/exams';
-import { findFlashcardById } from '@/lib/deck-utils';
-import { cn } from '@/lib/utils';
+import { ArrowLeft, Home, Calendar as CalendarIcon, BookOpen } from 'lucide-react';
+import { format, parseISO, isAfter } from 'date-fns';
+import { getAllFlashcardsFromDeck, findDeckById } from '@/lib/deck-utils';
 import Header from '@/components/Header';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ExamCalendarView } from '@/components/ExamCalendarView';
-import { toast } from 'sonner';
-
-const DailyScheduleItem = ({ day, exam }: { day: ExamScheduleItem, exam: ExamData }) => {
-  const navigate = useNavigate();
-  const { decks } = useDecks();
-  const date = parseISO(day.date);
-  const progress = day.cardIds.length > 0 ? (day.completedCardIds.length / day.cardIds.length) * 100 : 100;
-  const isCompleted = progress === 100;
-
-  const handleStudy = () => {
-    const remainingCardIds = day.cardIds.filter(id => !day.completedCardIds.includes(id));
-    const cardsToStudy = remainingCardIds
-      .map(id => findFlashcardById(decks, id)?.flashcard)
-      .filter(Boolean);
-
-    if (cardsToStudy.length === 0) {
-      toast.info("You've completed all cards for this day!");
-      return;
-    }
-
-    navigate('/study/custom', {
-      state: {
-        queue: cardsToStudy,
-        srsEnabled: exam.studyMode === 'srs',
-        studyMode: exam.studyMode,
-        title: `Exam Study: ${format(date, 'PPP')}`,
-        examId: exam.id,
-        scheduleDate: day.date,
-      }
-    });
-  };
-
-  return (
-    <div className={cn(
-      "p-4 border rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4",
-      isToday(date) && "border-primary",
-      isPast(date) && !isCompleted && "bg-destructive/10 border-destructive/50",
-      isCompleted && "bg-green-500/10 border-green-500/50"
-    )}>
-      <div className="flex-grow">
-        <p className="font-semibold">{format(date, 'EEEE, PPP')}</p>
-        <div className="flex items-center gap-4 mt-2">
-          <Progress value={progress} className="w-full sm:w-48 h-2" />
-          <span className="text-sm text-muted-foreground font-medium">
-            {day.completedCardIds.length} / {day.cardIds.length}
-          </span>
-        </div>
-      </div>
-      <Button onClick={handleStudy} disabled={isCompleted || day.cardIds.length === 0}>
-        <BookOpen className="mr-2 h-4 w-4" />
-        {isCompleted ? 'Completed' : 'Study'}
-      </Button>
-    </div>
-  );
-};
+import { useMemo } from 'react';
 
 const ExamDetailPage = () => {
   const { examId } = useParams<{ examId: string }>();
   const { exams } = useExams();
+  const { decks } = useDecks();
   const navigate = useNavigate();
 
   const exam = exams.find(e => e.id === examId);
+
+  const { allExamCards, masteredCardsCount, progress } = useMemo(() => {
+    if (!exam) return { allExamCards: [], masteredCardsCount: 0, progress: 0 };
+
+    let cards = exam.targetDeckIds.flatMap(deckId => {
+      const deck = findDeckById(decks, deckId);
+      return deck ? getAllFlashcardsFromDeck(deck) : [];
+    });
+    cards = [...new Map(cards.map(item => [item.id, item])).values()];
+
+    if (exam.targetTags.length > 0) {
+      cards = cards.filter(card => 
+        exam.targetTags.every(tag => card.tags?.includes(tag))
+      );
+    }
+    
+    const examDate = parseISO(exam.examDate);
+    const mastered = cards.filter(c => {
+      const srsData = c.srs?.fsrs || c.srs?.fsrs6 || c.srs?.sm2;
+      return srsData && isAfter(parseISO(srsData.due), examDate);
+    }).length;
+
+    const progressPercentage = cards.length > 0 ? (mastered / cards.length) * 100 : 0;
+
+    return { allExamCards: cards, masteredCardsCount: mastered, progress: progressPercentage };
+  }, [exam, decks]);
 
   if (!exam) {
     return (
@@ -85,10 +54,6 @@ const ExamDetailPage = () => {
       </div>
     );
   }
-
-  const totalCards = exam.schedule.reduce((acc, day) => acc + day.cardIds.length, 0);
-  const completedCards = exam.schedule.reduce((acc, day) => acc + day.completedCardIds.length, 0);
-  const overallProgress = totalCards > 0 ? (completedCards / totalCards) * 100 : 0;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -106,30 +71,26 @@ const ExamDetailPage = () => {
                 Exam Date: {format(parseISO(exam.examDate), 'PPP')}
               </CardDescription>
               <div className="pt-4 space-y-2">
-                <div className="flex justify-between text-sm font-medium text-muted-foreground">
-                  <span>Overall Progress</span>
-                  <span>{completedCards} / {totalCards} cards</span>
+                <div className="flex justify-between text-sm font-medium">
+                  <span>Mastery Progress</span>
+                  <span className="text-muted-foreground">{masteredCardsCount} / {allExamCards.length} cards</span>
                 </div>
-                <Progress value={overallProgress} />
+                <Progress value={progress} />
+                <p className="text-xs text-muted-foreground">
+                  A card is "mastered" when its next review is scheduled after the exam date.
+                </p>
               </div>
             </CardHeader>
-            <CardContent>
-              <Tabs defaultValue="list" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="list"><List className="mr-2 h-4 w-4" />List View</TabsTrigger>
-                  <TabsTrigger value="calendar"><CalendarIcon className="mr-2 h-4 w-4" />Calendar View</TabsTrigger>
-                </TabsList>
-                <TabsContent value="list" className="mt-4">
-                  <div className="space-y-4">
-                    {exam.schedule.map(day => (
-                      <DailyScheduleItem key={day.date} day={day} exam={exam} />
-                    ))}
-                  </div>
-                </TabsContent>
-                <TabsContent value="calendar" className="mt-4 flex justify-center">
-                  <ExamCalendarView exam={exam} />
-                </TabsContent>
-              </Tabs>
+            <CardContent className="text-center">
+              <Button size="lg" asChild>
+                <Link to="/study/all">
+                  <BookOpen className="mr-2 h-5 w-5" />
+                  Study Now
+                </Link>
+              </Button>
+              <p className="text-sm text-muted-foreground mt-2">
+                The "Study Now" queue will automatically prioritize cards for this exam.
+              </p>
             </CardContent>
           </Card>
         </div>
