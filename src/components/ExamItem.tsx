@@ -103,10 +103,14 @@ export const ExamItem = ({ exam }: ExamItemProps) => {
               <p className={cn("text-4xl font-bold", getReadinessColor(progress.percentage))}>
                 {progress.percentage}%
               </p>
-              <p className="text-xs text-muted-foreground">{progress.mastered} / {progress.total} items mastered</p>
+              <p className="text-xs text-muted-foreground">
+                {progress.mastered} mastered, {progress.inProgress} in progress, {progress.newItems} new
+              </p>
             </div>
             <Progress value={progress.percentage} className="mt-2" />
-            <p className="text-xs text-center text-muted-foreground mt-1">An item is "mastered" when its next review is after the exam date.</p>
+            <p className="text-xs text-center text-muted-foreground mt-1">
+              Readiness is based on mastered items (due after exam) and partial credit for items in progress.
+            </p>
           </div>
           <div className="pt-4 border-t">
             <h4 className="text-sm font-semibold mb-2">Scope</h4>

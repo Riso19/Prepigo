@@ -111,23 +111,64 @@ export const getMcqsForExam = (exam: ExamData, allQuestionBanks: QuestionBankDat
   return mcqs;
 };
 
-export const calculateExamProgress = (exam: ExamData, itemsInScope: (FlashcardData | McqData)[], settings: SrsSettings): { mastered: number, total: number, percentage: number } => {
-  if (itemsInScope.length === 0) {
-    return { mastered: 0, total: 0, percentage: 100 };
+export const calculateExamProgress = (
+  exam: ExamData,
+  itemsInScope: (FlashcardData | McqData)[],
+  settings: SrsSettings
+): {
+  mastered: number;
+  inProgress: number;
+  newItems: number;
+  total: number;
+  percentage: number;
+} => {
+  const total = itemsInScope.length;
+  if (total === 0) {
+    return { mastered: 0, inProgress: 0, newItems: 0, total: 0, percentage: 100 };
   }
 
   const examDate = new Date(exam.date);
-  const masteredCount = itemsInScope.filter(item => {
-    const scheduler = settings.scheduler === 'sm2' ? 'fsrs' : settings.scheduler;
-    const srsData = scheduler === 'fsrs6' ? item.srs?.fsrs6 : item.srs?.fsrs;
-    if (!srsData) return false;
-    const dueDate = new Date(srsData.due);
-    return dueDate > examDate;
-  }).length;
+  let masteredCount = 0;
+  let inProgressCount = 0;
+  let newItemsCount = 0;
+
+  for (const item of itemsInScope) {
+    const scheduler = settings.scheduler;
+    let isNew = true;
+    let dueDate: Date | null = null;
+
+    if (scheduler === 'sm2') {
+      const sm2State = item.srs?.sm2;
+      if (sm2State && sm2State.state !== 'new' && sm2State.state) {
+        isNew = false;
+        dueDate = new Date(sm2State.due);
+      }
+    } else { // fsrs or fsrs6
+      const srsData = scheduler === 'fsrs6' ? item.srs?.fsrs6 : item.srs?.fsrs;
+      if (srsData && srsData.state !== State.New) {
+        isNew = false;
+        dueDate = new Date(srsData.due);
+      }
+    }
+
+    if (isNew) {
+      newItemsCount++;
+    } else if (dueDate && dueDate > examDate) {
+      masteredCount++;
+    } else {
+      inProgressCount++;
+    }
+  }
+  
+  // Give half credit for items in progress
+  const weightedProgress = masteredCount + inProgressCount * 0.5;
+  const percentage = total > 0 ? Math.round((weightedProgress / total) * 100) : 100;
 
   return {
     mastered: masteredCount,
-    total: itemsInScope.length,
-    percentage: Math.round((masteredCount / itemsInScope.length) * 100),
+    inProgress: inProgressCount,
+    newItems: newItemsCount,
+    total: total,
+    percentage: percentage,
   };
 };
