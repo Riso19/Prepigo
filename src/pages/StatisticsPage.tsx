@@ -3,7 +3,7 @@ import { useDecks } from '@/contexts/DecksContext';
 import { useQuestionBanks } from '@/contexts/QuestionBankContext';
 import Header from '@/components/Header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, CartesianGrid } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, CartesianGrid, LabelList } from 'recharts';
 import { getAllFlashcardsFromDeck } from '@/lib/card-utils';
 import { getAllMcqsFromBank } from '@/lib/question-bank-utils';
 import { getItemStatus, ItemStatus } from '@/lib/srs-utils';
@@ -11,14 +11,14 @@ import { useSettings } from '@/contexts/SettingsContext';
 import { useQuery } from '@tanstack/react-query';
 import { getAllReviewLogsFromDB, getAllMcqReviewLogsFromDB, McqReviewLog } from '@/lib/idb';
 import { format, subDays, startOfDay, isSameDay, differenceInDays } from 'date-fns';
-import { Loader2, TrendingUp, CalendarDays, Flame, CheckCircle, BookOpen, Loader, Clock, Zap } from 'lucide-react';
+import { Loader2, TrendingUp, CalendarDays, Flame, BookOpen, Clock, Zap, HelpCircle, AlertTriangle } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { State } from 'ts-fsrs';
 import { DeckData, FlashcardData, ReviewLog } from '@/data/decks';
 import { McqData, QuestionBankData } from '@/data/questionBanks';
 import { PerformanceAnalytics } from '@/components/PerformanceAnalytics';
 import { PerformanceGraph } from '@/components/PerformanceGraph';
-import { calculateAccuracy } from '@/lib/analytics-utils';
+import { calculateAccuracy, calculateDueStats, calculateIntervalGrowth, calculateRetentionDistribution, calculateForecast } from '@/lib/analytics-utils';
 
 const StatisticsPage = () => {
   const { decks } = useDecks();
@@ -251,6 +251,40 @@ const StatisticsPage = () => {
     return calculateDifficulty(collectionStats.allMcqs, mcqScheduler);
   }, [collectionStats.allMcqs, settings.scheduler]);
 
+  const dueStats = useMemo(() => {
+    if (!logs) return null;
+    const flashcardDues = calculateDueStats(collectionStats.allFlashcards, settings);
+    const mcqDues = calculateDueStats(collectionStats.allMcqs, settings);
+    return {
+        flashcards: flashcardDues,
+        mcqs: mcqDues,
+        total: {
+            dueToday: flashcardDues.dueToday + mcqDues.dueToday,
+            overdue: flashcardDues.overdue + mcqDues.overdue,
+        }
+    };
+  }, [logs, collectionStats, settings]);
+
+  const intervalGrowthStats = useMemo(() => {
+      if (!logs) return null;
+      const flashcardGrowth = calculateIntervalGrowth(logs.cardLogs);
+      const mcqGrowth = calculateIntervalGrowth(logs.mcqLogs);
+      return { flashcards: flashcardGrowth, mcqs: mcqGrowth };
+  }, [logs]);
+
+  const retentionDistribution = useMemo(() => {
+      const flashcardDist = calculateRetentionDistribution(collectionStats.allFlashcards, settings);
+      const mcqScheduler = settings.scheduler === 'sm2' ? 'fsrs' : settings.scheduler;
+      const mcqSettings = {...settings, scheduler: mcqScheduler};
+      const mcqDist = calculateRetentionDistribution(collectionStats.allMcqs, mcqSettings);
+      return { flashcards: flashcardDist, mcqs: mcqDist };
+  }, [collectionStats, settings]);
+
+  const forecastData = useMemo(() => {
+      const combinedItems = [...collectionStats.allFlashcards, ...collectionStats.allMcqs];
+      return calculateForecast(combinedItems, settings);
+  }, [collectionStats, settings]);
+
   // --- Charting Constants ---
   const PIE_COLORS: Record<ItemStatus, string> = {
     New: '#3b82f6', // blue-500
@@ -330,7 +364,7 @@ const StatisticsPage = () => {
         </div>
 
         <h2 className="text-xl sm:text-2xl font-bold mt-8 mb-4">Learning Progress</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
           <Card>
             <CardHeader><CardTitle>Reviews</CardTitle></CardHeader>
             <CardContent className="space-y-4">
@@ -351,21 +385,21 @@ const StatisticsPage = () => {
             </CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle>Flashcard Time Metrics</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Due & Overdue</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-                {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
-                    <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Clock className="h-4 w-4" />Total Time</span><span className="font-bold">{timeStats.flashcards.totalTimeFormatted}</span></div>
-                    <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Zap className="h-4 w-4" />Avg. / Hour</span><span className="font-bold">{timeStats.flashcards.avgPerHour}</span></div>
-                </>}
+              {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
+                <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><CalendarDays className="h-4 w-4 text-green-500" />Due Today</span><span className="font-bold">{dueStats?.total.dueToday}</span></div>
+                <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><AlertTriangle className="h-4 w-4 text-red-500" />Overdue</span><span className="font-bold">{dueStats?.total.overdue}</span></div>
+              </>}
             </CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle>MCQ Time Metrics</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Avg. Interval Growth</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-                {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
-                    <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Clock className="h-4 w-4" />Total Time</span><span className="font-bold">{timeStats.mcqs.totalTimeFormatted}</span></div>
-                    <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Zap className="h-4 w-4" />Avg. / Hour</span><span className="font-bold">{timeStats.mcqs.avgPerHour}</span></div>
-                </>}
+              {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
+                <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><BookOpen className="h-4 w-4" />Flashcards</span><span className="font-bold">{intervalGrowthStats?.flashcards.toFixed(2)}x</span></div>
+                <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><HelpCircle className="h-4 w-4" />MCQs</span><span className="font-bold">{intervalGrowthStats?.mcqs.toFixed(2)}x</span></div>
+              </>}
             </CardContent>
           </Card>
         </div>
@@ -394,18 +428,19 @@ const StatisticsPage = () => {
           </Card>
         </div>
 
+        <h2 className="text-xl sm:text-2xl font-bold mt-8 mb-4">Forecast & Distribution</h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mt-6">
           <Card className="lg:col-span-2">
             <CardHeader>
-              <CardTitle>Review Activity</CardTitle>
-              <CardDescription>Reviews completed in the last 30 days.</CardDescription>
+              <CardTitle>Review Forecast</CardTitle>
+              <CardDescription>Upcoming reviews for the next 30 days.</CardDescription>
             </CardHeader>
             <CardContent>
               {isLoadingLogs ? (
                 <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>
               ) : (
                 <ResponsiveContainer width="100%" height={isMobile ? 250 : 300}>
-                  <BarChart data={reviewHistoryData}>
+                  <BarChart data={forecastData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="date" tick={{ fontSize: 12 }} />
                     <YAxis allowDecimals={false} />
@@ -414,6 +449,52 @@ const StatisticsPage = () => {
                   </BarChart>
                 </ResponsiveContainer>
               )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Predicted Retention (Flashcards)</CardTitle>
+              <CardDescription>Based on FSRS model.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : 
+                !retentionDistribution.flashcards ? <p className="text-sm text-muted-foreground">Not available for SM-2 or no review data.</p> :
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={retentionDistribution.flashcards} layout="vertical" margin={{ left: 10, right: 30 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" hide />
+                    <YAxis type="category" dataKey="name" width={60} tick={{ fontSize: 12 }} />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="#8884d8">
+                      <LabelList dataKey="count" position="right" />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              }
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Predicted Retention (MCQs)</CardTitle>
+              <CardDescription>Based on FSRS model.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : 
+                !retentionDistribution.mcqs ? <p className="text-sm text-muted-foreground">No review data available.</p> :
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={retentionDistribution.mcqs} layout="vertical" margin={{ left: 10, right: 30 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" hide />
+                    <YAxis type="category" dataKey="name" width={60} tick={{ fontSize: 12 }} />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="#82ca9d">
+                      <LabelList dataKey="count" position="right" />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              }
             </CardContent>
           </Card>
 
