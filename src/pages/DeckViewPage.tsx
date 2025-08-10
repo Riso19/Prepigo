@@ -33,12 +33,14 @@ const DeckViewPage = () => {
   const { decks, setDecks } = useDecks();
   const navigate = useNavigate();
   const [cardToDelete, setCardToDelete] = useState<FlashcardData | null>(null);
+  const [visibleCount, setVisibleCount] = useState(100);
   const isMobile = useIsMobile();
   const { settings: globalSettings } = useSettings();
 
   const deck = useMemo(() => (deckId ? findDeckById(decks, deckId) : null), [decks, deckId]);
   const deckPath = useMemo(() => (deckId ? findDeckPathById(decks, deckId)?.join(' / ') : null), [decks, deckId]);
   const flashcards = useMemo(() => (deck ? getAllFlashcardsFromDeck(deck) : []), [deck]);
+  const visibleFlashcards = useMemo(() => flashcards.slice(0, visibleCount), [flashcards, visibleCount]);
 
   const effectiveSettings = useMemo(() => {
     if (deck) {
@@ -46,6 +48,10 @@ const DeckViewPage = () => {
     }
     return globalSettings;
   }, [deck, decks, globalSettings]);
+
+  const handleLoadMore = () => {
+    setVisibleCount(prev => prev + 100);
+  };
 
   const handleDeleteConfirm = () => {
     if (cardToDelete) {
@@ -66,7 +72,7 @@ const DeckViewPage = () => {
     );
   }
 
-  const renderDesktopView = () => {
+  const renderDesktopView = (cards: FlashcardData[]) => {
     return (
       <div className="rounded-md border">
         <Table>
@@ -81,7 +87,7 @@ const DeckViewPage = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {flashcards.map(card => (
+            {cards.map(card => (
               <TableRow key={card.id}>
                 <TableCell className="capitalize font-medium">{card.type === 'imageOcclusion' ? 'Image' : card.type}</TableCell>
                 <TableCell>
@@ -138,10 +144,10 @@ const DeckViewPage = () => {
     );
   };
 
-  const renderMobileView = () => {
+  const renderMobileView = (cards: FlashcardData[]) => {
     return (
       <div className="space-y-4">
-        {flashcards.map(card => (
+        {cards.map(card => (
           <Card key={card.id}>
             <CardContent className="p-4 space-y-4">
               <div className="flex justify-between items-start gap-4">
@@ -246,7 +252,14 @@ const DeckViewPage = () => {
           </CardHeader>
           <CardContent>
             {flashcards.length > 0 ? (
-              isMobile ? renderMobileView() : renderDesktopView()
+              <>
+                {isMobile ? renderMobileView(visibleFlashcards) : renderDesktopView(visibleFlashcards)}
+                {visibleCount < flashcards.length && (
+                  <div className="mt-6 flex justify-center">
+                    <Button onClick={handleLoadMore}>Load More ({flashcards.length - visibleCount} remaining)</Button>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="text-center text-muted-foreground py-12">
                 <p className="mb-2">This deck is empty.</p>
