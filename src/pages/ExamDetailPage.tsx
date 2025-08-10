@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import Header from '@/components/Header';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ExamCalendarView } from '@/components/ExamCalendarView';
+import { toast } from 'sonner';
 
 const DailyScheduleItem = ({ day, exam }: { day: ExamScheduleItem, exam: ExamData }) => {
   const navigate = useNavigate();
@@ -21,11 +22,15 @@ const DailyScheduleItem = ({ day, exam }: { day: ExamScheduleItem, exam: ExamDat
   const isCompleted = progress === 100;
 
   const handleStudy = () => {
-    const cardsToStudy = day.cardIds
+    const remainingCardIds = day.cardIds.filter(id => !day.completedCardIds.includes(id));
+    const cardsToStudy = remainingCardIds
       .map(id => findFlashcardById(decks, id)?.flashcard)
       .filter(Boolean);
 
-    if (cardsToStudy.length === 0) return;
+    if (cardsToStudy.length === 0) {
+      toast.info("You've completed all cards for this day!");
+      return;
+    }
 
     navigate('/study/custom', {
       state: {
@@ -35,7 +40,6 @@ const DailyScheduleItem = ({ day, exam }: { day: ExamScheduleItem, exam: ExamDat
         title: `Exam Study: ${format(date, 'PPP')}`,
         examId: exam.id,
         scheduleDate: day.date,
-        cardIdsForCompletion: day.cardIds,
       }
     });
   };
