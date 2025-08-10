@@ -21,6 +21,9 @@ import PracticeMcqPage from "./pages/PracticeMcqPage";
 import ReviewMcqPage from "./pages/ReviewMcqPage";
 import McqSettingsPage from "./pages/McqSettingsPage";
 import CustomStudySetupPage from "./pages/CustomStudySetupPage";
+import { ExamsProvider } from "./contexts/ExamsContext";
+import ExamSchedulerPage from "./pages/ExamSchedulerPage";
+import CreateExamPage from "./pages/CreateExamPage";
 
 const queryClient = new QueryClient();
 
@@ -29,31 +32,35 @@ const App = () => (
     <SettingsProvider>
       <DecksProvider>
         <QuestionBankProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
-              <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/question-bank" element={<QuestionBankPage />} />
-                <Route path="/question-bank/:bankId/add" element={<CreateMcqPage />} />
-                <Route path="/question-bank/:bankId/view" element={<QuestionBankViewPage />} />
-                <Route path="/question-bank/:bankId/edit/:mcqId" element={<EditMcqPage />} />
-                <Route path="/question-bank/:bankId/practice" element={<PracticeMcqPage />} />
-                <Route path="/mcq-review/all" element={<ReviewMcqPage />} />
-                <Route path="/mcq-review/:bankId" element={<ReviewMcqPage />} />
-                <Route path="/custom-study" element={<CustomStudySetupPage />} />
-                <Route path="/study/:deckId" element={<StudyPage />} />
-                <Route path="/deck/:deckId/add" element={<CreateFlashcardPage />} />
-                <Route path="/deck/:deckId/view" element={<DeckViewPage />} />
-                <Route path="/deck/:deckId/edit/:flashcardId" element={<EditFlashcardPage />} />
-                <Route path="/settings" element={<SettingsPage />} />
-                <Route path="/settings/mcq" element={<McqSettingsPage />} />
-                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </BrowserRouter>
-          </TooltipProvider>
+          <ExamsProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Sonner />
+              <BrowserRouter>
+                <Routes>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/question-bank" element={<QuestionBankPage />} />
+                  <Route path="/question-bank/:bankId/add" element={<CreateMcqPage />} />
+                  <Route path="/question-bank/:bankId/view" element={<QuestionBankViewPage />} />
+                  <Route path="/question-bank/:bankId/edit/:mcqId" element={<EditMcqPage />} />
+                  <Route path="/question-bank/:bankId/practice" element={<PracticeMcqPage />} />
+                  <Route path="/mcq-review/all" element={<ReviewMcqPage />} />
+                  <Route path="/mcq-review/:bankId" element={<ReviewMcqPage />} />
+                  <Route path="/custom-study" element={<CustomStudySetupPage />} />
+                  <Route path="/study/:deckId" element={<StudyPage />} />
+                  <Route path="/deck/:deckId/add" element={<CreateFlashcardPage />} />
+                  <Route path="/deck/:deckId/view" element={<DeckViewPage />} />
+                  <Route path="/deck/:deckId/edit/:flashcardId" element={<EditFlashcardPage />} />
+                  <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="/settings/mcq" element={<McqSettingsPage />} />
+                  <Route path="/exams" element={<ExamSchedulerPage />} />
+                  <Route path="/exams/new" element={<CreateExamPage />} />
+                  {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </BrowserRouter>
+            </TooltipProvider>
+          </ExamsProvider>
         </QuestionBankProvider>
       </DecksProvider>
     </SettingsProvider>

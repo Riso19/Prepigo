@@ -14,7 +14,7 @@ import { Separator } from '@/components/ui/separator';
 import { useRef, useState } from 'react';
 import { useDecks } from '@/contexts/DecksContext';
 import { DeckData, decksSchema, FlashcardData } from '@/data/decks';
-import { clearDecksDB, getReviewLogsForCard, saveMediaToDB, clearMediaDB, clearQuestionBanksDB, clearMcqReviewLogsDB, getMediaFromDB, saveSingleMediaToDB } from '@/lib/idb';
+import { clearDecksDB, getReviewLogsForCard, saveMediaToDB, clearMediaDB, clearQuestionBanksDB, clearMcqReviewLogsDB, getMediaFromDB, saveSingleMediaToDB, clearExamsDB } from '@/lib/idb';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -410,6 +410,7 @@ const SettingsPage = () => {
         await clearSettingsDB();
         await clearMediaDB();
         await clearMcqReviewLogsDB();
+        await clearExamsDB();
         toast.success("All data has been reset. The app will now reload.", { id: toastId });
         setTimeout(() => {
             window.location.reload();
