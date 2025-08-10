@@ -271,8 +271,10 @@ const StatisticsPage = () => {
 
   const learningCurveData = useMemo(() => {
     if (!logs) return null;
-    const combinedLogs = [...logs.cardLogs, ...logs.mcqLogs];
-    return calculateLearningCurve(combinedLogs);
+    return {
+      flashcards: calculateLearningCurve(logs.cardLogs),
+      mcqs: calculateLearningCurve(logs.mcqLogs),
+    };
   }, [logs]);
 
   const forgettingCurveData = useMemo(() => {
@@ -667,16 +669,16 @@ const StatisticsPage = () => {
 
           <AnimatedCard delay={1.8}>
             <CardHeader>
-              <CardTitle>Learning Curve</CardTitle>
-              <CardDescription>Accuracy by review number for all items.</CardDescription>
+              <CardTitle>Flashcard Learning Curve</CardTitle>
+              <CardDescription>Accuracy by review number, resetting after each lapse.</CardDescription>
             </CardHeader>
             <CardContent>
               {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : 
-                !learningCurveData || learningCurveData.length === 0 ? <p className="text-sm text-muted-foreground">Not enough data for a learning curve.</p> :
+                !learningCurveData || learningCurveData.flashcards.length === 0 ? <p className="text-sm text-muted-foreground">Not enough data for a learning curve.</p> :
                 <ResponsiveContainer width="100%" height={250}>
-                  <LineChart data={learningCurveData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                  <LineChart data={learningCurveData.flashcards} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="review" allowDecimals={false} />
+                    <XAxis dataKey="review" allowDecimals={false} label={{ value: 'Review Number (since last lapse)', position: 'insideBottom', offset: -5 }} />
                     <YAxis domain={[0, 100]} tickFormatter={(tick) => `${tick}%`} />
                     <Tooltip formatter={(value) => [`${(value as number).toFixed(1)}%`, 'Accuracy']} />
                     <Legend />
@@ -688,6 +690,28 @@ const StatisticsPage = () => {
           </AnimatedCard>
 
           <AnimatedCard delay={1.9}>
+            <CardHeader>
+              <CardTitle>MCQ Learning Curve</CardTitle>
+              <CardDescription>Accuracy by review number, resetting after each lapse.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : 
+                !learningCurveData || learningCurveData.mcqs.length === 0 ? <p className="text-sm text-muted-foreground">Not enough data for a learning curve.</p> :
+                <ResponsiveContainer width="100%" height={250}>
+                  <LineChart data={learningCurveData.mcqs} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="review" allowDecimals={false} label={{ value: 'Review Number (since last lapse)', position: 'insideBottom', offset: -5 }} />
+                    <YAxis domain={[0, 100]} tickFormatter={(tick) => `${tick}%`} />
+                    <Tooltip formatter={(value) => [`${(value as number).toFixed(1)}%`, 'Accuracy']} />
+                    <Legend />
+                    <Line type="monotone" dataKey="accuracy" stroke="#82ca9d" strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              }
+            </CardContent>
+          </AnimatedCard>
+
+          <AnimatedCard delay={2.0}>
             <CardHeader>
               <CardTitle>Predicted Retention (Flashcards)</CardTitle>
               <CardDescription>Snapshot of current predicted recall probability.</CardDescription>
@@ -710,7 +734,7 @@ const StatisticsPage = () => {
             </CardContent>
           </AnimatedCard>
 
-          <AnimatedCard delay={2.0}>
+          <AnimatedCard delay={2.1}>
             <CardHeader>
               <CardTitle>Predicted Retention (MCQs)</CardTitle>
               <CardDescription>Snapshot of current predicted recall probability.</CardDescription>
@@ -734,7 +758,7 @@ const StatisticsPage = () => {
           </AnimatedCard>
 
           {cardDifficultyDistribution && cardDifficultyDistribution.reviewedCount > 0 && (
-            <AnimatedCard delay={2.1}>
+            <AnimatedCard delay={2.2}>
                 <CardHeader>
                     <CardTitle>Flashcard Difficulty</CardTitle>
                     <CardDescription>Distribution of FSRS difficulty scores for reviewed items.</CardDescription>
@@ -761,7 +785,7 @@ const StatisticsPage = () => {
           )}
 
           {mcqDifficultyDistribution && mcqDifficultyDistribution.reviewedCount > 0 && (
-            <AnimatedCard delay={2.2}>
+            <AnimatedCard delay={2.3}>
                 <CardHeader>
                     <CardTitle>MCQ Difficulty</CardTitle>
                     <CardDescription>Distribution of FSRS difficulty scores for reviewed items.</CardDescription>
@@ -787,7 +811,7 @@ const StatisticsPage = () => {
             </AnimatedCard>
           )}
 
-          <AnimatedCard delay={2.3}>
+          <AnimatedCard delay={2.4}>
             <CardHeader>
               <CardTitle>Flashcard Maturity</CardTitle>
               <CardDescription>A breakdown of your collection by learning stage.</CardDescription>
@@ -797,7 +821,7 @@ const StatisticsPage = () => {
             </CardContent>
           </AnimatedCard>
 
-          <AnimatedCard delay={2.4}>
+          <AnimatedCard delay={2.5}>
             <CardHeader>
               <CardTitle>MCQ Maturity</CardTitle>
               <CardDescription>A breakdown of your collection by learning stage.</CardDescription>

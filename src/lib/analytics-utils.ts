@@ -246,27 +246,38 @@ export const calculateSuspectedGuesses = (logs: (ReviewLog | McqReviewLog)[]) =>
 };
 
 export const calculateLearningCurve = (logs: (ReviewLog | McqReviewLog)[]) => {
-    const reviewsByItem = new Map<string, { rating: Rating }[]>();
+    const reviewsByItem = new Map<string, (ReviewLog | McqReviewLog)[]>();
     logs.forEach(log => {
         const id = 'cardId' in log ? log.cardId : (log as McqReviewLog).mcqId;
         if (!reviewsByItem.has(id)) {
             reviewsByItem.set(id, []);
         }
-        reviewsByItem.get(id)!.push({ rating: log.rating });
+        reviewsByItem.get(id)!.push(log);
     });
 
     const maxReviews = 10;
     const accuracyByReviewNum = Array.from({ length: maxReviews }, () => ({ correct: 0, total: 0 }));
 
-    reviewsByItem.forEach(reviews => {
-        reviews.forEach((review, index) => {
-            if (index < maxReviews) {
+    reviewsByItem.forEach(itemLogs => {
+        // Sort logs chronologically
+        itemLogs.sort((a, b) => new Date(a.review).getTime() - new Date(b.review).getTime());
+
+        let reviewCountSinceLapse = 0;
+        for (const log of itemLogs) {
+            reviewCountSinceLapse++;
+
+            if (reviewCountSinceLapse <= maxReviews) {
+                const index = reviewCountSinceLapse - 1;
                 accuracyByReviewNum[index].total++;
-                if (review.rating > Rating.Again) {
+                if (log.rating > Rating.Again) {
                     accuracyByReviewNum[index].correct++;
                 }
             }
-        });
+
+            if (log.rating === Rating.Again) {
+                reviewCountSinceLapse = 0; // Reset for the next review
+            }
+        }
     });
 
     return accuracyByReviewNum
