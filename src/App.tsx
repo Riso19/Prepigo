@@ -13,6 +13,7 @@ import DeckViewPage from "./pages/DeckViewPage";
 import EditFlashcardPage from "./pages/EditFlashcardPage";
 import SettingsPage from "./pages/SettingsPage";
 import { QuestionBankProvider } from "./contexts/QuestionBankContext";
+import QuestionBankPage from "./pages/QuestionBankPage";
 
 const queryClient = new QueryClient();
 
@@ -27,6 +28,7 @@ const App = () => (
             <BrowserRouter>
               <Routes>
                 <Route path="/" element={<Index />} />
+                <Route path="/question-bank" element={<QuestionBankPage />} />
                 <Route path="/study/:deckId" element={<StudyPage />} />
                 <Route path="/deck/:deckId/add" element={<CreateFlashcardPage />} />
                 <Route path="/deck/:deckId/view" element={<DeckViewPage />} />

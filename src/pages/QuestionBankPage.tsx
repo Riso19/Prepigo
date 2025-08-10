@@ -1,15 +1,15 @@
 import Header from "@/components/Header";
-import DeckManager from "@/components/DeckManager";
+import QuestionBankManager from "@/components/QuestionBankManager";
 
-const Index = () => {
+const QuestionBankPage = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-grow container mx-auto p-4 md:p-8 bg-secondary/50 rounded-lg my-4">
-        <DeckManager />
+        <QuestionBankManager />
       </main>
     </div>
   );
 };
 
-export default Index;
+export default QuestionBankPage;
