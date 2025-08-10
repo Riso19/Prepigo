@@ -2,10 +2,11 @@ import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { DeckData, ReviewLog } from '@/data/decks';
 
 const DB_NAME = 'PrepigoDB';
-const DB_VERSION = 3; // Increment version to trigger upgrade
+const DB_VERSION = 4; // Increment version to trigger upgrade
 const DECKS_STORE = 'decks';
 const REVIEW_LOGS_STORE = 'review_logs';
 const MEDIA_STORE = 'media';
+const SESSION_STATE_STORE = 'session_state';
 
 interface PrepigoDB extends DBSchema {
   [DECKS_STORE]: {
@@ -20,6 +21,10 @@ interface PrepigoDB extends DBSchema {
   [MEDIA_STORE]: {
     key: string; // filename
     value: { id: string; blob: Blob };
+  };
+  [SESSION_STATE_STORE]: {
+    key: string;
+    value: any;
   };
 }
 
@@ -43,6 +48,11 @@ const getDb = () => {
         if (oldVersion < 3) {
             if (!db.objectStoreNames.contains(MEDIA_STORE)) {
                 db.createObjectStore(MEDIA_STORE, { keyPath: 'id' });
+            }
+        }
+        if (oldVersion < 4) {
+            if (!db.objectStoreNames.contains(SESSION_STATE_STORE)) {
+                db.createObjectStore(SESSION_STATE_STORE);
             }
         }
       },
@@ -113,4 +123,15 @@ export const getMediaFromDB = async (id: string): Promise<Blob | undefined> => {
 export const clearMediaDB = async (): Promise<void> => {
     const db = await getDb();
     await db.clear(MEDIA_STORE);
+};
+
+// --- Session State Functions ---
+export const getIntroductionsFromDB = async (): Promise<{ date: string; ids: string[] } | undefined> => {
+  const db = await getDb();
+  return db.get(SESSION_STATE_STORE, 'introductionsToday');
+};
+
+export const saveIntroductionsToDB = async (introductions: { date: string; ids: string[] }): Promise<void> => {
+  const db = await getDb();
+  await db.put(SESSION_STATE_STORE, introductions, 'introductionsToday');
 };

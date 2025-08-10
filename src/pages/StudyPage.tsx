@@ -26,7 +26,7 @@ const parseSteps = (steps: string): number[] => {
 
 const StudyPage = () => {
   const { deckId } = useParams<{ deckId: string }>();
-  const { decks, setDecks } = useDecks();
+  const { decks, setDecks, introductionsToday, addIntroducedCard } = useDecks();
   const { settings: globalSettings } = useSettings();
   const navigate = useNavigate();
 
@@ -58,14 +58,13 @@ const StudyPage = () => {
 
     const decksToStudy = deckId === 'all' ? decks : (deck ? [deck] : []);
     if (decksToStudy.length > 0) {
-        const queue = buildSessionQueue(decksToStudy, decks, globalSettings);
+        const queue = buildSessionQueue(decksToStudy, decks, globalSettings, introductionsToday);
         setSessionQueue(queue);
     }
     
     setCurrentCardIndex(0);
     setBuriedNoteIds(new Set());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deckId]);
+  }, [deck, deckId, decks, globalSettings, introductionsToday]);
 
   const handleRating = useCallback(async (rating: Rating) => {
     if (!currentCard) return;
@@ -74,6 +73,7 @@ const StudyPage = () => {
     const actualCardIndex = sessionQueue.findIndex(c => c.id === currentCard.id);
     if (actualCardIndex === -1) return;
 
+    const wasNew = (currentCard.srs?.fsrs?.reps === 0 || !currentCard.srs?.fsrs) || (currentCard.srs?.sm2?.repetitions === 0 || !currentCard.srs?.sm2);
     let updatedCard: FlashcardData = currentCard;
 
     if (settings.scheduler === 'fsrs') {
@@ -150,8 +150,8 @@ const StudyPage = () => {
         };
         nextSm2State = sm2(qualityMap[rating], sm2Params, sm2State);
       } else {
-        const isNew = cardState === 'new';
-        if (isNew) nextSm2State.easinessFactor = settings.sm2StartingEase;
+        const isNewCard = cardState === 'new';
+        if (isNewCard) nextSm2State.easinessFactor = settings.sm2StartingEase;
         
         if (rating === Rating.Easy) {
           nextSm2State.state = 'review';
@@ -174,7 +174,7 @@ const StudyPage = () => {
             nextDue.setDate(nextDue.getDate() + graduationInterval);
             nextSm2State.due = nextDue.toISOString();
           } else {
-            nextSm2State.state = isNew ? 'learning' : cardState;
+            nextSm2State.state = isNewCard ? 'learning' : cardState;
             nextSm2State.learning_step = nextStep;
             const nextDue = new Date();
             nextDue.setMinutes(nextDue.getMinutes() + steps[nextStep]);
@@ -196,6 +196,10 @@ const StudyPage = () => {
       }
     }
     
+    if (wasNew) {
+      addIntroducedCard(currentCard.id);
+    }
+
     setDecks(prevDecks => updateFlashcard(prevDecks, updatedCard));
     
     if (currentCard.noteId) {
@@ -217,7 +221,7 @@ const StudyPage = () => {
 
     setIsFlipped(false);
     setCurrentCardIndex(actualCardIndex + 1);
-  }, [currentCard, sessionQueue, decks, deckId, globalSettings, setDecks, fsrsOutcomes, fsrsInstance]);
+  }, [currentCard, sessionQueue, decks, deckId, globalSettings, setDecks, fsrsOutcomes, fsrsInstance, addIntroducedCard]);
 
   useEffect(() => {
     if (isFlipped && currentCard) {

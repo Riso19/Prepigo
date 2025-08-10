@@ -348,11 +348,12 @@ const shuffle = <T,>(array: T[]): T[] => {
 export const buildSessionQueue = (
   decksToStudy: DeckData[],
   allDecks: DeckData[],
-  globalSettings: SrsSettings
+  globalSettings: SrsSettings,
+  introducedTodayIds: Set<string>
 ): FlashcardData[] => {
   const now = new Date();
 
-  const isNew = (card: FlashcardData, s: SrsSettings) => !card.srs?.isSuspended && (s.scheduler === 'fsrs' ? !card.srs?.fsrs || card.srs.fsrs.state === State.New : !card.srs?.sm2 || card.srs.sm2.state === 'new');
+  const isNew = (card: FlashcardData, s: SrsSettings) => !introducedTodayIds.has(card.id) && !card.srs?.isSuspended && (s.scheduler === 'fsrs' ? !card.srs?.fsrs || card.srs.fsrs.state === State.New : !card.srs?.sm2 || card.srs.sm2.state === 'new');
   const isDue = (card: FlashcardData, s: SrsSettings) => !card.srs?.isSuspended && (s.scheduler === 'fsrs' ? card.srs?.fsrs && new Date(card.srs.fsrs.due) <= now : card.srs?.sm2 && new Date(card.srs.sm2.due) <= now);
   const isLearning = (card: FlashcardData, s: SrsSettings) => isDue(card, s) && (s.scheduler === 'fsrs' ? card.srs?.fsrs?.state === State.Learning || card.srs?.fsrs?.state === State.Relearning : card.srs?.sm2?.state === 'learning' || card.srs?.sm2?.state === 'relearning');
   const isInterdayLearning = (card: FlashcardData, s: SrsSettings) => isLearning(card, s) && (s.scheduler === 'fsrs' || (s.scheduler === 'sm2' && (card.srs!.sm2!.learning_step || 0) >= parseSteps(card.srs!.sm2!.state === 'learning' ? s.learningSteps : s.relearningSteps).length || parseSteps(card.srs!.sm2!.state === 'learning' ? s.learningSteps : s.relearningSteps)[card.srs!.sm2!.learning_step || 0] >= 1440));

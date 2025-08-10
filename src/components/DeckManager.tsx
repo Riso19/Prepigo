@@ -28,7 +28,7 @@ const RootDroppable = () => {
 };
 
 const DeckManager = () => {
-  const { decks, setDecks } = useDecks();
+  const { decks, setDecks, introductionsToday } = useDecks();
   const { settings } = useSettings();
   const [isAddDeckOpen, setIsAddDeckOpen] = useState(false);
   const [dueCount, setDueCount] = useState(0);
@@ -36,12 +36,12 @@ const DeckManager = () => {
 
   useEffect(() => {
     if (decks.length > 0) {
-      const queue = buildSessionQueue(decks, decks, settings);
+      const queue = buildSessionQueue(decks, decks, settings, introductionsToday);
       setDueCount(queue.length);
     } else {
       setDueCount(0);
     }
-  }, [decks, settings]);
+  }, [decks, settings, introductionsToday]);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
