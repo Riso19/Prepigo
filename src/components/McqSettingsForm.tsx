@@ -13,6 +13,8 @@ const mcqSettingsSubSchema = z.object({
     scheduler: srsSettingsSchema.shape.scheduler,
     mcqFsrsParameters: srsSettingsSchema.shape.mcqFsrsParameters,
     mcqFsrs6Parameters: srsSettingsSchema.shape.mcqFsrs6Parameters,
+    mcqNewCardsPerDay: srsSettingsSchema.shape.mcqNewCardsPerDay,
+    mcqMaxReviewsPerDay: srsSettingsSchema.shape.mcqMaxReviewsPerDay,
 });
 
 export const McqSettingsForm = ({ setDialogOpen }: { setDialogOpen: (isOpen: boolean) => void }) => {
@@ -24,6 +26,8 @@ export const McqSettingsForm = ({ setDialogOpen }: { setDialogOpen: (isOpen: boo
       scheduler: settings.scheduler,
       mcqFsrsParameters: settings.mcqFsrsParameters,
       mcqFsrs6Parameters: settings.mcqFsrs6Parameters,
+      mcqNewCardsPerDay: settings.mcqNewCardsPerDay,
+      mcqMaxReviewsPerDay: settings.mcqMaxReviewsPerDay,
     },
   });
 
@@ -35,6 +39,8 @@ export const McqSettingsForm = ({ setDialogOpen }: { setDialogOpen: (isOpen: boo
       scheduler: data.scheduler,
       mcqFsrsParameters: data.mcqFsrsParameters,
       mcqFsrs6Parameters: data.mcqFsrs6Parameters,
+      mcqNewCardsPerDay: data.mcqNewCardsPerDay,
+      mcqMaxReviewsPerDay: data.mcqMaxReviewsPerDay,
     });
     showSuccess("MCQ settings saved!");
     setDialogOpen(false);
@@ -93,6 +99,18 @@ export const McqSettingsForm = ({ setDialogOpen }: { setDialogOpen: (isOpen: boo
                 </CardContent>
             </Card>
         )}
+
+        <Card>
+            <CardHeader><CardTitle>Daily Limits for MCQs</CardTitle></CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormField control={form.control} name="mcqNewCardsPerDay" render={({ field }) => (
+                    <FormItem><FormLabel>New MCQs/day</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={form.control} name="mcqMaxReviewsPerDay" render={({ field }) => (
+                    <FormItem><FormLabel>Maximum reviews/day</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+            </CardContent>
+        </Card>
 
         <div className="flex justify-end">
           <Button type="submit">Save MCQ Settings</Button>

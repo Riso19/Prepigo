@@ -1,4 +1,6 @@
 import { QuestionBankData, McqData } from "@/data/questionBanks";
+import { SrsSettings } from "@/contexts/SettingsContext";
+import { State } from "ts-fsrs";
 
 // Recursively find a question bank by its ID
 export const findQuestionBankById = (banks: QuestionBankData[], id: string): QuestionBankData | null => {
@@ -185,4 +187,51 @@ export const getAllTagsFromQuestionBanks = (banks: QuestionBankData[]): string[]
     };
     banks.forEach(collectTags);
     return Array.from(allTags).sort((a, b) => a.localeCompare(b));
+};
+
+const shuffle = <T,>(array: T[]): T[] => {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+};
+
+export const buildMcqSessionQueue = (
+  questionBanks: QuestionBankData[],
+  settings: SrsSettings,
+  introducedMcqIds: Set<string>
+): McqData[] => {
+  const now = new Date();
+  const allMcqs = questionBanks.flatMap(bank => getAllMcqsFromBank(bank));
+
+  const isNew = (mcq: McqData) => !introducedMcqIds.has(mcq.id) && (settings.scheduler === 'fsrs6' ? !mcq.srs?.fsrs6 || mcq.srs.fsrs6.state === State.New : !mcq.srs?.fsrs || mcq.srs.fsrs.state === State.New);
+  const isDue = (mcq: McqData) => (settings.scheduler === 'fsrs6' ? mcq.srs?.fsrs6 && new Date(mcq.srs.fsrs6.due) <= now : mcq.srs?.fsrs && new Date(mcq.srs.fsrs.due) <= now);
+  const isLearning = (mcq: McqData) => isDue(mcq) && (settings.scheduler === 'fsrs6' ? mcq.srs?.fsrs6?.state === State.Learning || mcq.srs?.fsrs6?.state === State.Relearning : mcq.srs?.fsrs?.state === State.Learning || mcq.srs?.fsrs?.state === State.Relearning);
+  const isReview = (mcq: McqData) => isDue(mcq) && (settings.scheduler === 'fsrs6' ? mcq.srs?.fsrs6?.state === State.Review : mcq.srs?.fsrs?.state === State.Review);
+
+  const sessionNew: McqData[] = [];
+  const sessionReviews: McqData[] = [];
+  const sessionLearning: McqData[] = [];
+
+  let newBudget = settings.mcqNewCardsPerDay - introducedMcqIds.size;
+  let reviewBudget = settings.mcqMaxReviewsPerDay;
+
+  for (const mcq of allMcqs) {
+    if (isLearning(mcq)) {
+      sessionLearning.push(mcq);
+    } else if (isReview(mcq) && reviewBudget > 0) {
+      sessionReviews.push(mcq);
+      reviewBudget--;
+    } else if (isNew(mcq) && newBudget > 0) {
+      sessionNew.push(mcq);
+      newBudget--;
+    }
+  }
+
+  const sortedNew = shuffle(sessionNew);
+  const sortedReviews = shuffle(sessionReviews);
+  const learningCombined = sessionLearning.sort((a, b) => new Date(a.srs!.fsrs?.due || a.srs!.fsrs6!.due).getTime() - new Date(b.srs!.fsrs?.due || b.srs!.fsrs6!.due).getTime());
+
+  return [...learningCombined, ...shuffle([...sortedReviews, ...sortedNew])];
 };

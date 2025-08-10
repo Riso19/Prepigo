@@ -3,7 +3,7 @@ import { DeckData, ReviewLog } from '@/data/decks';
 import { QuestionBankData } from '@/data/questionBanks';
 
 const DB_NAME = 'PrepigoDB';
-const DB_VERSION = 6; // Increment version to trigger upgrade
+const DB_VERSION = 7; // Increment version to trigger upgrade
 const DECKS_STORE = 'decks';
 const REVIEW_LOGS_STORE = 'review_logs';
 const MEDIA_STORE = 'media';
@@ -80,6 +80,7 @@ const getDb = () => {
                 store.createIndex('mcqId', 'mcqId');
             }
         }
+        // Version 7 does not require a schema change, just clearing old data if needed.
       },
     });
   }
@@ -177,6 +178,16 @@ export const getIntroductionsFromDB = async (): Promise<{ date: string; ids: str
 export const saveIntroductionsToDB = async (introductions: { date: string; ids: string[] }): Promise<void> => {
   const db = await getDb();
   await db.put(SESSION_STATE_STORE, introductions, 'introductionsToday');
+};
+
+export const getMcqIntroductionsFromDB = async (): Promise<{ date: string; ids: string[] } | undefined> => {
+  const db = await getDb();
+  return db.get(SESSION_STATE_STORE, 'mcqIntroductionsToday');
+};
+
+export const saveMcqIntroductionsToDB = async (introductions: { date: string; ids: string[] }): Promise<void> => {
+  const db = await getDb();
+  await db.put(SESSION_STATE_STORE, introductions, 'mcqIntroductionsToday');
 };
 
 // --- Question Bank Functions ---

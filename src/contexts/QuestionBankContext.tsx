@@ -1,12 +1,14 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { QuestionBankData, questionBanks as initialQuestionBanks } from "@/data/questionBanks";
-import { getAllQuestionBanksFromDB, saveQuestionBanksToDB } from "@/lib/idb";
+import { getAllQuestionBanksFromDB, saveQuestionBanksToDB, getMcqIntroductionsFromDB, saveMcqIntroductionsToDB } from "@/lib/idb";
 import { Loader2 } from "lucide-react";
 
 interface QuestionBankContextType {
   questionBanks: QuestionBankData[];
   setQuestionBanks: (newBanks: QuestionBankData[] | ((prevBanks: QuestionBankData[]) => QuestionBankData[])) => void;
   isLoading: boolean;
+  mcqIntroductionsToday: Set<string>;
+  addIntroducedMcq: (mcqId: string) => void;
 }
 
 const QuestionBankContext = createContext<QuestionBankContextType | undefined>(undefined);
@@ -14,16 +16,28 @@ const QuestionBankContext = createContext<QuestionBankContextType | undefined>(u
 export const QuestionBankProvider = ({ children }: { children: ReactNode }) => {
   const [questionBanks, setQuestionBanksState] = useState<QuestionBankData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [mcqIntroductionsToday, setMcqIntroductionsToday] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const loadData = async () => {
       try {
+        // Load question banks
         let dbBanks = await getAllQuestionBanksFromDB();
         if (dbBanks.length === 0) {
           await saveQuestionBanksToDB(initialQuestionBanks);
           dbBanks = initialQuestionBanks;
         }
         setQuestionBanksState(dbBanks);
+
+        // Load MCQ introductions
+        const todayStr = new Date().toISOString().split('T')[0];
+        const storedMcqIntroductions = await getMcqIntroductionsFromDB();
+        if (storedMcqIntroductions && storedMcqIntroductions.date === todayStr) {
+          setMcqIntroductionsToday(new Set(storedMcqIntroductions.ids));
+        } else {
+          setMcqIntroductionsToday(new Set());
+          await saveMcqIntroductionsToDB({ date: todayStr, ids: [] });
+        }
       } catch (error) {
         console.error("Failed to load question banks from IndexedDB, falling back to in-memory data.", error);
         setQuestionBanksState(initialQuestionBanks);
@@ -47,8 +61,18 @@ export const QuestionBankProvider = ({ children }: { children: ReactNode }) => {
     });
   };
 
+  const addIntroducedMcq = (mcqId: string) => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    setMcqIntroductionsToday(prev => {
+      const newSet = new Set(prev);
+      newSet.add(mcqId);
+      saveMcqIntroductionsToDB({ date: todayStr, ids: Array.from(newSet) });
+      return newSet;
+    });
+  };
+
   return (
-    <QuestionBankContext.Provider value={{ questionBanks, setQuestionBanks, isLoading }}>
+    <QuestionBankContext.Provider value={{ questionBanks, setQuestionBanks, isLoading, mcqIntroductionsToday, addIntroducedMcq }}>
       {isLoading ? (
         <div className="min-h-screen w-full flex flex-col items-center justify-center text-center p-4">
             <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />

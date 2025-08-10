@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { PlusCircle, Settings } from "lucide-react";
 import { useQuestionBanks } from "@/contexts/QuestionBankContext";
@@ -6,10 +6,11 @@ import QuestionBankItem from "@/components/QuestionBankItem";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { AddQuestionBankDialog } from "./AddQuestionBankDialog";
 import { DndContext, DragEndEvent, useDroppable } from "@dnd-kit/core";
-import { moveQuestionBank } from "@/lib/question-bank-utils";
+import { moveQuestionBank, buildMcqSessionQueue } from "@/lib/question-bank-utils";
 import { Link } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { McqSettingsForm } from "./McqSettingsForm";
+import { useSettings } from "@/contexts/SettingsContext";
 
 const RootDroppable = () => {
   const { setNodeRef, isOver } = useDroppable({
@@ -29,9 +30,21 @@ const RootDroppable = () => {
 };
 
 const QuestionBankManager = () => {
-  const { questionBanks, setQuestionBanks } = useQuestionBanks();
+  const { questionBanks, mcqIntroductionsToday } = useQuestionBanks();
+  const { setQuestionBanks } = useQuestionBanks();
+  const { settings } = useSettings();
   const [isAddBankOpen, setIsAddBankOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [dueMcqCount, setDueMcqCount] = useState(0);
+
+  useEffect(() => {
+    if (questionBanks.length > 0) {
+      const queue = buildMcqSessionQueue(questionBanks, settings, mcqIntroductionsToday);
+      setDueMcqCount(queue.length);
+    } else {
+      setDueMcqCount(0);
+    }
+  }, [questionBanks, settings, mcqIntroductionsToday]);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -50,7 +63,17 @@ const QuestionBankManager = () => {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <CardTitle className="text-2xl">My Question Banks</CardTitle>
             <div className="flex items-center gap-2">
-              <Button asChild>
+              {dueMcqCount > 0 && (
+                <Button asChild className="relative">
+                  <Link to="/mcq-review/all">
+                    Review MCQs
+                    <span className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white">
+                      {dueMcqCount}
+                    </span>
+                  </Link>
+                </Button>
+              )}
+              <Button asChild variant="outline">
                 <Link to="/question-bank/all/practice">Practice Now</Link>
               </Button>
               <Button onClick={() => setIsAddBankOpen(true)}>
