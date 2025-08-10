@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuestionBanks } from "@/contexts/QuestionBankContext";
-import { findQuestionBankById, getAllMcqsFromBank } from "@/lib/question-bank-utils";
+import { findQuestionBankById, getAllMcqsFromBank, updateMcq } from "@/lib/question-bank-utils";
 import { McqData } from "@/data/questionBanks";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Home, X, HelpCircle, Clock, Check, Sparkles } from "lucide-react";
@@ -9,6 +9,9 @@ import McqPlayer from "@/components/McqPlayer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { fsrs, createEmptyCard, Card as FsrsCard, Rating } from "ts-fsrs";
+import { fsrsMedConfig } from "../config/fsrs-med-config";
+import { addMcqReviewLog, McqReviewLog } from "@/lib/idb";
 
 const shuffle = <T,>(array: T[]): T[] => {
   const newArray = [...array];
@@ -21,7 +24,7 @@ const shuffle = <T,>(array: T[]): T[] => {
 
 const PracticeMcqPage = () => {
   const { bankId } = useParams<{ bankId: string }>();
-  const { questionBanks } = useQuestionBanks();
+  const { questionBanks, setQuestionBanks } = useQuestionBanks();
   const navigate = useNavigate();
 
   const [sessionQueue, setSessionQueue] = useState<McqData[]>([]);
@@ -30,6 +33,8 @@ const PracticeMcqPage = () => {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [sessionStats, setSessionStats] = useState({ correct: 0, incorrect: 0 });
   const [isFinished, setIsFinished] = useState(false);
+
+  const fsrsInstance = useMemo(() => fsrs(fsrsMedConfig), []);
 
   const bank = useMemo(() => (bankId && bankId !== 'all' ? findQuestionBankById(questionBanks, bankId) : null), [questionBanks, bankId]);
   const currentQuestion = useMemo(() => sessionQueue[currentQuestionIndex], [sessionQueue, currentQuestionIndex]);
@@ -58,9 +63,62 @@ const PracticeMcqPage = () => {
     setIsSubmitted(true);
   }, [isSubmitted, currentQuestion]);
 
-  const handleGradeAndProceed = useCallback((grade: number) => {
-    // TODO: Implement FSRS logic here using the grade
-    console.log(`Graded with FSRS rating: ${grade}`);
+  const handleGradeAndProceed = useCallback(async (grade: number) => {
+    if (!currentQuestion) return;
+
+    const ratingMap: { [key: number]: Rating } = {
+      1: Rating.Again,
+      2: Rating.Hard,
+      3: Rating.Good,
+      4: Rating.Easy,
+      5: Rating.Easy, // Map 5 to Easy as well
+    };
+    const rating = ratingMap[grade];
+    if (rating === undefined) return;
+
+    const card: FsrsCard = currentQuestion.srs?.fsrs
+      ? {
+          due: new Date(currentQuestion.srs.fsrs.due),
+          stability: currentQuestion.srs.fsrs.stability,
+          difficulty: currentQuestion.srs.fsrs.difficulty,
+          elapsed_days: currentQuestion.srs.fsrs.elapsed_days,
+          scheduled_days: currentQuestion.srs.fsrs.scheduled_days,
+          reps: currentQuestion.srs.fsrs.reps,
+          lapses: currentQuestion.srs.fsrs.lapses,
+          state: currentQuestion.srs.fsrs.state,
+          last_review: currentQuestion.srs.fsrs.last_review ? new Date(currentQuestion.srs.fsrs.last_review) : undefined,
+        }
+      : createEmptyCard(new Date());
+
+    const schedulingResult = fsrsInstance.repeat(card, new Date());
+    const nextState = schedulingResult[rating];
+
+    const logToSave: McqReviewLog = {
+      mcqId: currentQuestion.id,
+      rating: nextState.log.rating,
+      state: nextState.log.state,
+      due: nextState.log.due.toISOString(),
+      stability: nextState.log.stability,
+      difficulty: nextState.log.difficulty,
+      elapsed_days: nextState.log.elapsed_days,
+      last_elapsed_days: nextState.log.last_elapsed_days,
+      scheduled_days: nextState.log.scheduled_days,
+      review: nextState.log.review.toISOString(),
+    };
+    await addMcqReviewLog(logToSave);
+
+    const updatedMcq: McqData = {
+      ...currentQuestion,
+      srs: {
+        ...currentQuestion.srs,
+        fsrs: {
+          ...nextState.card,
+          due: nextState.card.due.toISOString(),
+          last_review: nextState.card.last_review?.toISOString(),
+        },
+      },
+    };
+    setQuestionBanks(prevBanks => updateMcq(prevBanks, updatedMcq));
 
     if (currentQuestionIndex < sessionQueue.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
@@ -69,7 +127,7 @@ const PracticeMcqPage = () => {
     } else {
       setIsFinished(true);
     }
-  }, [currentQuestionIndex, sessionQueue.length]);
+  }, [currentQuestion, currentQuestionIndex, sessionQueue.length, fsrsInstance, setQuestionBanks]);
 
   const handleRestart = useCallback(() => {
     setSessionQueue(shuffle(sessionQueue));

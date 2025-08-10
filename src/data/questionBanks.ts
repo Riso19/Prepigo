@@ -1,4 +1,5 @@
 import * as z from 'zod';
+import { srsDataSchema } from './decks';
 
 // --- MCQ Schemas ---
 export const mcqOptionSchema = z.object({
@@ -13,6 +14,7 @@ export const mcqDataSchema = z.object({
   options: z.array(mcqOptionSchema),
   explanation: z.string(),
   tags: z.array(z.string()).optional(),
+  srs: srsDataSchema.optional(),
 });
 
 // --- Question Bank Schema (Recursive) ---

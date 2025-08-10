@@ -3,12 +3,15 @@ import { DeckData, ReviewLog } from '@/data/decks';
 import { QuestionBankData } from '@/data/questionBanks';
 
 const DB_NAME = 'PrepigoDB';
-const DB_VERSION = 5; // Increment version to trigger upgrade
+const DB_VERSION = 6; // Increment version to trigger upgrade
 const DECKS_STORE = 'decks';
 const REVIEW_LOGS_STORE = 'review_logs';
 const MEDIA_STORE = 'media';
 const SESSION_STATE_STORE = 'session_state';
 const QUESTION_BANKS_STORE = 'question_banks';
+const MCQ_REVIEW_LOGS_STORE = 'mcq_review_logs';
+
+export type McqReviewLog = Omit<ReviewLog, 'cardId'> & { mcqId: string };
 
 interface PrepigoDB extends DBSchema {
   [DECKS_STORE]: {
@@ -19,6 +22,11 @@ interface PrepigoDB extends DBSchema {
     key: number;
     value: ReviewLog;
     indexes: { 'cardId': string };
+  };
+  [MCQ_REVIEW_LOGS_STORE]: {
+    key: number;
+    value: McqReviewLog;
+    indexes: { 'mcqId': string };
   };
   [MEDIA_STORE]: {
     key: string; // filename
@@ -66,6 +74,12 @@ const getDb = () => {
                 db.createObjectStore(QUESTION_BANKS_STORE, { keyPath: 'id' });
             }
         }
+        if (oldVersion < 6) {
+            if (!db.objectStoreNames.contains(MCQ_REVIEW_LOGS_STORE)) {
+                const store = db.createObjectStore(MCQ_REVIEW_LOGS_STORE, { autoIncrement: true });
+                store.createIndex('mcqId', 'mcqId');
+            }
+        }
       },
     });
   }
@@ -106,6 +120,24 @@ export const clearReviewLogsDB = async (): Promise<void> => {
   const db = await getDb();
   await db.clear(REVIEW_LOGS_STORE);
 };
+
+// --- MCQ Review Log Functions ---
+
+export const addMcqReviewLog = async (log: McqReviewLog): Promise<void> => {
+  const db = await getDb();
+  await db.add(MCQ_REVIEW_LOGS_STORE, log);
+};
+
+export const getReviewLogsForMcq = async (mcqId: string): Promise<McqReviewLog[]> => {
+  const db = await getDb();
+  return db.getAllFromIndex(MCQ_REVIEW_LOGS_STORE, 'mcqId', mcqId);
+};
+
+export const clearMcqReviewLogsDB = async (): Promise<void> => {
+  const db = await getDb();
+  await db.clear(MCQ_REVIEW_LOGS_STORE);
+};
+
 
 // --- Media Functions ---
 
