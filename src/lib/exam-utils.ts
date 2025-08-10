@@ -9,7 +9,7 @@ export const getCardsForExam = (exam: ExamData, allDecks: DeckData[], settings: 
   const flatDecks = allDecksFlat(allDecks);
 
   const cardSet = new Set<FlashcardData>();
-  const targetDeckIds = new Set(exam.deckIds);
+  const targetDeckIds = new Set(exam.deckIds || []);
 
   flatDecks.forEach(deck => {
     if (targetDeckIds.has(deck.id)) {
@@ -19,7 +19,7 @@ export const getCardsForExam = (exam: ExamData, allDecks: DeckData[], settings: 
 
   let cards = Array.from(cardSet);
 
-  if (exam.tags.length > 0) {
+  if (exam.tags && exam.tags.length > 0) {
     cards = cards.filter(card => {
       if (!card.tags || card.tags.length === 0) return false;
       if (exam.tagFilterType === 'any') {
