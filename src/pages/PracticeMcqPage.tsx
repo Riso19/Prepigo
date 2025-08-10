@@ -4,10 +4,11 @@ import { useQuestionBanks } from "@/contexts/QuestionBankContext";
 import { findQuestionBankById, getAllMcqsFromBank } from "@/lib/question-bank-utils";
 import { McqData } from "@/data/questionBanks";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Home } from "lucide-react";
+import { ArrowLeft, Home, X, HelpCircle, Clock, Check, Sparkles } from "lucide-react";
 import McqPlayer from "@/components/McqPlayer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const shuffle = <T,>(array: T[]): T[] => {
   const newArray = [...array];
@@ -54,7 +55,10 @@ const PracticeMcqPage = () => {
     setIsSubmitted(true);
   };
 
-  const handleNext = () => {
+  const handleGradeAndProceed = (grade: number) => {
+    // TODO: Implement FSRS logic here using the grade
+    console.log(`Graded with FSRS rating: ${grade}`);
+
     if (currentQuestionIndex < sessionQueue.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
       setSelectedOptionId(null);
@@ -111,6 +115,14 @@ const PracticeMcqPage = () => {
     );
   }
 
+  const gradingButtons = [
+    { label: "Wrong", tooltip: "Knew you were wrong or guessed wrong", grade: 1, icon: X, color: "bg-red-500 hover:bg-red-600" },
+    { label: "Unsure", tooltip: "Correct but unsure, or guessed right", grade: 2, icon: HelpCircle, color: "bg-yellow-500 hover:bg-yellow-600" },
+    { label: "Slow", tooltip: "Correct, but took effort to recall", grade: 3, icon: Clock, color: "bg-blue-500 hover:bg-blue-600" },
+    { label: "Confident", tooltip: "Quick, certain recall", grade: 4, icon: Check, color: "bg-green-500 hover:bg-green-600" },
+    { label: "Easy", tooltip: "Trivial, effortless recall", grade: 5, icon: Sparkles, color: "bg-sky-400 hover:bg-sky-500" },
+  ];
+
   return (
     <div className="min-h-screen w-full bg-secondary/50 flex flex-col">
       <div className="flex-grow w-full pb-32">
@@ -135,9 +147,24 @@ const PracticeMcqPage = () => {
       <footer className="sticky bottom-0 w-full bg-secondary/95 backdrop-blur-sm border-t z-20">
         <div className="w-full max-w-2xl mx-auto p-4">
           {isSubmitted ? (
-            <Button onClick={handleNext} className="w-full h-16 text-lg">
-              {currentQuestionIndex === sessionQueue.length - 1 ? "Finish Session" : "Next Question"}
-            </Button>
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 md:gap-4">
+              {gradingButtons.map(({ label, tooltip, grade, icon: Icon, color }) => (
+                <Tooltip key={grade}>
+                  <TooltipTrigger asChild>
+                    <Button
+                      onClick={() => handleGradeAndProceed(grade)}
+                      className={`h-16 text-base flex-col gap-1 text-white font-bold ${color}`}
+                    >
+                      <Icon className="h-5 w-5" />
+                      <span>{label}</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{tooltip}</p>
+                  </TooltipContent>
+                </Tooltip>
+              ))}
+            </div>
           ) : (
             <Button onClick={handleSubmit} disabled={!selectedOptionId} className="w-full h-16 text-lg">
               Check Answer
