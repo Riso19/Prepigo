@@ -87,6 +87,7 @@ const PracticeMcqPage = () => {
           lapses: currentQuestion.srs.fsrs.lapses,
           state: currentQuestion.srs.fsrs.state,
           last_review: currentQuestion.srs.fsrs.last_review ? new Date(currentQuestion.srs.fsrs.last_review) : undefined,
+          learning_steps: currentQuestion.srs.fsrs.learning_steps ?? 0,
         }
       : createEmptyCard(new Date());
 
