@@ -1,10 +1,10 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
 import { useQuestionBanks } from "@/contexts/QuestionBankContext";
 import { updateMcq, buildMcqSessionQueue, findQuestionBankById, getEffectiveMcqSrsSettings } from "@/lib/question-bank-utils";
 import { McqData, QuestionBankData } from "@/data/questionBanks";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Home, X, HelpCircle, Clock, Check, Sparkles } from "lucide-react";
+import { ArrowLeft, Home, X, HelpCircle, Clock, Check, Sparkles, Calendar } from "lucide-react";
 import McqPlayer from "@/components/McqPlayer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -13,6 +13,9 @@ import { fsrs, createEmptyCard, Card as FsrsCard, Rating, State } from "ts-fsrs"
 import { fsrs6, Card as Fsrs6Card, generatorParameters as fsrs6GeneratorParameters } from "@/lib/fsrs6";
 import { addMcqReviewLog, McqReviewLog } from "@/lib/idb";
 import { useSettings } from "@/contexts/SettingsContext";
+import { useExams } from "@/contexts/ExamsContext";
+import { ExamData } from "@/data/exams";
+import { differenceInDays, isPast } from "date-fns";
 
 const shuffle = <T,>(array: T[]): T[] => {
   const newArray = [...array];
@@ -51,6 +54,7 @@ const ReviewMcqPage = () => {
   const { questionBanks, setQuestionBanks, mcqIntroductionsToday, addIntroducedMcq } = useQuestionBanks();
   const navigate = useNavigate();
   const { settings: globalSettings } = useSettings();
+  const { exams } = useExams();
 
   const [sessionQueue, setSessionQueue] = useState<McqData[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -60,6 +64,7 @@ const ReviewMcqPage = () => {
   const [sessionStats, setSessionStats] = useState({ correct: 0, incorrect: 0 });
   const [isFinished, setIsFinished] = useState(false);
   const [dueTimeStrings, setDueTimeStrings] = useState<Record<string, string> | null>(null);
+  const [mcqExamMap, setMcqExamMap] = useState<Map<string, ExamData>>(new Map());
 
   const fsrsInstance = useMemo(() => {
     const settings = getEffectiveMcqSrsSettings(questionBanks, bankId || 'all', globalSettings);
@@ -74,18 +79,24 @@ const ReviewMcqPage = () => {
   }, [bankId, questionBanks, globalSettings]);
 
   const currentQuestion = useMemo(() => sessionQueue[currentQuestionIndex], [sessionQueue, currentQuestionIndex]);
+  const currentMcqExam = useMemo(() => {
+    if (!currentQuestion) return null;
+    return mcqExamMap.get(currentQuestion.id);
+  }, [currentQuestion, mcqExamMap]);
 
   useEffect(() => {
     if (questionBanks.length > 0) {
       const banksToReview = bankId && bankId !== 'all' ? [findQuestionBankById(questionBanks, bankId)].filter(Boolean) as QuestionBankData[] : questionBanks;
       if (banksToReview.length > 0) {
-        const queue = buildMcqSessionQueue(banksToReview, questionBanks, globalSettings, mcqIntroductionsToday);
+        const { queue, mcqExamMap: newMcqExamMap } = buildMcqSessionQueue(banksToReview, questionBanks, globalSettings, mcqIntroductionsToday, exams);
         setSessionQueue(queue);
+        setMcqExamMap(newMcqExamMap);
       } else {
         setSessionQueue([]);
+        setMcqExamMap(new Map());
       }
     }
-  }, [bankId, questionBanks, globalSettings, mcqIntroductionsToday]);
+  }, [bankId, questionBanks, globalSettings, mcqIntroductionsToday, exams]);
 
   const handleGradeAndProceed = useCallback(async (rating: Rating) => {
     if (!currentQuestion) return;
@@ -211,7 +222,7 @@ const ReviewMcqPage = () => {
   const handleRestart = useCallback(() => {
     const banksToReview = bankId && bankId !== 'all' ? [findQuestionBankById(questionBanks, bankId)].filter(Boolean) as QuestionBankData[] : questionBanks;
     if (banksToReview.length > 0) {
-      const queue = buildMcqSessionQueue(banksToReview, questionBanks, globalSettings, mcqIntroductionsToday);
+      const { queue } = buildMcqSessionQueue(banksToReview, questionBanks, globalSettings, mcqIntroductionsToday, exams);
       setSessionQueue(queue);
     }
     setCurrentQuestionIndex(0);
@@ -220,7 +231,7 @@ const ReviewMcqPage = () => {
     setIsAnswerCorrect(null);
     setSessionStats({ correct: 0, incorrect: 0 });
     setIsFinished(false);
-  }, [bankId, questionBanks, globalSettings, mcqIntroductionsToday]);
+  }, [bankId, questionBanks, globalSettings, mcqIntroductionsToday, exams]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -315,6 +326,18 @@ const ReviewMcqPage = () => {
             <Progress value={((currentQuestionIndex + 1) / sessionQueue.length) * 100} className="mt-4 h-2" />
           </header>
           <main className="w-full max-w-2xl mx-auto flex flex-col items-center justify-start py-6 gap-6">
+            {currentMcqExam && (
+              <div className="w-full p-2 text-sm font-semibold text-center text-primary-foreground bg-primary/90 rounded-md flex items-center justify-center gap-2">
+                <Calendar className="h-4 w-4" />
+                <span>For Exam: {currentMcqExam.name} ({(() => {
+                  const examDate = new Date(currentMcqExam.date);
+                  const daysLeft = differenceInDays(examDate, new Date());
+                  if (isPast(examDate) && daysLeft < 0) return "Past";
+                  if (daysLeft === 0) return "Today";
+                  return `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
+                })()})</span>
+              </div>
+            )}
             {currentQuestion && (
               <McqPlayer
                 mcq={currentQuestion}

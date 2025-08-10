@@ -5,6 +5,7 @@ export const examDataSchema = z.object({
   name: z.string(),
   date: z.string(), // ISO string
   deckIds: z.array(z.string()),
+  questionBankIds: z.array(z.string()),
   tags: z.array(z.string()),
   tagFilterType: z.enum(['any', 'all']),
   filterMode: z.enum(['all', 'due', 'difficulty']),

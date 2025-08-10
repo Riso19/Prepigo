@@ -9,6 +9,7 @@ import { DndContext, DragEndEvent, useDroppable } from "@dnd-kit/core";
 import { moveQuestionBank, buildMcqSessionQueue } from "@/lib/question-bank-utils";
 import { Link } from "react-router-dom";
 import { useSettings } from "@/contexts/SettingsContext";
+import { useExams } from "@/contexts/ExamsContext";
 
 const RootDroppable = () => {
   const { setNodeRef, isOver } = useDroppable({
@@ -30,17 +31,18 @@ const RootDroppable = () => {
 const QuestionBankManager = () => {
   const { questionBanks, mcqIntroductionsToday, setQuestionBanks } = useQuestionBanks();
   const { settings } = useSettings();
+  const { exams } = useExams();
   const [isAddBankOpen, setIsAddBankOpen] = useState(false);
   const [dueMcqCount, setDueMcqCount] = useState(0);
 
   useEffect(() => {
     if (questionBanks.length > 0) {
-      const queue = buildMcqSessionQueue(questionBanks, questionBanks, settings, mcqIntroductionsToday);
+      const { queue } = buildMcqSessionQueue(questionBanks, questionBanks, settings, mcqIntroductionsToday, exams);
       setDueMcqCount(queue.length);
     } else {
       setDueMcqCount(0);
     }
-  }, [questionBanks, settings, mcqIntroductionsToday]);
+  }, [questionBanks, settings, mcqIntroductionsToday, exams]);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;

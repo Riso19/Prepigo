@@ -3,11 +3,11 @@ import { Link } from 'react-router-dom';
 import { ExamData } from '@/data/exams';
 import { useDecks } from '@/contexts/DecksContext';
 import { useSettings } from '@/contexts/SettingsContext';
-import { getCardsForExam, calculateExamProgress } from '@/lib/exam-utils';
+import { getCardsForExam, calculateExamProgress, getMcqsForExam } from '@/lib/exam-utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { Calendar, Tag, CheckCircle, MoreVertical, Trash2, Pencil, FileText } from 'lucide-react';
+import { Calendar, Tag, MoreVertical, Trash2, Pencil, FileText, HelpCircle } from 'lucide-react';
 import { format, differenceInDays, isPast } from 'date-fns';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { useExams } from '@/contexts/ExamsContext';
@@ -22,6 +22,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useState } from 'react';
+import { useQuestionBanks } from '@/contexts/QuestionBankContext';
 
 interface ExamItemProps {
   exam: ExamData;
@@ -29,12 +30,16 @@ interface ExamItemProps {
 
 export const ExamItem = ({ exam }: ExamItemProps) => {
   const { decks } = useDecks();
+  const { questionBanks } = useQuestionBanks();
   const { settings } = useSettings();
   const { deleteExam } = useExams();
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
 
   const cardsInScope = useMemo(() => getCardsForExam(exam, decks, settings), [exam, decks, settings]);
-  const progress = useMemo(() => calculateExamProgress(exam, cardsInScope, settings), [exam, cardsInScope, settings]);
+  const mcqsInScope = useMemo(() => getMcqsForExam(exam, questionBanks, settings), [exam, questionBanks, settings]);
+  const itemsInScope = useMemo(() => [...cardsInScope, ...mcqsInScope], [cardsInScope, mcqsInScope]);
+
+  const progress = useMemo(() => calculateExamProgress(exam, itemsInScope, settings), [exam, itemsInScope, settings]);
 
   const examDate = new Date(exam.date);
   const daysLeft = differenceInDays(examDate, new Date());
@@ -74,10 +79,10 @@ export const ExamItem = ({ exam }: ExamItemProps) => {
           <div className="space-y-2">
             <div className="flex justify-between items-center text-sm">
               <span className="font-medium">Progress</span>
-              <span className="text-muted-foreground">{progress.mastered} / {progress.total} cards mastered</span>
+              <span className="text-muted-foreground">{progress.mastered} / {progress.total} items mastered</span>
             </div>
             <Progress value={progress.percentage} />
-            <p className="text-xs text-muted-foreground">A card is "mastered" when its next review is after the exam date.</p>
+            <p className="text-xs text-muted-foreground">An item is "mastered" when its next review is after the exam date.</p>
           </div>
           <div className="mt-4 pt-4 border-t">
             <h4 className="text-sm font-semibold mb-2">Scope</h4>
@@ -86,6 +91,12 @@ export const ExamItem = ({ exam }: ExamItemProps) => {
                 <FileText className="h-4 w-4 text-green-500" />
                 <span>{exam.deckIds.length} deck(s)</span>
               </div>
+              {exam.questionBankIds?.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <HelpCircle className="h-4 w-4 text-purple-500" />
+                  <span>{exam.questionBankIds.length} question bank(s)</span>
+                </div>
+              )}
               {exam.tags.length > 0 && (
                 <div className="flex items-center gap-2">
                   <Tag className="h-4 w-4 text-blue-500" />

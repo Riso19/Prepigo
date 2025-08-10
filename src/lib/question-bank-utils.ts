@@ -1,6 +1,9 @@
 import { QuestionBankData, McqData } from "@/data/questionBanks";
 import { SrsSettings } from "@/contexts/SettingsContext";
 import { State } from "ts-fsrs";
+import { ExamData } from "@/data/exams";
+import { getMcqsForExam } from "./exam-utils";
+import { differenceInDays } from "date-fns";
 
 // Recursively find a question bank by its ID
 export const findQuestionBankById = (banks: QuestionBankData[], id: string): QuestionBankData | null => {
@@ -304,15 +307,76 @@ export const buildMcqSessionQueue = (
   banksToStudy: QuestionBankData[],
   allBanks: QuestionBankData[],
   globalSettings: SrsSettings,
-  introducedMcqIds: Set<string>
-): McqData[] => {
+  introducedMcqIds: Set<string>,
+  exams?: ExamData[]
+): { queue: McqData[], mcqExamMap: Map<string, ExamData> } => {
   const now = new Date();
+  const mcqExamMap = new Map<string, ExamData>();
+  const examPriorityNew: McqData[] = [];
+  const examPriorityMcqIds = new Set<string>();
 
-  const isNew = (mcq: McqData, s: SrsSettings) => {
-    if (introducedMcqIds.has(mcq.id) || mcq.srs?.isSuspended) return false;
+  const isTrulyNew = (mcq: McqData, s: SrsSettings) => {
+    if (mcq.srs?.isSuspended) return false;
     const scheduler = s.scheduler === 'sm2' ? 'fsrs' : s.scheduler;
     const srsData = scheduler === 'fsrs6' ? mcq.srs?.fsrs6 : mcq.srs?.fsrs;
     return !srsData || srsData.state === State.New;
+  };
+
+  if (exams && exams.length > 0) {
+    const sortedExams = [...exams].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+    for (const exam of sortedExams) {
+      const allMcqsForExam = getMcqsForExam(exam, allBanks, globalSettings);
+      for (const mcq of allMcqsForExam) {
+        if (!mcqExamMap.has(mcq.id)) {
+          mcqExamMap.set(mcq.id, exam);
+        }
+      }
+
+      const totalNewPoolForExam = allMcqsForExam.filter(mcq => 
+        isTrulyNew(mcq, globalSettings) || introducedMcqIds.has(mcq.id)
+      );
+
+      const newIntroducedForThisExamToday = allMcqsForExam.filter(mcq => introducedMcqIds.has(mcq.id)).length;
+      const availableNewMcqsForExam = allMcqsForExam.filter(mcq => isTrulyNew(mcq, globalSettings) && !introducedMcqIds.has(mcq.id));
+
+      const daysLeft = differenceInDays(new Date(exam.date), now);
+      let dailyBudget: number;
+
+      if (daysLeft <= 0) {
+        dailyBudget = availableNewMcqsForExam.length;
+      } else {
+        dailyBudget = Math.ceil(totalNewPoolForExam.length / daysLeft);
+      }
+
+      const newForToday = Math.max(0, dailyBudget - newIntroducedForThisExamToday);
+
+      const mcqsForToday = availableNewMcqsForExam.slice(0, newForToday);
+      mcqsForToday.forEach(mcq => {
+        if (!examPriorityMcqIds.has(mcq.id)) {
+          examPriorityNew.push(mcq);
+          examPriorityMcqIds.add(mcq.id);
+        }
+      });
+    }
+  }
+
+  const examSort = (a: McqData, b: McqData): number => {
+    const examA = mcqExamMap.get(a.id);
+    const examB = mcqExamMap.get(b.id);
+    if (examA && !examB) return -1;
+    if (!examA && examB) return 1;
+    if (examA && examB) {
+        const diff = new Date(examA.date).getTime() - new Date(examB.date).getTime();
+        if (diff !== 0) return diff;
+    }
+    return 0;
+  };
+
+  const isNew = (mcq: McqData, s: SrsSettings) => {
+    if (examPriorityMcqIds.has(mcq.id)) return false;
+    if (introducedMcqIds.has(mcq.id)) return false;
+    return isTrulyNew(mcq, s);
   };
 
   const isDue = (mcq: McqData, s: SrsSettings) => {
@@ -329,13 +393,6 @@ export const buildMcqSessionQueue = (
     return !!srsData && (srsData.state === State.Learning || srsData.state === State.Relearning);
   };
 
-  const isReview = (mcq: McqData, s: SrsSettings) => {
-    if (!isDue(mcq, s)) return false;
-    const scheduler = s.scheduler === 'sm2' ? 'fsrs' : s.scheduler;
-    const srsData = scheduler === 'fsrs6' ? mcq.srs?.fsrs6 : mcq.srs?.fsrs;
-    return !!srsData && srsData.state === State.Review;
-  };
-
   const sessionNew: McqData[] = [];
   const sessionReviews: McqData[] = [];
   const sessionLearning: McqData[] = [];
@@ -350,7 +407,7 @@ export const buildMcqSessionQueue = (
     const mcqs = bank.mcqs;
     sessionLearning.push(...mcqs.filter(m => isLearning(m, settings)));
     
-    const potentialReviews = mcqs.filter(m => isReview(m, settings));
+    const potentialReviews = mcqs.filter(m => isDue(m, settings) && !isLearning(m, settings));
     const reviewsToTake = Math.min(potentialReviews.length, currentReviewBudget);
     if (reviewsToTake > 0) {
       sessionReviews.push(...potentialReviews.slice(0, reviewsToTake));
@@ -402,7 +459,10 @@ export const buildMcqSessionQueue = (
       return new Date(srsA!.due).getTime() - new Date(srsB!.due).getTime();
   });
 
-  return [...learningCombined, ...shuffle([...sortedReviews, ...sortedNew])];
+  examPriorityNew.sort(examSort);
+  const finalQueue = [...examPriorityNew, ...learningCombined, ...shuffle([...sortedReviews, ...sortedNew])];
+
+  return { queue: finalQueue, mcqExamMap };
 };
 
 // Immutably merge new question banks into existing ones

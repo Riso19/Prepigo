@@ -6,7 +6,7 @@ import { useExams } from '@/contexts/ExamsContext';
 import { useSettings } from '@/contexts/SettingsContext';
 import { ExamData, examDataSchema } from '@/data/exams';
 import { getAllTags } from '@/lib/deck-utils';
-import { getCardsForExam } from '@/lib/exam-utils';
+import { getCardsForExam, getMcqsForExam } from '@/lib/exam-utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
@@ -24,12 +24,15 @@ import { format, startOfToday } from 'date-fns';
 import { useMemo, useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useQuestionBanks } from '@/contexts/QuestionBankContext';
+import { QuestionBankTreeSelector } from '@/components/QuestionBankTreeSelector';
 
 const EditExamPage = () => {
   const { examId } = useParams<{ examId: string }>();
   const navigate = useNavigate();
   const { exams, updateExam } = useExams();
   const { decks } = useDecks();
+  const { questionBanks } = useQuestionBanks();
   const { settings } = useSettings();
   const allTags = useMemo(() => getAllTags(decks), [decks]);
   
@@ -47,23 +50,34 @@ const EditExamPage = () => {
       form.reset({
         ...exam,
         deckIds: Array.isArray(exam.deckIds) ? exam.deckIds : [],
+        questionBankIds: Array.isArray(exam.questionBankIds) ? exam.questionBankIds : [],
       });
       setDifficultyRange([exam.filterDifficultyMin || 5, exam.filterDifficultyMax || 10]);
     }
   }, [exam, form]);
 
   const watchedValues = form.watch();
-  const cardsInScope = useMemo(() => {
-    const examData = { ...watchedValues, deckIds: Array.from(watchedValues.deckIds || []) };
-    return getCardsForExam(examData as ExamData, decks, settings);
-  }, [watchedValues, decks, settings]);
+  const itemsInScope = useMemo(() => {
+    const examData = { 
+        ...watchedValues, 
+        deckIds: Array.from(watchedValues.deckIds || []),
+        questionBankIds: Array.from(watchedValues.questionBankIds || [])
+    };
+    const cards = getCardsForExam(examData as ExamData, decks, settings);
+    const mcqs = getMcqsForExam(examData as ExamData, questionBanks, settings);
+    return [...cards, ...mcqs];
+  }, [watchedValues, decks, questionBanks, settings]);
 
   const onSubmit = (data: ExamData) => {
-    if (cardsInScope.length === 0) {
-      toast.error("No cards match the selected filters. Please adjust the scope.");
+    if (itemsInScope.length === 0) {
+      toast.error("No items match the selected filters. Please adjust the scope.");
       return;
     }
-    const finalData = { ...data, deckIds: Array.from(data.deckIds) };
+    const finalData = { 
+        ...data, 
+        deckIds: Array.from(data.deckIds),
+        questionBankIds: Array.from(data.questionBankIds)
+    };
     updateExam(finalData);
     toast.success(`Exam "${data.name}" updated!`);
     navigate('/exams');
@@ -120,16 +134,19 @@ const EditExamPage = () => {
                   <FormField control={form.control} name="deckIds" render={({ field }) => (
                     <FormItem><FormLabel>Decks</FormLabel><FormControl><DeckTreeSelector decks={decks} selectedDeckIds={new Set(field.value)} onSelectionChange={(ids) => field.onChange(Array.from(ids))} /></FormControl><FormMessage /></FormItem>
                   )} />
+                  <FormField control={form.control} name="questionBankIds" render={({ field }) => (
+                    <FormItem><FormLabel>Question Banks</FormLabel><FormControl><QuestionBankTreeSelector banks={questionBanks} selectedBankIds={new Set(field.value)} onSelectionChange={(ids) => field.onChange(Array.from(ids))} /></FormControl><FormMessage /></FormItem>
+                  )} />
                   <div className="space-y-4"><FormLabel>Tags</FormLabel>
                     <FormField control={form.control} name="tags" render={({ field }) => (<FormItem><FormControl><TagEditor tags={field.value} onTagsChange={field.onChange} allTags={allTags} /></FormControl><FormMessage /></FormItem>)} />
                     <FormField control={form.control} name="tagFilterType" render={({ field }) => (<FormItem><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger className="w-[280px]"><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="any">Match any selected tag</SelectItem><SelectItem value="all">Match all selected tags</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
                   </div>
                   <FormField control={form.control} name="filterMode" render={({ field }) => (
-                    <FormItem className="space-y-3"><FormLabel>Card Filters</FormLabel>
+                    <FormItem className="space-y-3"><FormLabel>Card & MCQ Filters</FormLabel>
                       <FormControl>
                         <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
-                          <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="all" /></FormControl><FormLabel className="font-normal">All cards in scope</FormLabel></FormItem>
-                          <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="due" /></FormControl><FormLabel className="font-normal">Due cards only</FormLabel></FormItem>
+                          <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="all" /></FormControl><FormLabel className="font-normal">All items in scope</FormLabel></FormItem>
+                          <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="due" /></FormControl><FormLabel className="font-normal">Due items only</FormLabel></FormItem>
                           <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="difficulty" /></FormControl><FormLabel className="font-normal">Filter by difficulty (FSRS only)</FormLabel></FormItem>
                         </RadioGroup>
                       </FormControl>
@@ -151,12 +168,12 @@ const EditExamPage = () => {
                           form.setValue('filterDifficultyMax', value[1]);
                         }}
                       />
-                      <FormDescription>1 is easiest, 10 is hardest. This only includes cards that have been reviewed at least once.</FormDescription>
+                      <FormDescription>1 is easiest, 10 is hardest. This only includes items that have been reviewed at least once.</FormDescription>
                     </div>
                   )}
                   <div className="flex justify-between items-center pt-4 border-t">
                     <div className="text-lg font-bold">
-                      Total Cards in Plan: {cardsInScope.length}
+                      Total Items in Plan: {itemsInScope.length}
                     </div>
                     <Button type="submit" size="lg">Update Exam</Button>
                   </div>
