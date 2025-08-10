@@ -13,6 +13,7 @@ import { getAllReviewLogsFromDB, getAllMcqReviewLogsFromDB } from '@/lib/idb';
 import { format, subDays, startOfDay, isSameDay } from 'date-fns';
 import { Loader2 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { State } from 'ts-fsrs';
 
 const StatisticsPage = () => {
   const { decks } = useDecks();
@@ -76,6 +77,47 @@ const StatisticsPage = () => {
     });
   }, [reviewLogs]);
 
+  const difficultyDistribution = useMemo(() => {
+    if (settings.scheduler === 'sm2') {
+      return null;
+    }
+    const allItems = [...collectionStats.allFlashcards, ...collectionStats.allMcqs];
+    
+    const reviewedItems = allItems.filter(item => {
+      const srsData = settings.scheduler === 'fsrs6' ? item.srs?.fsrs6 : item.srs?.fsrs;
+      return srsData && srsData.state !== State.New;
+    });
+
+    if (reviewedItems.length === 0) {
+      return { chartData: [], averageDifficulty: 0, reviewedCount: 0 };
+    }
+
+    const bins = Array.from({ length: 10 }, () => 0);
+    let totalDifficulty = 0;
+
+    reviewedItems.forEach(item => {
+      const srsData = settings.scheduler === 'fsrs6' ? item.srs?.fsrs6 : item.srs?.fsrs;
+      const difficulty = srsData!.difficulty;
+      totalDifficulty += difficulty;
+      const binIndex = Math.max(0, Math.min(9, Math.floor(difficulty) - 1));
+      bins[binIndex]++;
+    });
+
+    const averageDifficulty = totalDifficulty / reviewedItems.length;
+
+    const chartData = bins.map((count, index) => ({
+      name: `${(index + 1) * 10}%`,
+      count: count,
+      difficulty: index + 1,
+    }));
+
+    return {
+      chartData,
+      averageDifficulty: Math.round(averageDifficulty * 10),
+      reviewedCount: reviewedItems.length,
+    };
+  }, [collectionStats, settings.scheduler]);
+
   // --- Charting Constants ---
   const PIE_COLORS: Record<ItemStatus, string> = {
     New: '#3b82f6', // blue-500
@@ -84,6 +126,14 @@ const StatisticsPage = () => {
     Young: '#84cc16', // lime-500
     Mature: '#14b8a6', // teal-500
     Suspended: '#6b7280', // gray-500
+  };
+
+  const getDifficultyColor = (difficulty: number) => {
+    if (difficulty <= 3) return 'hsl(48, 96%, 51%)'; // yellow-400
+    if (difficulty <= 5) return 'hsl(38, 92%, 56%)'; // orange-400
+    if (difficulty <= 7) return 'hsl(25, 95%, 53%)'; // orange-500
+    if (difficulty <= 9) return 'hsl(13, 84%, 53%)'; // red-500
+    return 'hsl(0, 72%, 51%)'; // red-600
   };
 
   const renderPieChart = (data: Record<ItemStatus, number>) => {
@@ -168,6 +218,33 @@ const StatisticsPage = () => {
               )}
             </CardContent>
           </Card>
+
+          {difficultyDistribution && difficultyDistribution.reviewedCount > 0 && (
+            <Card className="lg:col-span-2">
+                <CardHeader>
+                    <CardTitle>Card & MCQ Difficulty</CardTitle>
+                    <CardDescription>The higher the difficulty, the slower stability will increase.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <ResponsiveContainer width="100%" height={isMobile ? 250 : 300}>
+                        <BarChart data={difficultyDistribution.chartData}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                            <YAxis allowDecimals={false} />
+                            <Tooltip cursor={{ fill: 'hsl(var(--muted))' }} />
+                            <Bar dataKey="count">
+                                {difficultyDistribution.chartData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={getDifficultyColor(entry.difficulty)} />
+                                ))}
+                            </Bar>
+                        </BarChart>
+                    </ResponsiveContainer>
+                    <p className="text-center font-semibold text-muted-foreground mt-4">
+                        Average difficulty: {difficultyDistribution.averageDifficulty}%
+                    </p>
+                </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>
