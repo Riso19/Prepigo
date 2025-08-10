@@ -20,16 +20,21 @@ import Header from '@/components/Header';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { useSettings } from '@/contexts/SettingsContext';
+import { useExams } from '@/contexts/ExamsContext';
+import { format } from 'date-fns';
+import { Slider } from '@/components/ui/slider';
 
 const customStudySchema = z.object({
   cardLimit: z.coerce.number().int().min(1, "Must be at least 1 card."),
   srsEnabled: z.boolean(),
   selectedDeckIds: z.set(z.string()).min(1, "Please select at least one deck."),
-  filterType: z.enum(['all', 'new', 'due', 'failed']),
+  filterType: z.enum(['all', 'new', 'due', 'failed', 'difficulty']),
   failedDays: z.coerce.number().int().min(1).optional(),
   tags: z.array(z.string()),
   tagFilterType: z.enum(['any', 'all']),
   order: z.enum(['random', 'sequentialNewest', 'sequentialOldest']),
+  filterDifficultyMin: z.number().min(1).max(10).optional(),
+  filterDifficultyMax: z.number().min(1).max(10).optional(),
 });
 
 type CustomStudyFormValues = z.infer<typeof customStudySchema>;
@@ -37,10 +42,13 @@ type CustomStudyFormValues = z.infer<typeof customStudySchema>;
 const CustomStudySetupPage = () => {
   const { decks } = useDecks();
   const { settings } = useSettings();
+  const { exams } = useExams();
   const allTags = useMemo(() => getAllTags(decks), [decks]);
   const navigate = useNavigate();
   const [availableCardCount, setAvailableCardCount] = useState<number | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
+  const [selectedExamId, setSelectedExamId] = useState<string>('');
+  const [difficultyRange, setDifficultyRange] = useState([5, 10]);
 
   const form = useForm<CustomStudyFormValues>({
     resolver: zodResolver(customStudySchema),
@@ -53,10 +61,32 @@ const CustomStudySetupPage = () => {
       tags: [],
       tagFilterType: 'any',
       order: 'random',
+      filterDifficultyMin: 5,
+      filterDifficultyMax: 10,
     },
   });
 
   const watchedValues = form.watch();
+
+  useEffect(() => {
+    if (selectedExamId) {
+        const selectedExam = exams.find(e => e.id === selectedExamId);
+        if (selectedExam) {
+            form.setValue('selectedDeckIds', new Set(selectedExam.deckIds));
+            form.setValue('tags', selectedExam.tags);
+            form.setValue('tagFilterType', selectedExam.tagFilterType);
+            form.setValue('filterType', selectedExam.filterMode);
+            
+            if (selectedExam.filterMode === 'difficulty') {
+                const min = selectedExam.filterDifficultyMin || 5;
+                const max = selectedExam.filterDifficultyMax || 10;
+                form.setValue('filterDifficultyMin', min);
+                form.setValue('filterDifficultyMax', max);
+                setDifficultyRange([min, max]);
+            }
+        }
+    }
+  }, [selectedExamId, exams, form]);
 
   useEffect(() => {
     const calculateCount = async () => {
@@ -127,6 +157,16 @@ const CustomStudySetupPage = () => {
           });
           cardsToFilter = cardsToFilter.filter(c => recentFailedCardIds.has(c.id));
           break;
+        case 'difficulty':
+            const min = watchedValues.filterDifficultyMin || 1;
+            const max = watchedValues.filterDifficultyMax || 10;
+            cardsToFilter = cardsToFilter.filter(c => {
+                const srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
+                if (!srsData || srsData.state === State.New) return false;
+                const difficulty = srsData.difficulty;
+                return difficulty >= min && difficulty <= max;
+            });
+            break;
       }
 
       setAvailableCardCount(cardsToFilter.length);
@@ -193,6 +233,16 @@ const CustomStudySetupPage = () => {
             const recentFailedCardIds = new Set<string>(allLogs.filter(log => new Date(log.review) >= cutoffDate && (log.rating === Rating.Again || log.rating === Rating.Hard)).map(log => log.cardId));
             filteredCards = filteredCards.filter(c => recentFailedCardIds.has(c.id));
             break;
+        case 'difficulty':
+            const min = values.filterDifficultyMin || 1;
+            const max = values.filterDifficultyMax || 10;
+            filteredCards = filteredCards.filter(c => {
+                const srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
+                if (!srsData || srsData.state === State.New) return false;
+                const difficulty = srsData.difficulty;
+                return difficulty >= min && difficulty <= max;
+            });
+            break;
     }
 
     switch (values.order) {
@@ -228,6 +278,29 @@ const CustomStudySetupPage = () => {
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
                 
+                {exams.length > 0 && (
+                    <div className="space-y-2">
+                        <FormLabel>Load from Exam Schedule</FormLabel>
+                        <Select onValueChange={setSelectedExamId} value={selectedExamId}>
+                            <FormControl>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select an exam to load its settings..." />
+                                </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                                {exams.map(exam => (
+                                    <SelectItem key={exam.id} value={exam.id}>
+                                        {exam.name} ({format(new Date(exam.date), 'PPP')})
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <FormDescription>
+                            This will populate the filters below based on the selected exam.
+                        </FormDescription>
+                    </div>
+                )}
+
                 <FormField
                   control={form.control}
                   name="selectedDeckIds"
@@ -257,6 +330,7 @@ const CustomStudySetupPage = () => {
                                     <SelectItem value="new">New cards only</SelectItem>
                                     <SelectItem value="due">Due cards only</SelectItem>
                                     <SelectItem value="failed">Review failed in last X days</SelectItem>
+                                    <SelectItem value="difficulty">Filter by difficulty (FSRS only)</SelectItem>
                                 </SelectContent>
                             </Select>
                             <FormMessage />
@@ -272,6 +346,25 @@ const CustomStudySetupPage = () => {
                         )} />
                     )}
                 </div>
+
+                {watchedValues.filterType === 'difficulty' && (
+                    <div className="p-4 border rounded-md space-y-4">
+                        <div className="flex justify-between">
+                            <FormLabel>Difficulty Range</FormLabel>
+                            <span className="text-sm font-medium">{difficultyRange[0]} - {difficultyRange[1]}</span>
+                        </div>
+                        <Slider
+                            defaultValue={difficultyRange}
+                            min={1} max={10} step={1}
+                            onValueChange={(value) => {
+                                setDifficultyRange(value);
+                                form.setValue('filterDifficultyMin', value[0]);
+                                form.setValue('filterDifficultyMax', value[1]);
+                            }}
+                        />
+                        <FormDescription>1 is easiest, 10 is hardest. This only includes cards that have been reviewed at least once.</FormDescription>
+                    </div>
+                )}
 
                 <div className="space-y-4">
                     <FormLabel>Filter by tags</FormLabel>
