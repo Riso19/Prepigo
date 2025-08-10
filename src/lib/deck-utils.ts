@@ -213,3 +213,51 @@ export const mergeDecks = (existingDecks: DeckData[], newDecks: DeckData[]): Dec
 
   return Array.from(deckMap.values());
 };
+
+export const moveDeck = (decks: DeckData[], activeId: string, overId: string | null): DeckData[] => {
+  const decksCopy = JSON.parse(JSON.stringify(decks));
+
+  // Find the deck being moved and remove it from its parent
+  const findAndSplice = (currentDecks: DeckData[]): DeckData | null => {
+    for (let i = 0; i < currentDecks.length; i++) {
+      if (currentDecks[i].id === activeId) {
+        const [deckToMove] = currentDecks.splice(i, 1);
+        return deckToMove;
+      }
+      if (currentDecks[i].subDecks) {
+        const found = findAndSplice(currentDecks[i].subDecks!);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  const deckToMove = findAndSplice(decksCopy);
+
+  if (!deckToMove) {
+    return decks; // Deck to move not found, return original state
+  }
+
+  if (overId === 'root-droppable' || overId === null) {
+    // Move to the root
+    decksCopy.push(deckToMove);
+  } else {
+    // Move into another deck
+    const overDeck = findDeckById(decksCopy, overId);
+    if (overDeck) {
+      // Prevent nesting a deck inside itself or one of its own children
+      if (findDeckById([deckToMove], overId)) {
+        return decks; // Invalid move, return original state
+      }
+      if (!overDeck.subDecks) {
+        overDeck.subDecks = [];
+      }
+      overDeck.subDecks.push(deckToMove);
+    } else {
+      // If the target isn't a valid deck, revert the change.
+      return decks;
+    }
+  }
+
+  return decksCopy;
+};

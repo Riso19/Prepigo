@@ -5,13 +5,43 @@ import { useDecks } from "@/contexts/DecksContext";
 import DeckItem from "@/components/DeckItem";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { AddDeckDialog } from "./AddDeckDialog";
+import { DndContext, DragEndEvent, useDroppable } from "@dnd-kit/core";
+import { moveDeck } from "@/lib/deck-utils";
 
-const DeckManager = () => {
-  const { decks } = useDecks();
-  const [isAddDeckOpen, setIsAddDeckOpen] = useState(false);
+const RootDroppable = () => {
+  const { setNodeRef, isOver } = useDroppable({
+    id: 'root-droppable',
+  });
 
   return (
-    <>
+    <div
+      ref={setNodeRef}
+      className={`mt-4 p-4 border-2 border-dashed rounded-lg text-center text-muted-foreground transition-colors ${
+        isOver ? 'bg-primary/10 border-primary' : ''
+      }`}
+    >
+      Drop here to move a deck to the root
+    </div>
+  );
+};
+
+const DeckManager = () => {
+  const { decks, setDecks } = useDecks();
+  const [isAddDeckOpen, setIsAddDeckOpen] = useState(false);
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    // If dropped nowhere, or on itself, do nothing
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    setDecks((prevDecks) => moveDeck(prevDecks, active.id as string, over.id as string));
+  };
+
+  return (
+    <DndContext onDragEnd={handleDragEnd}>
       <Card className="w-full max-w-4xl mx-auto">
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -34,10 +64,11 @@ const DeckManager = () => {
               <p>Click "Add New Deck" to get started!</p>
             </div>
           )}
+          {decks.length > 0 && <RootDroppable />}
         </CardContent>
       </Card>
       <AddDeckDialog isOpen={isAddDeckOpen} onOpenChange={setIsAddDeckOpen} />
-    </>
+    </DndContext>
   );
 };
 

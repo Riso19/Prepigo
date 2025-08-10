@@ -3,16 +3,24 @@ import { Link } from "react-router-dom";
 import { DeckData, FlashcardData } from "@/data/decks";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "./ui/button";
-import { ChevronRight, FileText, Folder, MoreVertical, Plus, BookOpen, Image as ImageIcon, Settings } from "lucide-react";
+import { ChevronRight, FileText, Folder, MoreVertical, Plus, BookOpen, Image as ImageIcon, Settings, GripVertical } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AddSubDeckDialog } from "./AddSubDeckDialog";
 import { getAllFlashcardsFromDeck } from "@/lib/deck-utils";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
 
 const DeckItem = ({ deck }: { deck: DeckData }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isAddSubDeckOpen, setIsAddSubDeckOpen] = useState(false);
+
+  const { attributes, listeners, setNodeRef: setDraggableRef, isDragging } = useDraggable({
+    id: deck.id,
+  });
+  const { isOver, setNodeRef: setDroppableRef } = useDroppable({
+    id: deck.id,
+  });
 
   const hasSubDecks = deck.subDecks && deck.subDecks.length > 0;
   const hasFlashcards = deck.flashcards && deck.flashcards.length > 0;
@@ -31,17 +39,28 @@ const DeckItem = ({ deck }: { deck: DeckData }) => {
     }
   };
 
+  const containerStyle = {
+    opacity: isDragging ? 0.5 : 1,
+    outline: isOver ? '2px solid hsl(var(--primary))' : 'none',
+    outlineOffset: '2px',
+  };
+
   return (
     <>
       <Collapsible open={isOpen} onOpenChange={setIsOpen} className="space-y-2">
-        <div className="flex items-center justify-between space-x-4 pl-2 pr-1 py-1 rounded-lg hover:bg-accent group">
-          <CollapsibleTrigger asChild>
-            <button className="flex items-center gap-3 flex-grow text-left">
-              <ChevronRight className={cn("h-5 w-5 transition-transform duration-200", isOpen && "rotate-90")} />
-              <Folder className="h-5 w-5 text-primary" />
-              <span className="font-semibold">{deck.name}</span>
-            </button>
-          </CollapsibleTrigger>
+        <div ref={setDroppableRef} style={containerStyle} className="flex items-center justify-between space-x-2 pl-1 pr-1 py-1 rounded-lg hover:bg-accent group transition-all">
+          <div className="flex items-center gap-1 flex-grow">
+            <div {...listeners} {...attributes} ref={setDraggableRef} className="cursor-grab p-2 touch-none">
+              <GripVertical className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <CollapsibleTrigger asChild>
+              <button className="flex items-center gap-3 flex-grow text-left p-1 rounded-md">
+                <ChevronRight className={cn("h-5 w-5 transition-transform duration-200", isOpen && "rotate-90")} />
+                <Folder className="h-5 w-5 text-primary" />
+                <span className="font-semibold">{deck.name}</span>
+              </button>
+            </CollapsibleTrigger>
+          </div>
           <div className="flex items-center gap-1">
             <span className="text-sm text-muted-foreground">{totalFlashcards} cards</span>
             <DropdownMenu>
