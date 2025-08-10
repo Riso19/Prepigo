@@ -11,15 +11,16 @@ import { useSettings } from '@/contexts/SettingsContext';
 import { useQuery } from '@tanstack/react-query';
 import { getAllReviewLogsFromDB, getAllMcqReviewLogsFromDB, McqReviewLog } from '@/lib/idb';
 import { format, subDays, startOfDay, isSameDay, differenceInDays } from 'date-fns';
-import { Loader2, TrendingUp, CalendarDays, Flame, BookOpen, Clock, Zap, HelpCircle, AlertTriangle, BrainCircuit, ShieldAlert, BarChartBig, Lightbulb } from 'lucide-react';
+import { Loader2, TrendingUp, CalendarDays, Flame, BookOpen, Clock, Zap, HelpCircle, AlertTriangle, BrainCircuit, ShieldAlert, BarChartBig, Lightbulb, Activity } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { State } from 'ts-fsrs';
 import { DeckData, FlashcardData, ReviewLog } from '@/data/decks';
 import { McqData, QuestionBankData } from '@/data/questionBanks';
 import { PerformanceAnalytics } from '@/components/PerformanceAnalytics';
 import { PerformanceGraph } from '@/components/PerformanceGraph';
-import { calculateAccuracy, calculateDueStats, calculateIntervalGrowth, calculateRetentionDistribution, calculateForecast, calculateAverageRetention, calculateAtRiskItems, calculateCumulativeStabilityGrowth, calculateSuspectedGuesses, calculateLearningCurve, calculateForgettingCurve } from '@/lib/analytics-utils';
+import { calculateAccuracy, calculateDueStats, calculateIntervalGrowth, calculateRetentionDistribution, calculateForecast, calculateAverageRetention, calculateAtRiskItems, calculateCumulativeStabilityGrowth, calculateSuspectedGuesses, calculateLearningCurve, calculateForgettingCurve, calculateStabilityOverTime, calculateMemoryDecayVelocity } from '@/lib/analytics-utils';
 import { ForgettingCurveChart } from '@/components/ForgettingCurveChart';
+import { StabilityTrendChart } from '@/components/StabilityTrendChart';
 
 const StatisticsPage = () => {
   const { decks } = useDecks();
@@ -269,6 +270,22 @@ const StatisticsPage = () => {
     return calculateForgettingCurve(combinedLogs);
   }, [logs]);
 
+  const stabilityStats = useMemo(() => {
+    if (!logs) return null;
+    const flashcardStabilityTrend = calculateStabilityOverTime(logs.cardLogs);
+    const mcqStabilityTrend = calculateStabilityOverTime(logs.mcqLogs);
+    return {
+      flashcards: {
+        trend: flashcardStabilityTrend,
+        velocity: calculateMemoryDecayVelocity(flashcardStabilityTrend),
+      },
+      mcqs: {
+        trend: mcqStabilityTrend,
+        velocity: calculateMemoryDecayVelocity(mcqStabilityTrend),
+      },
+    };
+  }, [logs]);
+
   // --- Charting Constants ---
   const PIE_COLORS: Record<ItemStatus, string> = {
     New: '#3b82f6', // blue-500
@@ -394,6 +411,52 @@ const StatisticsPage = () => {
 
         <h2 className="text-xl sm:text-2xl font-bold mt-8 mb-4">Performance Analytics</h2>
         <PerformanceAnalytics />
+
+        <h2 className="text-xl sm:text-2xl font-bold mt-8 mb-4">Memory Stability</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Flashcard Stability Trend</CardTitle>
+              <CardDescription>Average stability of reviewed flashcards over time.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : 
+                !stabilityStats || stabilityStats.flashcards.trend.length < 2 ? <p className="text-sm text-muted-foreground">Not enough data to show stability trend.</p> :
+                <>
+                  <div className="flex items-center gap-2 mb-4">
+                    <Activity className="h-5 w-5 text-muted-foreground" />
+                    <span className="font-medium">Decay Velocity (30d):</span>
+                    <span className={`font-bold ${stabilityStats.flashcards.velocity < 0 ? 'text-red-500' : 'text-green-500'}`}>
+                      {stabilityStats.flashcards.velocity.toFixed(2)} days/day
+                    </span>
+                  </div>
+                  <StabilityTrendChart data={stabilityStats.flashcards.trend} />
+                </>
+              }
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>MCQ Stability Trend</CardTitle>
+              <CardDescription>Average stability of reviewed MCQs over time.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : 
+                !stabilityStats || stabilityStats.mcqs.trend.length < 2 ? <p className="text-sm text-muted-foreground">Not enough data to show stability trend.</p> :
+                <>
+                  <div className="flex items-center gap-2 mb-4">
+                    <Activity className="h-5 w-5 text-muted-foreground" />
+                    <span className="font-medium">Decay Velocity (30d):</span>
+                    <span className={`font-bold ${stabilityStats.mcqs.velocity < 0 ? 'text-red-500' : 'text-green-500'}`}>
+                      {stabilityStats.mcqs.velocity.toFixed(2)} days/day
+                    </span>
+                  </div>
+                  <StabilityTrendChart data={stabilityStats.mcqs.trend} />
+                </>
+              }
+            </CardContent>
+          </Card>
+        </div>
 
         <h2 className="text-xl sm:text-2xl font-bold mt-8 mb-4">Advanced Memory Stats</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">

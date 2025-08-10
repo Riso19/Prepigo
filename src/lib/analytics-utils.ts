@@ -302,3 +302,62 @@ export const calculateForgettingCurve = (logs: (ReviewLog | McqReviewLog)[]) => 
 
     return curveData.length > 3 ? curveData : null;
 };
+
+export const calculateStabilityOverTime = (logs: (ReviewLog | McqReviewLog)[]) => {
+  if (logs.length < 2) {
+    return [];
+  }
+
+  const logsByDay = new Map<string, { totalStability: number; count: number }>();
+
+  logs.forEach(log => {
+    // Only consider logs where stability is meaningful
+    if (log.state === State.Review || log.state === State.Relearning) {
+      const day = format(startOfDay(new Date(log.review)), 'yyyy-MM-dd');
+      if (!logsByDay.has(day)) {
+        logsByDay.set(day, { totalStability: 0, count: 0 });
+      }
+      const entry = logsByDay.get(day)!;
+      entry.totalStability += log.stability;
+      entry.count++;
+    }
+  });
+
+  const stabilityTrend = Array.from(logsByDay.entries())
+    .map(([date, { totalStability, count }]) => ({
+      date,
+      avgStability: count > 0 ? totalStability / count : 0,
+    }))
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  return stabilityTrend;
+};
+
+export const calculateMemoryDecayVelocity = (stabilityTrend: { date: string; avgStability: number }[]) => {
+  const today = startOfDay(new Date());
+  const thirtyDaysAgo = subDays(today, 30);
+
+  const recentData = stabilityTrend.filter(d => new Date(d.date) >= thirtyDaysAgo);
+
+  if (recentData.length < 2) {
+    return 0; // Not enough data for a trend
+  }
+
+  const velocities: number[] = [];
+  for (let i = 1; i < recentData.length; i++) {
+    const prev = recentData[i - 1];
+    const curr = recentData[i];
+    const deltaStability = curr.avgStability - prev.avgStability;
+    const deltaTime = differenceInDays(new Date(curr.date), new Date(prev.date));
+    if (deltaTime > 0) {
+      velocities.push(deltaStability / deltaTime);
+    }
+  }
+
+  if (velocities.length === 0) {
+    return 0;
+  }
+
+  const avgVelocity = velocities.reduce((sum, v) => sum + v, 0) / velocities.length;
+  return avgVelocity;
+};
