@@ -1,7 +1,18 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { getMediaFromDB } from '@/lib/idb';
 
 const resolvedUrlCache = new Map<string, string>();
+
+export const unresolveMediaHtml = (html: string): string => {
+    let unprocessedHtml = html;
+    for (const [fileName, objectUrl] of resolvedUrlCache.entries()) {
+        // We need to handle both the URL being in quotes and potentially being encoded
+        const urlToReplace = new URL(objectUrl).toString();
+        // Using split and join for compatibility with older TS lib versions
+        unprocessedHtml = unprocessedHtml.split(urlToReplace).join(`media://${fileName}`);
+    }
+    return unprocessedHtml;
+};
 
 export const useResolvedHtml = (html: string | undefined) => {
   const [resolvedHtml, setResolvedHtml] = useState(html || '');

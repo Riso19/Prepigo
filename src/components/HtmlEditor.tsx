@@ -2,6 +2,7 @@ import { useRef, useState, useEffect, useCallback, KeyboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Bold, Italic, Subscript, Superscript } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useResolvedHtml, unresolveMediaHtml } from '@/hooks/use-resolved-html';
 
 interface HtmlEditorProps {
   value: string;
@@ -15,15 +16,15 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
   const [isItalic, setIsItalic] = useState(false);
   const [isSubscript, setIsSubscript] = useState(false);
   const [isSuperscript, setIsSuperscript] = useState(false);
+  const resolvedValue = useResolvedHtml(value);
 
   useEffect(() => {
-    if (editorRef.current && editorRef.current.innerHTML !== value) {
-      editorRef.current.innerHTML = value;
+    if (editorRef.current && editorRef.current.innerHTML !== resolvedValue) {
+      editorRef.current.innerHTML = resolvedValue;
     }
-  }, [value]);
+  }, [resolvedValue]);
 
   const updateToolbar = useCallback(() => {
-    // Use setTimeout to allow the DOM selection to update before we query its state
     setTimeout(() => {
       setIsBold(document.queryCommandState('bold'));
       setIsItalic(document.queryCommandState('italic'));
@@ -33,20 +34,19 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
   }, []);
 
   const handleFormat = (command: 'bold' | 'italic' | 'subscript' | 'superscript') => {
-    // For subscript and superscript, ensure they are mutually exclusive.
     if (command === 'subscript' || command === 'superscript') {
       const otherCommand = command === 'subscript' ? 'superscript' : 'subscript';
-      // If the other command is active, turn it off first.
       if (document.queryCommandState(otherCommand)) {
         document.execCommand(otherCommand, false);
       }
     }
     
-    // Toggle the command the user clicked.
     document.execCommand(command, false);
 
     if (editorRef.current) {
-      onChange(editorRef.current.innerHTML);
+      const rawHtml = editorRef.current.innerHTML;
+      const originalUrlHtml = unresolveMediaHtml(rawHtml);
+      onChange(originalUrlHtml);
       editorRef.current.focus();
       updateToolbar();
     }
@@ -54,12 +54,13 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
 
   const handleInput = () => {
     if (editorRef.current) {
-      onChange(editorRef.current.innerHTML);
+      const rawHtml = editorRef.current.innerHTML;
+      const originalUrlHtml = unresolveMediaHtml(rawHtml);
+      onChange(originalUrlHtml);
     }
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    // When space is pressed, exit sub/super mode
     if (e.key === ' ') {
       if (document.queryCommandState('subscript')) {
         document.execCommand('subscript', false);
