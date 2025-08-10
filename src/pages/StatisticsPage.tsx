@@ -14,6 +14,8 @@ import { format, subDays, startOfDay, isSameDay } from 'date-fns';
 import { Loader2 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { State } from 'ts-fsrs';
+import { FlashcardData } from '@/data/decks';
+import { McqData } from '@/data/questionBanks';
 
 const StatisticsPage = () => {
   const { decks } = useDecks();
@@ -77,14 +79,9 @@ const StatisticsPage = () => {
     });
   }, [reviewLogs]);
 
-  const difficultyDistribution = useMemo(() => {
-    if (settings.scheduler === 'sm2') {
-      return null;
-    }
-    const allItems = [...collectionStats.allFlashcards, ...collectionStats.allMcqs];
-    
-    const reviewedItems = allItems.filter(item => {
-      const srsData = settings.scheduler === 'fsrs6' ? item.srs?.fsrs6 : item.srs?.fsrs;
+  const calculateDifficulty = (items: (FlashcardData | McqData)[], scheduler: 'fsrs' | 'fsrs6') => {
+    const reviewedItems = items.filter(item => {
+      const srsData = scheduler === 'fsrs6' ? item.srs?.fsrs6 : item.srs?.fsrs;
       return srsData && srsData.state !== State.New;
     });
 
@@ -96,7 +93,7 @@ const StatisticsPage = () => {
     let totalDifficulty = 0;
 
     reviewedItems.forEach(item => {
-      const srsData = settings.scheduler === 'fsrs6' ? item.srs?.fsrs6 : item.srs?.fsrs;
+      const srsData = scheduler === 'fsrs6' ? item.srs?.fsrs6 : item.srs?.fsrs;
       const difficulty = srsData!.difficulty;
       totalDifficulty += difficulty;
       const binIndex = Math.max(0, Math.min(9, Math.floor(difficulty) - 1));
@@ -116,7 +113,17 @@ const StatisticsPage = () => {
       averageDifficulty: Math.round(averageDifficulty * 10),
       reviewedCount: reviewedItems.length,
     };
-  }, [collectionStats, settings.scheduler]);
+  };
+
+  const cardDifficultyDistribution = useMemo(() => {
+    if (settings.scheduler === 'sm2') return null;
+    return calculateDifficulty(collectionStats.allFlashcards, settings.scheduler);
+  }, [collectionStats.allFlashcards, settings.scheduler]);
+
+  const mcqDifficultyDistribution = useMemo(() => {
+    const mcqScheduler = settings.scheduler === 'sm2' ? 'fsrs' : settings.scheduler;
+    return calculateDifficulty(collectionStats.allMcqs, mcqScheduler);
+  }, [collectionStats.allMcqs, settings.scheduler]);
 
   // --- Charting Constants ---
   const PIE_COLORS: Record<ItemStatus, string> = {
@@ -219,28 +226,55 @@ const StatisticsPage = () => {
             </CardContent>
           </Card>
 
-          {difficultyDistribution && difficultyDistribution.reviewedCount > 0 && (
-            <Card className="lg:col-span-2">
+          {cardDifficultyDistribution && cardDifficultyDistribution.reviewedCount > 0 && (
+            <Card>
                 <CardHeader>
-                    <CardTitle>Card & MCQ Difficulty</CardTitle>
-                    <CardDescription>The higher the difficulty, the slower stability will increase.</CardDescription>
+                    <CardTitle>Flashcard Difficulty</CardTitle>
+                    <CardDescription>Difficulty distribution for reviewed flashcards.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <ResponsiveContainer width="100%" height={isMobile ? 250 : 300}>
-                        <BarChart data={difficultyDistribution.chartData}>
+                        <BarChart data={cardDifficultyDistribution.chartData}>
                             <CartesianGrid strokeDasharray="3 3" />
                             <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                             <YAxis allowDecimals={false} />
                             <Tooltip cursor={{ fill: 'hsl(var(--muted))' }} />
                             <Bar dataKey="count">
-                                {difficultyDistribution.chartData.map((entry, index) => (
+                                {cardDifficultyDistribution.chartData.map((entry, index) => (
                                     <Cell key={`cell-${index}`} fill={getDifficultyColor(entry.difficulty)} />
                                 ))}
                             </Bar>
                         </BarChart>
                     </ResponsiveContainer>
                     <p className="text-center font-semibold text-muted-foreground mt-4">
-                        Average difficulty: {difficultyDistribution.averageDifficulty}%
+                        Average difficulty: {cardDifficultyDistribution.averageDifficulty}%
+                    </p>
+                </CardContent>
+            </Card>
+          )}
+
+          {mcqDifficultyDistribution && mcqDifficultyDistribution.reviewedCount > 0 && (
+            <Card>
+                <CardHeader>
+                    <CardTitle>MCQ Difficulty</CardTitle>
+                    <CardDescription>Difficulty distribution for reviewed MCQs.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <ResponsiveContainer width="100%" height={isMobile ? 250 : 300}>
+                        <BarChart data={mcqDifficultyDistribution.chartData}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                            <YAxis allowDecimals={false} />
+                            <Tooltip cursor={{ fill: 'hsl(var(--muted))' }} />
+                            <Bar dataKey="count">
+                                {mcqDifficultyDistribution.chartData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={getDifficultyColor(entry.difficulty)} />
+                                ))}
+                            </Bar>
+                        </BarChart>
+                    </ResponsiveContainer>
+                    <p className="text-center font-semibold text-muted-foreground mt-4">
+                        Average difficulty: {mcqDifficultyDistribution.averageDifficulty}%
                     </p>
                 </CardContent>
             </Card>
