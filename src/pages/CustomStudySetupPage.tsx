@@ -23,6 +23,7 @@ import { useSettings } from '@/contexts/SettingsContext';
 import { useExams } from '@/contexts/ExamsContext';
 import { format } from 'date-fns';
 import { Slider } from '@/components/ui/slider';
+import { cn } from '@/lib/utils';
 
 const customStudySchema = z.object({
   cardLimit: z.coerce.number().int().min(1, "Must be at least 1 card."),
@@ -307,13 +308,20 @@ const CustomStudySetupPage = () => {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Decks to include</FormLabel>
-                      <FormControl>
-                        <DeckTreeSelector
-                          decks={decks}
-                          selectedDeckIds={field.value}
-                          onSelectionChange={(newIds) => field.onChange(newIds)}
-                        />
-                      </FormControl>
+                      <div className={cn(selectedExamId && "opacity-50 pointer-events-none")}>
+                        <FormControl>
+                          <DeckTreeSelector
+                            decks={decks}
+                            selectedDeckIds={field.value}
+                            onSelectionChange={(newIds) => field.onChange(newIds)}
+                          />
+                        </FormControl>
+                      </div>
+                      {selectedExamId && (
+                        <FormDescription>
+                          Deck selection is managed by the chosen exam schedule.
+                        </FormDescription>
+                      )}
                       <FormMessage />
                     </FormItem>
                   )}
