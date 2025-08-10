@@ -1,4 +1,5 @@
 import { DeckData, FlashcardData } from "@/data/decks";
+import { SrsSettings } from "@/contexts/SettingsContext";
 
 // Recursively find a deck by its ID
 export const findDeckById = (decks: DeckData[], id: string): DeckData | null => {
@@ -272,4 +273,54 @@ export const moveDeck = (decks: DeckData[], activeId: string, overId: string | n
   }
 
   return decksCopy;
+};
+
+export const updateDeck = (decks: DeckData[], updatedDeck: DeckData): DeckData[] => {
+  return decks.map(deck => {
+    if (deck.id === updatedDeck.id) {
+      return updatedDeck;
+    }
+    if (deck.subDecks) {
+      return { ...deck, subDecks: updateDeck(deck.subDecks, updatedDeck) };
+    }
+    return deck;
+  });
+};
+
+export const findDeckWithAncestors = (
+  decks: DeckData[],
+  deckId: string,
+  ancestors: DeckData[] = []
+): { deck: DeckData; ancestors: DeckData[] } | null => {
+  for (const deck of decks) {
+    if (deck.id === deckId) {
+      return { deck, ancestors };
+    }
+    if (deck.subDecks) {
+      const found = findDeckWithAncestors(deck.subDecks, deckId, [...ancestors, deck]);
+      if (found) return found;
+    }
+  }
+  return null;
+};
+
+export const getEffectiveSrsSettings = (
+  decks: DeckData[],
+  deckId: string,
+  globalSettings: SrsSettings
+): SrsSettings => {
+  const result = findDeckWithAncestors(decks, deckId);
+  if (!result) return globalSettings;
+
+  const { deck, ancestors } = result;
+  const hierarchy = [...ancestors, deck];
+
+  for (let i = hierarchy.length - 1; i >= 0; i--) {
+    const currentDeck = hierarchy[i];
+    if (currentDeck.hasCustomSettings && currentDeck.srsSettings) {
+      return currentDeck.srsSettings;
+    }
+  }
+
+  return globalSettings;
 };

@@ -1,5 +1,6 @@
 import * as z from 'zod';
 import { State } from 'ts-fsrs';
+import { srsSettingsSchema } from '@/contexts/SettingsContext';
 
 export type FlashcardType = "basic" | "cloze" | "imageOcclusion";
 
@@ -93,6 +94,8 @@ const baseDeckSchema = z.object({
   id: z.string(),
   name: z.string(),
   flashcards: z.array(flashcardDataSchema),
+  hasCustomSettings: z.boolean().optional(),
+  srsSettings: srsSettingsSchema.optional(),
 });
 
 export type DeckData = z.infer<typeof baseDeckSchema> & {

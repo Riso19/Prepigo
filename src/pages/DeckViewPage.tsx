@@ -15,7 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ArrowLeft, Home, Pencil, Trash2, PlusCircle } from 'lucide-react';
+import { ArrowLeft, Home, Pencil, Trash2, PlusCircle, Settings } from 'lucide-react';
 import { FlashcardData } from '@/data/decks';
 import { showSuccess } from '@/utils/toast';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -23,6 +23,8 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { MediaAwareImage } from '@/components/MediaAwareImage';
 import { HtmlRenderer } from '@/components/HtmlRenderer';
 import { Badge } from '@/components/ui/badge';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { DeckSettingsForm } from '@/components/DeckSettingsForm';
 
 const DeckViewPage = () => {
   const { deckId } = useParams<{ deckId: string }>();
@@ -214,6 +216,20 @@ const DeckViewPage = () => {
             )}
           </CardContent>
         </Card>
+
+        <Accordion type="single" collapsible className="w-full mt-6">
+          <AccordionItem value="deck-settings">
+            <AccordionTrigger>
+              <div className="flex items-center gap-2 text-lg font-semibold">
+                <Settings className="h-5 w-5" />
+                Deck Specific Settings
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="pt-4">
+              <DeckSettingsForm deck={deck} />
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       </div>
 
       <AlertDialog open={!!cardToDelete} onOpenChange={() => setCardToDelete(null)}>

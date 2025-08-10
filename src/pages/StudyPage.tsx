@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useDecks } from "@/contexts/DecksContext";
 import { useSettings } from "@/contexts/SettingsContext";
-import { findDeckById, getAllFlashcardsFromDeck, updateFlashcard } from "@/lib/deck-utils";
+import { findDeckById, getAllFlashcardsFromDeck, updateFlashcard, getEffectiveSrsSettings } from "@/lib/deck-utils";
 import { addReviewLog } from "@/lib/idb";
 import { FlashcardData, ReviewLog, Sm2State } from "@/data/decks";
 import Flashcard from "@/components/Flashcard";
@@ -36,8 +36,13 @@ const shuffle = <T,>(array: T[]): T[] => {
 const StudyPage = () => {
   const { deckId } = useParams<{ deckId: string }>();
   const { decks, setDecks } = useDecks();
-  const { settings } = useSettings();
+  const { settings: globalSettings } = useSettings();
   const navigate = useNavigate();
+
+  const settings = useMemo(() => {
+    if (!deckId) return globalSettings;
+    return getEffectiveSrsSettings(decks, deckId, globalSettings);
+  }, [deckId, decks, globalSettings]);
 
   const deck = useMemo(() => (deckId ? findDeckById(decks, deckId) : null), [decks, deckId]);
   

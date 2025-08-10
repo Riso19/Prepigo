@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -10,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import Header from '@/components/Header';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { useSettings, SrsSettings, clearSettingsDB } from '@/contexts/SettingsContext';
+import { useSettings, SrsSettings, clearSettingsDB, srsSettingsSchema } from '@/contexts/SettingsContext';
 import { showSuccess, showError } from '@/utils/toast';
 import { Separator } from '@/components/ui/separator';
 import { useRef, useState } from 'react';
@@ -37,42 +36,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { importAnkiTxtFile } from '@/lib/anki-txt-importer';
 
-const fsrsParametersSchema = z.object({
-    request_retention: z.coerce.number().min(0.7, "Must be at least 0.7").max(0.99, "Must be less than 1.0"),
-    maximum_interval: z.coerce.number().int().min(1, "Must be at least 1 day"),
-    w: z.array(z.number()),
-});
-
-const settingsSchema = z.object({
-  scheduler: z.enum(['fsrs', 'sm2']),
-  fsrsParameters: fsrsParametersSchema,
-  sm2StartingEase: z.coerce.number().min(1.3, "Must be at least 1.3"),
-  sm2MinEasinessFactor: z.coerce.number().min(1.3, "Must be at least 1.3"),
-  sm2EasyBonus: z.coerce.number().min(1, "Must be at least 1.0"),
-  sm2IntervalModifier: z.coerce.number().min(0.1, "Must be at least 0.1"),
-  sm2HardIntervalMultiplier: z.coerce.number().min(1.0, "Must be at least 1.0"),
-  sm2LapsedIntervalMultiplier: z.coerce.number().min(0, "Must be at least 0").max(1, "Must be 1.0 or less"),
-  sm2MaximumInterval: z.coerce.number().int().min(1, "Must be at least 1 day"),
-  sm2GraduatingInterval: z.coerce.number().int().min(1, "Must be at least 1 day"),
-  sm2EasyInterval: z.coerce.number().int().min(1, "Must be at least 1 day"),
-  sm2MinimumInterval: z.coerce.number().int().min(1, "Must be at least 1 day"),
-  learningSteps: z.string().regex(/^(\d+[smhd]?\s*)*\d+[smhd]?$/, "Must be space-separated numbers with optional s,m,h,d units."),
-  relearningSteps: z.string().regex(/^(\d+[smhd]?\s*)*\d+[smhd]?$/, "Must be space-separated numbers with optional s,m,h,d units."),
-  leechThreshold: z.coerce.number().int().min(1, "Must be at least 1"),
-  leechAction: z.enum(['tag', 'suspend']),
-  newCardsPerDay: z.coerce.number().int().min(0, "Must be 0 or greater"),
-  maxReviewsPerDay: z.coerce.number().int().min(0, "Must be 0 or greater"),
-  newCardInsertionOrder: z.enum(['sequential', 'random']),
-  newCardGatherOrder: z.enum(['deck', 'ascending', 'descending', 'randomNotes', 'randomCards']),
-  newCardSortOrder: z.enum(['gathered', 'typeThenGathered', 'typeThenRandom', 'randomNote', 'random']),
-  newReviewOrder: z.enum(['mix', 'after', 'before']),
-  interdayLearningReviewOrder: z.enum(['mix', 'after', 'before']),
-  reviewSortOrder: z.enum(['dueDateRandom', 'dueDateDeck', 'overdue']),
-  buryNewSiblings: z.boolean(),
-  buryReviewSiblings: z.boolean(),
-  buryInterdayLearningSiblings: z.boolean(),
-});
-
 const SettingsPage = () => {
   const { settings, setSettings, isLoading } = useSettings();
   const { decks, setDecks } = useDecks();
@@ -85,7 +48,7 @@ const SettingsPage = () => {
   const [rescheduleOnSave, setRescheduleOnSave] = useState(false);
 
   const form = useForm<SrsSettings>({
-    resolver: zodResolver(settingsSchema),
+    resolver: zodResolver(srsSettingsSchema),
     values: settings,
     defaultValues: settings,
   });
