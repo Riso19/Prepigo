@@ -4,6 +4,7 @@ import { State } from "ts-fsrs";
 import { getAllFlashcardsFromDeck } from "./card-utils";
 import { ExamData } from "@/data/exams";
 import { getCardsForExam } from "./exam-utils";
+import { differenceInDays } from "date-fns";
 
 // Recursively find a deck by its ID
 export const findDeckById = (decks: DeckData[], id: string): DeckData | null => {
@@ -409,18 +410,49 @@ export const buildSessionQueue = (
   exams?: ExamData[]
 ): { queue: FlashcardData[], cardExamMap: Map<string, ExamData> } => {
   const now = new Date();
-
   const cardExamMap = new Map<string, ExamData>();
-  const hasExams = exams && exams.length > 0;
-  if (hasExams) {
+  const examPriorityNew: FlashcardData[] = [];
+  const examPriorityCardIds = new Set<string>();
+
+  const isTrulyNew = (card: FlashcardData, s: SrsSettings) => {
+    if (card.srs?.isSuspended) return false;
+    if (s.scheduler === 'sm2') return !card.srs?.sm2 || card.srs.sm2.state === 'new' || !card.srs.sm2.state;
+    const srsData = s.scheduler === 'fsrs6' ? card.srs?.fsrs6 : card.srs?.fsrs;
+    return !srsData || srsData.state === State.New;
+  };
+
+  if (exams && exams.length > 0) {
     const sortedExams = [...exams].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
     for (const exam of sortedExams) {
-        const examCards = getCardsForExam(exam, allDecks, globalSettings);
-        for (const card of examCards) {
-            if (!cardExamMap.has(card.id)) {
-                cardExamMap.set(card.id, exam);
-            }
+      const allCardsForExam = getCardsForExam(exam, allDecks, globalSettings);
+      for (const card of allCardsForExam) {
+        if (!cardExamMap.has(card.id)) {
+          cardExamMap.set(card.id, exam);
         }
+      }
+
+      const allNewCardsForExam = allCardsForExam.filter(card => {
+        const settings = getEffectiveSrsSettings(allDecks, findDeckWithAncestors(allDecks, card.id)?.deck.id || '', globalSettings);
+        return isTrulyNew(card, settings);
+      });
+
+      const daysLeft = differenceInDays(new Date(exam.date), now);
+      let dailyBudget: number;
+
+      if (daysLeft <= 0) {
+        dailyBudget = allNewCardsForExam.length;
+      } else {
+        dailyBudget = Math.ceil(allNewCardsForExam.length / daysLeft);
+      }
+
+      const cardsForToday = allNewCardsForExam.slice(0, dailyBudget);
+      cardsForToday.forEach(card => {
+        if (!examPriorityCardIds.has(card.id)) {
+          examPriorityNew.push(card);
+          examPriorityCardIds.add(card.id);
+        }
+      });
     }
   }
 
@@ -436,50 +468,10 @@ export const buildSessionQueue = (
     return 0;
   };
 
-  const examPriorityNew: FlashcardData[] = [];
-  const examPriorityCardIds = new Set<string>();
-
-  if (hasExams) {
-      const cardToDeckIdMap = new Map<string, string>();
-      const buildCardToDeckIdMap = (d: DeckData[]) => {
-          for (const deck of d) {
-              for (const card of deck.flashcards) {
-                  cardToDeckIdMap.set(card.id, deck.id);
-              }
-              if (deck.subDecks) buildCardToDeckIdMap(deck.subDecks);
-          }
-      };
-      buildCardToDeckIdMap(allDecks);
-
-      const examDeckIds = new Set(exams.flatMap(e => e.deckIds));
-      const allCardsInStudyScope = decksToStudy.flatMap(d => getAllFlashcardsFromDeck(d));
-
-      const originalIsNew = (card: FlashcardData, s: SrsSettings) => {
-          if (introducedTodayIds.has(card.id) || card.srs?.isSuspended) return false;
-          if (s.scheduler === 'sm2') return !card.srs?.sm2 || card.srs.sm2.state === 'new' || !card.srs.sm2.state;
-          const srsData = s.scheduler === 'fsrs6' ? card.srs?.fsrs6 : card.srs?.fsrs;
-          return !srsData || srsData.state === State.New;
-      };
-
-      const priorityCards = allCardsInStudyScope.filter(card => {
-          const cardDeckId = cardToDeckIdMap.get(card.id);
-          if (!cardDeckId || !examDeckIds.has(cardDeckId)) return false;
-          const settings = getEffectiveSrsSettings(allDecks, cardDeckId, globalSettings);
-          return originalIsNew(card, settings);
-      });
-
-      priorityCards.forEach(card => {
-          examPriorityNew.push(card);
-          examPriorityCardIds.add(card.id);
-      });
-  }
-
   const isNew = (card: FlashcardData, s: SrsSettings) => {
     if (examPriorityCardIds.has(card.id)) return false;
-    if (introducedTodayIds.has(card.id) || card.srs?.isSuspended) return false;
-    if (s.scheduler === 'sm2') return !card.srs?.sm2 || card.srs.sm2.state === 'new' || !card.srs.sm2.state;
-    const srsData = s.scheduler === 'fsrs6' ? card.srs?.fsrs6 : card.srs?.fsrs;
-    return !srsData || srsData.state === State.New;
+    if (introducedTodayIds.has(card.id)) return false;
+    return isTrulyNew(card, s);
   };
 
   const isDue = (card: FlashcardData, s: SrsSettings) => {
@@ -581,27 +573,27 @@ export const buildSessionQueue = (
   
   let sortedNew = gatheredNew;
   sortedNew.sort((a, b) => {
-    if (hasExams) {
+    if (exams && exams.length > 0) {
         const examOrder = examSort(a, b);
         if (examOrder !== 0) return examOrder;
     }
     return (a.srs?.newCardOrder || 0) - (b.srs?.newCardOrder || 0);
   });
 
-  if ((globalSettings.newCardSortOrder === 'random' || globalSettings.newCardGatherOrder === 'randomCards' || globalSettings.newCardGatherOrder === 'randomNotes') && !hasExams) {
+  if ((globalSettings.newCardSortOrder === 'random' || globalSettings.newCardGatherOrder === 'randomCards' || globalSettings.newCardGatherOrder === 'randomNotes') && !(exams && exams.length > 0)) {
     sortedNew = shuffle(sortedNew);
   }
 
   let sortedReviews = [...new Set(sessionReviews)];
   sortedReviews.sort((a, b) => {
-    if (hasExams) {
+    if (exams && exams.length > 0) {
         const examOrder = examSort(a, b);
         if (examOrder !== 0) return examOrder;
     }
     return new Date(a.srs!.fsrs?.due || a.srs!.sm2!.due).getTime() - new Date(b.srs!.fsrs?.due || b.srs!.sm2!.due).getTime();
   });
 
-  if (globalSettings.reviewSortOrder === 'dueDateRandom' && !hasExams) {
+  if (globalSettings.reviewSortOrder === 'dueDateRandom' && !(exams && exams.length > 0)) {
     sortedReviews = shuffle(sortedReviews);
   }
 
