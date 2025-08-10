@@ -166,6 +166,9 @@ const StudyPage = () => {
   const handleRating = useCallback(async (rating: Rating) => {
     if (!currentCard) return;
 
+    const actualCardIndex = sessionQueue.findIndex(c => c.id === currentCard.id);
+    if (actualCardIndex === -1) return;
+
     setHistory(prev => new Map(prev).set(currentCard.id, currentCard.srs));
 
     let updatedCard: FlashcardData = currentCard;
@@ -305,24 +308,22 @@ const StudyPage = () => {
       }
 
       if (shouldBury) {
-          setBuriedNoteIds(prev => new Set([...prev, currentCard.noteId!]));
+          setBuriedNoteIds(prev => new Set(prev).add(currentCard.noteId!));
       }
     }
 
     setIsFlipped(false);
-    setCurrentCardIndex(prev => prev + 1);
-  }, [currentCard, settings, setDecks, fsrsOutcomes, fsrsInstance]);
+    setCurrentCardIndex(actualCardIndex + 1);
+  }, [currentCard, sessionQueue, settings, setDecks, fsrsOutcomes, fsrsInstance]);
 
   const handlePrevious = useCallback(async () => {
-    if (currentCardIndex === 0) return;
+    const lastRatedCardId = Array.from(history.keys()).pop();
+    if (!lastRatedCardId) return;
 
-    const previousCardIndex = currentCardIndex - 1;
-    const cardToRevert = sessionQueue[previousCardIndex];
-
+    const cardToRevert = sessionQueue.find(c => c.id === lastRatedCardId);
     if (!cardToRevert) return;
 
-    const originalSrs = history.get(cardToRevert.id);
-
+    const originalSrs = history.get(lastRatedCardId);
     const revertedCard = { ...cardToRevert, srs: originalSrs };
     setDecks(prevDecks => updateFlashcard(prevDecks, revertedCard));
 
@@ -332,13 +333,16 @@ const StudyPage = () => {
 
     setHistory(prev => {
       const newHistory = new Map(prev);
-      newHistory.delete(cardToRevert.id);
+      newHistory.delete(lastRatedCardId);
       return newHistory;
     });
 
-    setCurrentCardIndex(previousCardIndex);
+    const revertedCardIndex = sessionQueue.findIndex(c => c.id === lastRatedCardId);
+    if (revertedCardIndex === -1) return;
+
+    setCurrentCardIndex(revertedCardIndex);
     setIsFlipped(false);
-  }, [currentCardIndex, sessionQueue, history, setDecks, settings.scheduler]);
+  }, [sessionQueue, history, setDecks, settings.scheduler]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -458,7 +462,7 @@ const StudyPage = () => {
           <main className="w-full max-w-2xl mx-auto flex flex-col items-center justify-start py-6 gap-6">
             {renderCard()}
             <div className="flex items-center gap-4 text-sm text-muted-foreground flex-shrink-0">
-              <Button variant="outline" size="sm" onClick={handlePrevious} disabled={currentCardIndex === 0}>
+              <Button variant="outline" size="sm" onClick={handlePrevious} disabled={history.size === 0}>
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Previous
               </Button>
