@@ -9,7 +9,6 @@ import { DndContext, DragEndEvent, useDroppable } from "@dnd-kit/core";
 import { moveDeck, buildSessionQueue } from "@/lib/deck-utils";
 import { Link, useNavigate } from "react-router-dom";
 import { useSettings } from "@/contexts/SettingsContext";
-import { useExams } from "@/contexts/ExamsContext";
 
 const RootDroppable = () => {
   const { setNodeRef, isOver } = useDroppable({
@@ -31,19 +30,18 @@ const RootDroppable = () => {
 const DeckManager = () => {
   const { decks, setDecks, introductionsToday } = useDecks();
   const { settings } = useSettings();
-  const { exams } = useExams();
   const [isAddDeckOpen, setIsAddDeckOpen] = useState(false);
   const [dueCount, setDueCount] = useState(0);
   const navigate = useNavigate();
 
   useEffect(() => {
     if (decks.length > 0) {
-      const queue = buildSessionQueue(decks, decks, settings, introductionsToday, exams);
+      const queue = buildSessionQueue(decks, decks, settings, introductionsToday);
       setDueCount(queue.length);
     } else {
       setDueCount(0);
     }
-  }, [decks, settings, introductionsToday, exams]);
+  }, [decks, settings, introductionsToday]);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;

@@ -1,8 +1,6 @@
 import { DeckData, FlashcardData } from "@/data/decks";
 import { SrsSettings } from "@/contexts/SettingsContext";
 import { State } from "ts-fsrs";
-import { ExamData } from "@/data/exams";
-import { differenceInCalendarDays, isAfter, parseISO } from "date-fns";
 
 // Recursively find a deck by its ID
 export const findDeckById = (decks: DeckData[], id: string): DeckData | null => {
@@ -422,11 +420,9 @@ export const buildSessionQueue = (
   decksToStudy: DeckData[],
   allDecks: DeckData[],
   globalSettings: SrsSettings,
-  introducedTodayIds: Set<string>,
-  allExams: ExamData[]
+  introducedTodayIds: Set<string>
 ): FlashcardData[] => {
   const now = new Date();
-  now.setHours(0, 0, 0, 0);
 
   const isNew = (card: FlashcardData, s: SrsSettings) => {
     if (introducedTodayIds.has(card.id) || card.srs?.isSuspended) return false;
@@ -449,80 +445,104 @@ export const buildSessionQueue = (
     return !!srsData && (srsData.state === State.Learning || srsData.state === State.Relearning);
   };
 
-  const allCardsInScope = new Set<FlashcardData>();
-  decksToStudy.forEach(deck => getAllFlashcardsFromDeck(deck).forEach(card => allCardsInScope.add(card)));
+  const isInterdayLearning = (card: FlashcardData, s: SrsSettings) => {
+    if (!isLearning(card, s)) return false;
+    if (s.scheduler === 'sm2') {
+        const sm2State = card.srs!.sm2!;
+        const steps = parseSteps(sm2State.state === 'learning' ? s.learningSteps : s.relearningSteps);
+        const currentStep = sm2State.learning_step || 0;
+        if (currentStep >= steps.length) return true;
+        return steps[currentStep] >= 1440;
+    }
+    return false;
+  };
 
-  const learningCards = [...allCardsInScope].filter(c => isLearning(c, getEffectiveSrsSettings(allDecks, findFlashcardById(allDecks, c.id)!.deckId, globalSettings)));
-  const reviewCards = [...allCardsInScope].filter(c => isDue(c, getEffectiveSrsSettings(allDecks, findFlashcardById(allDecks, c.id)!.deckId, globalSettings)) && !isLearning(c, getEffectiveSrsSettings(allDecks, findFlashcardById(allDecks, c.id)!.deckId, globalSettings)));
-  
-  const alreadyInQueue = new Set([...learningCards, ...reviewCards].map(c => c.id));
+  const isIntradayLearning = (card: FlashcardData, s: SrsSettings) => isLearning(card, s) && !isInterdayLearning(card, s);
 
-  // Exam Prep Logic
-  const examPrepCards: FlashcardData[] = [];
-  const activeExams = allExams.filter(exam => !isAfter(now, parseISO(exam.examDate)));
+  const isReview = (card: FlashcardData, s: SrsSettings) => {
+    if (!isDue(card, s)) return false;
+    if (s.scheduler === 'sm2') return card.srs?.sm2?.state === 'review';
+    const srsData = s.scheduler === 'fsrs6' ? card.srs?.fsrs6 : card.srs?.fsrs;
+    return !!srsData && srsData.state === State.Review;
+  };
 
-  for (const exam of activeExams) {
-    const examDate = parseISO(exam.examDate);
-    const daysRemaining = differenceInCalendarDays(examDate, now) + 1;
-    if (daysRemaining <= 0) continue;
+  const sessionNew: FlashcardData[] = [];
+  const sessionReviews: FlashcardData[] = [];
+  const sessionLearning: FlashcardData[] = [];
 
-    let examScopeCards = exam.targetDeckIds.flatMap(deckId => {
-      const deck = findDeckById(allDecks, deckId);
-      return deck ? getAllFlashcardsFromDeck(deck) : [];
-    });
-    examScopeCards = [...new Map(examScopeCards.map(item => [item.id, item])).values()];
+  const recursiveGather = (deck: DeckData, newBudget: number, reviewBudget: number): { newTaken: number, reviewsTaken: number } => {
+    const settings = getEffectiveSrsSettings(allDecks, deck.id, globalSettings);
+    const currentNewBudget = Math.min(newBudget, settings.newCardsPerDay);
+    const currentReviewBudget = Math.min(reviewBudget, settings.maxReviewsPerDay);
+    let newTaken = 0;
+    let reviewsTaken = 0;
 
-    if (exam.targetTags.length > 0) {
-      examScopeCards = examScopeCards.filter(c => exam.targetTags.every(tag => c.tags?.includes(tag)));
+    const cards = deck.flashcards;
+    sessionLearning.push(...cards.filter(c => isIntradayLearning(c, settings)));
+    
+    const potentialReviews = cards.filter(c => isReview(c, settings) || isInterdayLearning(c, settings));
+    const reviewsToTake = Math.min(potentialReviews.length, currentReviewBudget);
+    if (reviewsToTake > 0) {
+      sessionReviews.push(...potentialReviews.slice(0, reviewsToTake));
+      reviewsTaken += reviewsToTake;
     }
 
-    if (exam.filterMode === 'due') {
-      examScopeCards = examScopeCards.filter(c => isDue(c, getEffectiveSrsSettings(allDecks, findFlashcardById(allDecks, c.id)!.deckId, globalSettings)));
-    } else if (exam.filterMode === 'difficulty') {
-      examScopeCards = examScopeCards.filter(c => {
-        const srsData = c.srs?.fsrs || c.srs?.fsrs6;
-        if (!srsData) return false;
-        const d = srsData.difficulty;
-        return d >= (exam.filterDifficultyMin ?? 1) && d <= (exam.filterDifficultyMax ?? 10);
-      });
+    const canTakeNew = globalSettings.newCardsIgnoreReviewLimit || reviewsTaken < currentReviewBudget;
+    if (canTakeNew) {
+      const potentialNew = cards.filter(c => isNew(c, settings));
+      const newToTake = Math.min(potentialNew.length, currentNewBudget);
+      if (newToTake > 0) {
+        sessionNew.push(...potentialNew.slice(0, newToTake));
+        newTaken += newToTake;
+      }
     }
 
-    const masteredCards = examScopeCards.filter(c => {
-      const srsData = c.srs?.fsrs || c.srs?.fsrs6 || c.srs?.sm2;
-      return srsData && isAfter(parseISO(srsData.due), examDate);
-    }).length;
-
-    const dailyQuota = Math.ceil((examScopeCards.length - masteredCards) / daysRemaining);
-    const cardsForThisExamInQueue = [...learningCards, ...reviewCards].filter(c => examScopeCards.some(ec => ec.id === c.id)).length;
-    let needed = dailyQuota - cardsForThisExamInQueue;
-
-    if (needed > 0) {
-      const pullableCards = examScopeCards.filter(c => !alreadyInQueue.has(c.id));
-      pullableCards.sort((a, b) => {
-        const dueA = a.srs?.fsrs?.due || a.srs?.fsrs6?.due || a.srs?.sm2?.due || '9999-12-31';
-        const dueB = b.srs?.fsrs?.due || b.srs?.fsrs6?.due || b.srs?.sm2?.due || '9999-12-31';
-        return new Date(dueA).getTime() - new Date(dueB).getTime();
-      });
-      
-      const cardsToPull = pullableCards.slice(0, needed);
-      cardsToPull.forEach(card => {
-        (card as any).studyReason = { type: 'exam', name: exam.name };
-        examPrepCards.push(card);
-        alreadyInQueue.add(card.id);
-      });
+    if (deck.subDecks) {
+      for (const subDeck of deck.subDecks) {
+        const remainingNew = newBudget - newTaken;
+        const remainingReview = reviewBudget - reviewsTaken;
+        if (remainingNew <= 0 && remainingReview <= 0) break;
+        const { newTaken: subNew, reviewsTaken: subReviews } = recursiveGather(subDeck, remainingNew, remainingReview);
+        newTaken += subNew;
+        reviewsTaken += subReviews;
+      }
     }
+    return { newTaken, reviewsTaken };
+  };
+
+  let remainingNewBudget = Math.max(0, globalSettings.newCardsPerDay - introducedTodayIds.size);
+  let remainingReviewBudget = globalSettings.maxReviewsPerDay;
+
+  for (const deck of decksToStudy) {
+    if (remainingNewBudget <= 0 && remainingReviewBudget <= 0 && !globalSettings.newCardsIgnoreReviewLimit) {
+      break;
+    }
+    
+    const { newTaken, reviewsTaken } = recursiveGather(deck, remainingNewBudget, remainingReviewBudget);
+    
+    remainingNewBudget -= newTaken;
+    remainingReviewBudget -= reviewsTaken;
   }
 
-  // New Card Logic
-  const newCards: FlashcardData[] = [];
-  let newCardBudget = globalSettings.newCardsPerDay - introducedTodayIds.size;
-  if (newCardBudget > 0) {
-    const potentialNew = [...allCardsInScope].filter(c => !alreadyInQueue.has(c.id) && isNew(c, getEffectiveSrsSettings(allDecks, findFlashcardById(allDecks, c.id)!.deckId, globalSettings)));
-    if (globalSettings.newCardGatherOrder === 'randomCards') shuffle(potentialNew);
-    else potentialNew.sort((a, b) => (a.srs?.newCardOrder || 0) - (b.srs?.newCardOrder || 0));
-    newCards.push(...potentialNew.slice(0, newCardBudget));
+  let gatheredNew = [...new Set(sessionNew)];
+  if (globalSettings.newCardGatherOrder === 'ascending') gatheredNew.sort((a, b) => (a.srs?.newCardOrder || 0) - (b.srs?.newCardOrder || 0));
+  if (globalSettings.newCardGatherOrder === 'descending') gatheredNew.sort((a, b) => (b.srs?.newCardOrder || 0) - (a.srs?.newCardOrder || 0));
+  if (globalSettings.newCardGatherOrder === 'randomCards' || globalSettings.newCardGatherOrder === 'randomNotes') gatheredNew = shuffle(gatheredNew);
+
+  let sortedNew = gatheredNew;
+  if (globalSettings.newCardSortOrder === 'random') sortedNew = shuffle(sortedNew);
+
+  let sortedReviews = [...new Set(sessionReviews)];
+  if (globalSettings.reviewSortOrder === 'dueDateRandom') {
+    sortedReviews.sort((a, b) => new Date(a.srs!.fsrs?.due || a.srs!.sm2!.due).getTime() - new Date(b.srs!.fsrs?.due || b.srs!.sm2!.due).getTime());
+    sortedReviews = shuffle(sortedReviews);
   }
 
-  const finalQueue = [...learningCards, ...reviewCards, ...examPrepCards, ...newCards];
-  return shuffle(finalQueue);
+  const learningCombined = [...new Set(sessionLearning)].sort((a, b) => new Date(a.srs!.fsrs?.due || a.srs!.sm2!.due).getTime() - new Date(b.srs!.fsrs?.due || b.srs!.sm2!.due).getTime());
+
+  const finalWithNew = globalSettings.newReviewOrder === 'mix' ? shuffle([...sortedReviews, ...sortedNew]) :
+                       globalSettings.newReviewOrder === 'after' ? [...sortedReviews, ...sortedNew] :
+                       [...sortedNew, ...sortedReviews];
+
+  return [...learningCombined, ...finalWithNew];
 };

@@ -12,7 +12,7 @@ interface TagEditorProps {
   className?: string;
 }
 
-export const TagEditor = ({ tags = [], onTagsChange, allTags, className }: TagEditorProps) => {
+export const TagEditor = ({ tags, onTagsChange, allTags, className }: TagEditorProps) => {
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [inputValue, setInputValue] = React.useState('');
   const [open, setOpen] = React.useState(false);

@@ -25,9 +25,6 @@ const Header = () => {
             <NavLink to="/question-bank" className={navLinkClass}>
               Question Bank
             </NavLink>
-            <NavLink to="/exams" className={navLinkClass}>
-              Exams
-            </NavLink>
           </nav>
         </div>
         <Button variant="ghost" size="icon" asChild>
