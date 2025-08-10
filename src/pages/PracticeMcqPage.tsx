@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuestionBanks } from "@/contexts/QuestionBankContext";
 import { findQuestionBankById, getAllMcqsFromBank } from "@/lib/question-bank-utils";
@@ -44,7 +44,7 @@ const PracticeMcqPage = () => {
     }
   }, [bankId, bank, questionBanks]);
 
-  const handleSubmit = () => {
+  const handleSubmit = useCallback(() => {
     if (!selectedOptionId) return;
     const correctOption = currentQuestion.options.find(opt => opt.isCorrect);
     if (selectedOptionId === correctOption?.id) {
@@ -53,9 +53,9 @@ const PracticeMcqPage = () => {
       setSessionStats(prev => ({ ...prev, incorrect: prev.incorrect + 1 }));
     }
     setIsSubmitted(true);
-  };
+  }, [selectedOptionId, currentQuestion]);
 
-  const handleGradeAndProceed = (grade: number) => {
+  const handleGradeAndProceed = useCallback((grade: number) => {
     // TODO: Implement FSRS logic here using the grade
     console.log(`Graded with FSRS rating: ${grade}`);
 
@@ -66,16 +66,53 @@ const PracticeMcqPage = () => {
     } else {
       setIsFinished(true);
     }
-  };
+  }, [currentQuestionIndex, sessionQueue.length]);
 
-  const handleRestart = () => {
+  const handleRestart = useCallback(() => {
     setSessionQueue(shuffle(sessionQueue));
     setCurrentQuestionIndex(0);
     setSelectedOptionId(null);
     setIsSubmitted(false);
     setSessionStats({ correct: 0, incorrect: 0 });
     setIsFinished(false);
-  };
+  }, [sessionQueue]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLElement) {
+        const target = event.target;
+        if (target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') {
+          return;
+        }
+      }
+
+      if (isSubmitted) {
+        const grade = parseInt(event.key, 10);
+        if (!isNaN(grade) && grade >= 1 && grade <= 5) {
+          event.preventDefault();
+          handleGradeAndProceed(grade);
+        }
+      } else {
+        const keyNumber = parseInt(event.key, 10);
+        if (currentQuestion && !isNaN(keyNumber) && keyNumber > 0 && keyNumber <= currentQuestion.options.length) {
+          const optionIndex = keyNumber - 1;
+          const optionId = currentQuestion.options[optionIndex].id;
+          setSelectedOptionId(optionId);
+          event.preventDefault();
+        }
+
+        if (selectedOptionId && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault();
+          handleSubmit();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isSubmitted, selectedOptionId, currentQuestion, handleSubmit, handleGradeAndProceed]);
 
   const pageTitle = bankId === 'all' ? "Practicing All MCQs" : `Practicing: ${bank?.name}`;
 
@@ -153,10 +190,11 @@ const PracticeMcqPage = () => {
                   <TooltipTrigger asChild>
                     <Button
                       onClick={() => handleGradeAndProceed(grade)}
-                      className={`h-16 text-base flex-col gap-1 text-white font-bold ${color}`}
+                      className={`h-16 text-base flex-col gap-1 text-white font-bold relative ${color}`}
                     >
                       <Icon className="h-5 w-5" />
                       <span>{label}</span>
+                      <span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">{grade}</span>
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
@@ -166,8 +204,9 @@ const PracticeMcqPage = () => {
               ))}
             </div>
           ) : (
-            <Button onClick={handleSubmit} disabled={!selectedOptionId} className="w-full h-16 text-lg">
+            <Button onClick={handleSubmit} disabled={!selectedOptionId} className="w-full h-16 text-lg relative">
               Check Answer
+              <span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">Enter</span>
             </Button>
           )}
         </div>

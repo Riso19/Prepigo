@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { HtmlRenderer } from "./HtmlRenderer";
 import { cn } from "@/lib/utils";
 import { CheckCircle2, XCircle } from "lucide-react";
+import { Badge } from "./ui/badge";
 
 interface McqPlayerProps {
   mcq: McqData;
@@ -41,12 +42,12 @@ const McqPlayer = ({ mcq, selectedOptionId, isSubmitted, onOptionSelect }: McqPl
           disabled={isSubmitted}
         >
           <div className="space-y-4">
-            {mcq.options.map((option) => (
+            {mcq.options.map((option, index) => (
               <Label
                 key={option.id}
                 htmlFor={option.id}
                 className={cn(
-                  "flex items-start gap-4 rounded-lg border p-4 transition-all cursor-pointer",
+                  "flex items-start gap-4 rounded-lg border p-4 transition-all cursor-pointer relative",
                   getOptionClass(option.id, option.isCorrect)
                 )}
               >
@@ -56,6 +57,11 @@ const McqPlayer = ({ mcq, selectedOptionId, isSubmitted, onOptionSelect }: McqPl
                 </div>
                 {isSubmitted && option.isCorrect && <CheckCircle2 className="h-6 w-6 text-green-500 flex-shrink-0" />}
                 {isSubmitted && !option.isCorrect && selectedOptionId === option.id && <XCircle className="h-6 w-6 text-red-500 flex-shrink-0" />}
+                {!isSubmitted && (
+                  <Badge variant="outline" className="absolute -top-2 -right-2 text-xs font-mono bg-background">
+                    {index + 1}
+                  </Badge>
+                )}
               </Label>
             ))}
           </div>
