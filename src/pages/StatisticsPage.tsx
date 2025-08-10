@@ -9,12 +9,12 @@ import { getAllMcqsFromBank } from '@/lib/question-bank-utils';
 import { getItemStatus, ItemStatus } from '@/lib/srs-utils';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useQuery } from '@tanstack/react-query';
-import { getAllReviewLogsFromDB, getAllMcqReviewLogsFromDB } from '@/lib/idb';
+import { getAllReviewLogsFromDB, getAllMcqReviewLogsFromDB, McqReviewLog } from '@/lib/idb';
 import { format, subDays, startOfDay, isSameDay, differenceInDays } from 'date-fns';
 import { Loader2, TrendingUp, CalendarDays, Flame, CheckCircle, BookOpen, Loader, Clock, Zap } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { State } from 'ts-fsrs';
-import { FlashcardData } from '@/data/decks';
+import { FlashcardData, ReviewLog } from '@/data/decks';
 import { McqData } from '@/data/questionBanks';
 
 const StatisticsPage = () => {
@@ -24,12 +24,12 @@ const StatisticsPage = () => {
   const isMobile = useIsMobile();
 
   // --- Data Fetching for Review Logs ---
-  const { data: reviewLogs, isLoading: isLoadingLogs } = useQuery({
-    queryKey: ['reviewLogs'],
+  const { data: logs, isLoading: isLoadingLogs } = useQuery({
+    queryKey: ['allReviewLogs'],
     queryFn: async () => {
       const cardLogs = await getAllReviewLogsFromDB();
       const mcqLogs = await getAllMcqReviewLogsFromDB();
-      return [...cardLogs, ...mcqLogs];
+      return { cardLogs, mcqLogs };
     }
   });
 
@@ -50,7 +50,8 @@ const StatisticsPage = () => {
   }, [decks, questionBanks]);
 
   const progressStats = useMemo(() => {
-    if (!reviewLogs) return null;
+    if (!logs) return null;
+    const reviewLogs = [...logs.cardLogs, ...logs.mcqLogs];
     const today = startOfDay(new Date());
     const reviewsToday = reviewLogs.filter(log => isSameDay(new Date(log.review), today)).length;
     const reviewsPast7Days = reviewLogs.filter(log => differenceInDays(today, new Date(log.review)) < 7).length;
@@ -89,27 +90,41 @@ const StatisticsPage = () => {
     }
 
     return { reviewsToday, reviewsPast7Days, reviewsPast30Days, currentStreak, longestStreak };
-  }, [reviewLogs]);
+  }, [logs]);
 
   const timeStats = useMemo(() => {
-    if (!reviewLogs || reviewLogs.length === 0) {
+    const calculateMetrics = (logSet: (ReviewLog | McqReviewLog)[]) => {
+      if (!logSet || logSet.length === 0) {
         return {
-            totalTimeFormatted: "0m",
-            avgPerHour: 0,
+          totalTimeFormatted: "0h 0m",
+          avgPerHour: 0,
         };
+      }
+
+      const totalDurationMs = logSet.reduce((acc, log) => acc + (log.duration || 0), 0);
+      const totalDurationHours = totalDurationMs / (1000 * 60 * 60);
+
+      const hours = Math.floor(totalDurationHours);
+      const minutes = Math.round((totalDurationHours - hours) * 60);
+      const totalTimeFormatted = `${hours}h ${minutes}m`;
+
+      const avgPerHour = totalDurationHours > 0 ? Math.round(logSet.length / totalDurationHours) : 0;
+
+      return { totalTimeFormatted, avgPerHour };
+    };
+
+    if (!logs) {
+      return {
+        flashcards: { totalTimeFormatted: "0h 0m", avgPerHour: 0 },
+        mcqs: { totalTimeFormatted: "0h 0m", avgPerHour: 0 },
+      };
     }
 
-    const totalDurationMs = reviewLogs.reduce((acc, log) => acc + (log.duration || 0), 0);
-    const totalDurationHours = totalDurationMs / (1000 * 60 * 60);
-
-    const hours = Math.floor(totalDurationHours);
-    const minutes = Math.round((totalDurationHours - hours) * 60);
-    const totalTimeFormatted = `${hours}h ${minutes}m`;
-
-    const avgPerHour = totalDurationHours > 0 ? Math.round(reviewLogs.length / totalDurationHours) : 0;
-
-    return { totalTimeFormatted, avgPerHour };
-  }, [reviewLogs]);
+    return {
+      flashcards: calculateMetrics(logs.cardLogs),
+      mcqs: calculateMetrics(logs.mcqLogs),
+    };
+  }, [logs]);
 
   const masteryStats = useMemo(() => {
     const flashcards = { unseen: 0, inProgress: 0, mastered: 0 };
@@ -148,7 +163,8 @@ const StatisticsPage = () => {
   }, [collectionStats, settings.scheduler]);
 
   const reviewHistoryData = useMemo(() => {
-    if (!reviewLogs) return [];
+    if (!logs) return [];
+    const reviewLogs = [...logs.cardLogs, ...logs.mcqLogs];
     const today = startOfDay(new Date());
     const days = Array.from({ length: 30 }, (_, i) => subDays(today, i)).reverse();
     
@@ -159,7 +175,7 @@ const StatisticsPage = () => {
         reviews: count,
       };
     });
-  }, [reviewLogs]);
+  }, [logs]);
 
   const calculateDifficulty = (items: (FlashcardData | McqData)[], scheduler: 'fsrs' | 'fsrs6') => {
     const reviewedItems = items.filter(item => {
@@ -287,7 +303,7 @@ const StatisticsPage = () => {
 
         <h2 className="text-xl sm:text-2xl font-bold mt-8 mb-4">Learning Progress</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-          <Card className="lg:col-span-1">
+          <Card>
             <CardHeader><CardTitle>Reviews</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
@@ -297,7 +313,7 @@ const StatisticsPage = () => {
               </>}
             </CardContent>
           </Card>
-          <Card className="lg:col-span-1">
+          <Card>
             <CardHeader><CardTitle>Study Streak</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
@@ -306,7 +322,7 @@ const StatisticsPage = () => {
               </>}
             </CardContent>
           </Card>
-          <Card className="lg:col-span-1">
+          <Card>
             <CardHeader><CardTitle>Flashcard Mastery</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><BookOpen className="h-4 w-4" />Unseen</span><span className="font-bold">{masteryStats.flashcards.unseen}</span></div>
@@ -314,12 +330,29 @@ const StatisticsPage = () => {
               <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><CheckCircle className="h-4 w-4" />Mastered</span><span className="font-bold">{masteryStats.flashcards.mastered}</span></div>
             </CardContent>
           </Card>
-          <Card className="lg:col-span-3">
-            <CardHeader><CardTitle>Time-Based Metrics</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Card>
+            <CardHeader><CardTitle>MCQ Mastery</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><BookOpen className="h-4 w-4" />Unseen</span><span className="font-bold">{masteryStats.mcqs.unseen}</span></div>
+              <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Loader className="h-4 w-4" />In Progress</span><span className="font-bold">{masteryStats.mcqs.inProgress}</span></div>
+              <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><CheckCircle className="h-4 w-4" />Mastered</span><span className="font-bold">{masteryStats.mcqs.mastered}</span></div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle>Flashcard Time Metrics</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
                 {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
-                    <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Clock className="h-4 w-4" />Total Time Studied</span><span className="font-bold">{timeStats?.totalTimeFormatted}</span></div>
-                    <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Zap className="h-4 w-4" />Avg. Reviews / Hour</span><span className="font-bold">{timeStats?.avgPerHour}</span></div>
+                    <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Clock className="h-4 w-4" />Total Time</span><span className="font-bold">{timeStats.flashcards.totalTimeFormatted}</span></div>
+                    <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Zap className="h-4 w-4" />Avg. / Hour</span><span className="font-bold">{timeStats.flashcards.avgPerHour}</span></div>
+                </>}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle>MCQ Time Metrics</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+                {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
+                    <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Clock className="h-4 w-4" />Total Time</span><span className="font-bold">{timeStats.mcqs.totalTimeFormatted}</span></div>
+                    <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Zap className="h-4 w-4" />Avg. / Hour</span><span className="font-bold">{timeStats.mcqs.avgPerHour}</span></div>
                 </>}
             </CardContent>
           </Card>
