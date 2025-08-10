@@ -858,6 +858,25 @@ const SettingsPage = () => {
                   </CardContent>
                 </Card>
 
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Appearance</CardTitle>
+                    <CardDescription>Customize the look and feel of the app.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <FormField control={form.control} name="disableFlipAnimation" render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                          <div className="space-y-0.5">
+                            <FormLabel>Disable flip animation</FormLabel>
+                            <FormDescription>Instantly show the back of the card without an animation.</FormDescription>
+                          </div>
+                          <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </CardContent>
+                </Card>
+
                 <div className="flex justify-end">
                   <Button type="submit" size="lg">Save All Settings</Button>
                 </div>

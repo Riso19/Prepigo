@@ -54,6 +54,7 @@ export const srsSettingsSchema = z.object({
   buryInterdayLearningSiblings: z.boolean(),
   newCardsIgnoreReviewLimit: z.boolean(),
   limitsStartFromTop: z.boolean(),
+  disableFlipAnimation: z.boolean(),
 });
 
 export type SrsSettings = z.infer<typeof srsSettingsSchema>;
@@ -122,6 +123,7 @@ const defaultSettings: SrsSettings = {
   buryInterdayLearningSiblings: false,
   newCardsIgnoreReviewLimit: false,
   limitsStartFromTop: false,
+  disableFlipAnimation: false,
 };
 
 // --- Database Functions ---
