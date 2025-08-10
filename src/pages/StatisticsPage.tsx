@@ -10,8 +10,8 @@ import { getItemStatus, ItemStatus } from '@/lib/srs-utils';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useQuery } from '@tanstack/react-query';
 import { getAllReviewLogsFromDB, getAllMcqReviewLogsFromDB } from '@/lib/idb';
-import { format, subDays, startOfDay, isSameDay } from 'date-fns';
-import { Loader2 } from 'lucide-react';
+import { format, subDays, startOfDay, isSameDay, differenceInDays } from 'date-fns';
+import { Loader2, TrendingUp, CalendarDays, Flame, CheckCircle, BookOpen, Loader } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { State } from 'ts-fsrs';
 import { FlashcardData } from '@/data/decks';
@@ -48,6 +48,68 @@ const StatisticsPage = () => {
       allMcqs,
     };
   }, [decks, questionBanks]);
+
+  const progressStats = useMemo(() => {
+    if (!reviewLogs) return null;
+    const today = startOfDay(new Date());
+    const reviewsToday = reviewLogs.filter(log => isSameDay(new Date(log.review), today)).length;
+    const reviewsPast7Days = reviewLogs.filter(log => differenceInDays(today, new Date(log.review)) < 7).length;
+    const reviewsPast30Days = reviewLogs.filter(log => differenceInDays(today, new Date(log.review)) < 30).length;
+
+    const uniqueDays = [...new Set(reviewLogs.map(log => startOfDay(new Date(log.review)).getTime()))].sort((a, b) => a - b);
+    let currentStreak = 0;
+    let longestStreak = 0;
+    let currentSequence = 0;
+
+    if (uniqueDays.length > 0) {
+      const lastDay = new Date(uniqueDays[uniqueDays.length - 1]);
+      if (isSameDay(lastDay, today) || isSameDay(lastDay, subDays(today, 1))) {
+        currentStreak = 1;
+        for (let i = uniqueDays.length - 2; i >= 0; i--) {
+          const day = new Date(uniqueDays[i]);
+          const prevDay = new Date(uniqueDays[i + 1]);
+          if (differenceInDays(prevDay, day) === 1) {
+            currentStreak++;
+          } else {
+            break;
+          }
+        }
+      }
+
+      for (let i = 0; i < uniqueDays.length; i++) {
+        if (i > 0 && differenceInDays(new Date(uniqueDays[i]), new Date(uniqueDays[i - 1])) === 1) {
+          currentSequence++;
+        } else {
+          currentSequence = 1;
+        }
+        if (currentSequence > longestStreak) {
+          longestStreak = currentSequence;
+        }
+      }
+    }
+
+    return { reviewsToday, reviewsPast7Days, reviewsPast30Days, currentStreak, longestStreak };
+  }, [reviewLogs]);
+
+  const masteryStats = useMemo(() => {
+    const flashcards = { unseen: 0, inProgress: 0, mastered: 0 };
+    collectionStats.allFlashcards.forEach(card => {
+      const status = getItemStatus(card, settings.scheduler);
+      if (status === 'New') flashcards.unseen++;
+      else if (status === 'Mature') flashcards.mastered++;
+      else if (status !== 'Suspended') flashcards.inProgress++;
+    });
+
+    const mcqs = { unseen: 0, inProgress: 0, mastered: 0 };
+    collectionStats.allMcqs.forEach(mcq => {
+      const status = getItemStatus(mcq, settings.scheduler === 'sm2' ? 'fsrs' : settings.scheduler);
+      if (status === 'New') mcqs.unseen++;
+      else if (status === 'Mature') mcqs.mastered++;
+      else if (status !== 'Suspended') mcqs.inProgress++;
+    });
+
+    return { flashcards, mcqs };
+  }, [collectionStats, settings.scheduler]);
 
   const maturityData = useMemo(() => {
     const flashcardStatusCounts: Record<ItemStatus, number> = { New: 0, Learning: 0, Relearning: 0, Young: 0, Mature: 0, Suspended: 0 };
@@ -200,6 +262,37 @@ const StatisticsPage = () => {
           <Card>
             <CardHeader><CardTitle>Total MCQs</CardTitle></CardHeader>
             <CardContent><p className="text-3xl sm:text-4xl font-bold">{collectionStats.totalMcqs}</p></CardContent>
+          </Card>
+        </div>
+
+        <h2 className="text-xl sm:text-2xl font-bold mt-8 mb-4">Learning Progress</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+          <Card className="lg:col-span-1">
+            <CardHeader><CardTitle>Reviews</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
+                <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><TrendingUp className="h-4 w-4" />Today</span><span className="font-bold">{progressStats?.reviewsToday}</span></div>
+                <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><CalendarDays className="h-4 w-4" />Past 7 days</span><span className="font-bold">{progressStats?.reviewsPast7Days}</span></div>
+                <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><CalendarDays className="h-4 w-4" />Past 30 days</span><span className="font-bold">{progressStats?.reviewsPast30Days}</span></div>
+              </>}
+            </CardContent>
+          </Card>
+          <Card className="lg:col-span-1">
+            <CardHeader><CardTitle>Study Streak</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              {isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <>
+                <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Flame className="h-4 w-4 text-orange-500" />Current Streak</span><span className="font-bold">{progressStats?.currentStreak} days</span></div>
+                <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Flame className="h-4 w-4" />Longest Streak</span><span className="font-bold">{progressStats?.longestStreak} days</span></div>
+              </>}
+            </CardContent>
+          </Card>
+          <Card className="lg:col-span-1">
+            <CardHeader><CardTitle>Flashcard Mastery</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><BookOpen className="h-4 w-4" />Unseen</span><span className="font-bold">{masteryStats.flashcards.unseen}</span></div>
+              <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Loader className="h-4 w-4" />In Progress</span><span className="font-bold">{masteryStats.flashcards.inProgress}</span></div>
+              <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><CheckCircle className="h-4 w-4" />Mastered</span><span className="font-bold">{masteryStats.flashcards.mastered}</span></div>
+            </CardContent>
           </Card>
         </div>
 
