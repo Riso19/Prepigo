@@ -79,7 +79,8 @@ export const DeckSettingsForm = ({ deck }: DeckSettingsFormProps) => {
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                         <SelectContent>
-                          <SelectItem value="fsrs">FSRS (Recommended)</SelectItem>
+                          <SelectItem value="fsrs">FSRS-4.5 (Recommended)</SelectItem>
+                          <SelectItem value="fsrs6">FSRS-6 (Experimental)</SelectItem>
                           <SelectItem value="sm2">SM-2 (Legacy)</SelectItem>
                         </SelectContent>
                       </Select>
@@ -91,10 +92,25 @@ export const DeckSettingsForm = ({ deck }: DeckSettingsFormProps) => {
 
               {scheduler === 'fsrs' && (
                 <Card>
-                  <CardHeader><CardTitle>FSRS Parameters</CardTitle></CardHeader>
+                  <CardHeader><CardTitle>FSRS-4.5 Parameters</CardTitle></CardHeader>
                   <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <FormField control={form.control} name="fsrsParameters.request_retention" render={({ field }) => (<FormItem><FormLabel>Requested Retention</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>)} />
                     <FormField control={form.control} name="fsrsParameters.maximum_interval" render={({ field }) => (<FormItem><FormLabel>Maximum Interval (days)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                  </CardContent>
+                </Card>
+              )}
+
+              {scheduler === 'fsrs6' && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>FSRS-6 Parameters (Experimental)</CardTitle>
+                    <CardDescription>
+                      This is an experimental scheduler. Parameters are not yet optimized.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <FormField control={form.control} name="fsrs6Parameters.request_retention" render={({ field }) => (<FormItem><FormLabel>Requested Retention</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                    <FormField control={form.control} name="fsrs6Parameters.maximum_interval" render={({ field }) => (<FormItem><FormLabel>Maximum Interval (days)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>)} />
                   </CardContent>
                 </Card>
               )}

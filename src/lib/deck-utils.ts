@@ -356,8 +356,30 @@ export const getDeckDueCounts = (
   const settings = getEffectiveSrsSettings(allDecks, deck.id, globalSettings);
 
   for (const card of deck.flashcards) {
-    const isCardNew = !card.srs?.isSuspended && (settings.scheduler === 'fsrs' ? !card.srs?.fsrs || card.srs.fsrs.state === State.New : !card.srs?.sm2 || card.srs.sm2.state === 'new');
-    const isCardDue = !card.srs?.isSuspended && (settings.scheduler === 'fsrs' ? card.srs?.fsrs && new Date(card.srs.fsrs.due) <= now : card.srs?.sm2 && new Date(card.srs.sm2.due) <= now);
+    if (card.srs?.isSuspended) continue;
+
+    let isCardNew = false;
+    let isCardDue = false;
+    let isCardLearning = false;
+    let isCardReview = false;
+
+    if (settings.scheduler === 'sm2') {
+      const sm2State = card.srs?.sm2;
+      isCardNew = !sm2State || sm2State.state === 'new' || !sm2State.state;
+      isCardDue = !!sm2State && new Date(sm2State.due) <= now;
+      if (isCardDue) {
+        isCardLearning = sm2State.state === 'learning' || sm2State.state === 'relearning';
+        isCardReview = sm2State.state === 'review';
+      }
+    } else { // FSRS or FSRS6
+      const srsData = settings.scheduler === 'fsrs6' ? card.srs?.fsrs6 : card.srs?.fsrs;
+      isCardNew = !srsData || srsData.state === State.New;
+      isCardDue = !!srsData && new Date(srsData.due) <= now;
+      if (isCardDue) {
+        isCardLearning = srsData.state === State.Learning || srsData.state === State.Relearning;
+        isCardReview = srsData.state === State.Review;
+      }
+    }
 
     if (isCardNew) {
       counts.newCount++;
@@ -365,9 +387,6 @@ export const getDeckDueCounts = (
     }
 
     if (isCardDue) {
-      const isCardLearning = (settings.scheduler === 'fsrs' ? card.srs?.fsrs?.state === State.Learning || card.srs?.fsrs?.state === State.Relearning : card.srs?.sm2?.state === 'learning' || card.srs?.sm2?.state === 'relearning');
-      const isCardReview = (settings.scheduler === 'fsrs' ? card.srs?.fsrs?.state === State.Review : card.srs?.sm2?.state === 'review');
-
       if (isCardLearning) {
         counts.learnCount++;
       } else if (isCardReview) {
@@ -396,12 +415,47 @@ export const buildSessionQueue = (
 ): FlashcardData[] => {
   const now = new Date();
 
-  const isNew = (card: FlashcardData, s: SrsSettings) => !introducedTodayIds.has(card.id) && !card.srs?.isSuspended && (s.scheduler === 'fsrs' ? !card.srs?.fsrs || card.srs.fsrs.state === State.New : !card.srs?.sm2 || card.srs.sm2.state === 'new');
-  const isDue = (card: FlashcardData, s: SrsSettings) => !card.srs?.isSuspended && (s.scheduler === 'fsrs' ? card.srs?.fsrs && new Date(card.srs.fsrs.due) <= now : card.srs?.sm2 && new Date(card.srs.sm2.due) <= now);
-  const isLearning = (card: FlashcardData, s: SrsSettings) => isDue(card, s) && (s.scheduler === 'fsrs' ? card.srs?.fsrs?.state === State.Learning || card.srs?.fsrs?.state === State.Relearning : card.srs?.sm2?.state === 'learning' || card.srs?.sm2?.state === 'relearning');
-  const isInterdayLearning = (card: FlashcardData, s: SrsSettings) => isLearning(card, s) && (s.scheduler === 'fsrs' || (s.scheduler === 'sm2' && (card.srs!.sm2!.learning_step || 0) >= parseSteps(card.srs!.sm2!.state === 'learning' ? s.learningSteps : s.relearningSteps).length || parseSteps(card.srs!.sm2!.state === 'learning' ? s.learningSteps : s.relearningSteps)[card.srs!.sm2!.learning_step || 0] >= 1440));
+  const isNew = (card: FlashcardData, s: SrsSettings) => {
+    if (introducedTodayIds.has(card.id) || card.srs?.isSuspended) return false;
+    if (s.scheduler === 'sm2') return !card.srs?.sm2 || card.srs.sm2.state === 'new' || !card.srs.sm2.state;
+    const srsData = s.scheduler === 'fsrs6' ? card.srs?.fsrs6 : card.srs?.fsrs;
+    return !srsData || srsData.state === State.New;
+  };
+
+  const isDue = (card: FlashcardData, s: SrsSettings) => {
+    if (card.srs?.isSuspended) return false;
+    if (s.scheduler === 'sm2') return !!card.srs?.sm2 && new Date(card.srs.sm2.due) <= now;
+    const srsData = s.scheduler === 'fsrs6' ? card.srs?.fsrs6 : card.srs?.fsrs;
+    return !!srsData && new Date(srsData.due) <= now;
+  };
+
+  const isLearning = (card: FlashcardData, s: SrsSettings) => {
+    if (!isDue(card, s)) return false;
+    if (s.scheduler === 'sm2') return card.srs?.sm2?.state === 'learning' || card.srs?.sm2?.state === 'relearning';
+    const srsData = s.scheduler === 'fsrs6' ? card.srs?.fsrs6 : card.srs?.fsrs;
+    return !!srsData && (srsData.state === State.Learning || srsData.state === State.Relearning);
+  };
+
+  const isInterdayLearning = (card: FlashcardData, s: SrsSettings) => {
+    if (!isLearning(card, s)) return false;
+    if (s.scheduler === 'sm2') {
+        const sm2State = card.srs!.sm2!;
+        const steps = parseSteps(sm2State.state === 'learning' ? s.learningSteps : s.relearningSteps);
+        const currentStep = sm2State.learning_step || 0;
+        if (currentStep >= steps.length) return true;
+        return steps[currentStep] >= 1440;
+    }
+    return false;
+  };
+
   const isIntradayLearning = (card: FlashcardData, s: SrsSettings) => isLearning(card, s) && !isInterdayLearning(card, s);
-  const isReview = (card: FlashcardData, s: SrsSettings) => isDue(card, s) && (s.scheduler === 'fsrs' ? card.srs?.fsrs?.state === State.Review : card.srs?.sm2?.state === 'review');
+
+  const isReview = (card: FlashcardData, s: SrsSettings) => {
+    if (!isDue(card, s)) return false;
+    if (s.scheduler === 'sm2') return card.srs?.sm2?.state === 'review';
+    const srsData = s.scheduler === 'fsrs6' ? card.srs?.fsrs6 : card.srs?.fsrs;
+    return !!srsData && srsData.state === State.Review;
+  };
 
   const sessionNew: FlashcardData[] = [];
   const sessionReviews: FlashcardData[] = [];
