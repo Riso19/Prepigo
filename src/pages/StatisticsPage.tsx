@@ -12,11 +12,13 @@ import { useQuery } from '@tanstack/react-query';
 import { getAllReviewLogsFromDB, getAllMcqReviewLogsFromDB } from '@/lib/idb';
 import { format, subDays, startOfDay, isSameDay } from 'date-fns';
 import { Loader2 } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const StatisticsPage = () => {
   const { decks } = useDecks();
   const { questionBanks } = useQuestionBanks();
   const { settings } = useSettings();
+  const isMobile = useIsMobile();
 
   // --- Data Fetching for Review Logs ---
   const { data: reviewLogs, isLoading: isLoadingLogs } = useQuery({
@@ -96,9 +98,9 @@ const StatisticsPage = () => {
     return (
       <>
         <CardTitle>{title}</CardTitle>
-        <ResponsiveContainer width="100%" height={250}>
+        <ResponsiveContainer width="100%" height={isMobile ? 200 : 250}>
           <PieChart>
-            <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+            <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={isMobile ? 60 : 80} label>
               {chartData.map((entry) => (
                 <Cell key={`cell-${entry.name}`} fill={PIE_COLORS[entry.name as ItemStatus]} />
               ))}
@@ -116,26 +118,26 @@ const StatisticsPage = () => {
       <Header />
       <main className="flex-grow container mx-auto p-4 md:p-8">
         <h1 className="text-3xl font-bold mb-6">Statistics</h1>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
           <Card>
             <CardHeader><CardTitle>Total Decks</CardTitle></CardHeader>
-            <CardContent><p className="text-4xl font-bold">{collectionStats.totalDecks}</p></CardContent>
+            <CardContent><p className="text-3xl sm:text-4xl font-bold">{collectionStats.totalDecks}</p></CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle>Total Flashcards</CardTitle></CardHeader>
-            <CardContent><p className="text-4xl font-bold">{collectionStats.totalFlashcards}</p></CardContent>
+            <CardContent><p className="text-3xl sm:text-4xl font-bold">{collectionStats.totalFlashcards}</p></CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle>Total Q-Banks</CardTitle></CardHeader>
-            <CardContent><p className="text-4xl font-bold">{collectionStats.totalQBanks}</p></CardContent>
+            <CardContent><p className="text-3xl sm:text-4xl font-bold">{collectionStats.totalQBanks}</p></CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle>Total MCQs</CardTitle></CardHeader>
-            <CardContent><p className="text-4xl font-bold">{collectionStats.totalMcqs}</p></CardContent>
+            <CardContent><p className="text-3xl sm:text-4xl font-bold">{collectionStats.totalMcqs}</p></CardContent>
           </Card>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mt-6">
           <Card className="lg:col-span-2">
             <CardHeader>
               <CardTitle>Review Activity</CardTitle>
@@ -145,10 +147,10 @@ const StatisticsPage = () => {
               {isLoadingLogs ? (
                 <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>
               ) : (
-                <ResponsiveContainer width="100%" height={300}>
+                <ResponsiveContainer width="100%" height={isMobile ? 250 : 300}>
                   <BarChart data={reviewHistoryData}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
+                    <XAxis dataKey="date" tick={{ fontSize: 12 }} />
                     <YAxis allowDecimals={false} />
                     <Tooltip />
                     <Bar dataKey="reviews" fill="hsl(var(--primary))" />
