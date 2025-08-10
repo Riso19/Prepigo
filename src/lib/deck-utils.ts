@@ -305,13 +305,13 @@ export const findDeckWithAncestors = (
   return null;
 };
 
-export const getEffectiveSrsSettings = (
+export const getEffectiveSrsSettingsWithSource = (
   decks: DeckData[],
   deckId: string,
   globalSettings: SrsSettings
-): SrsSettings => {
+): { settings: SrsSettings; sourceName: string } => {
   const result = findDeckWithAncestors(decks, deckId);
-  if (!result) return globalSettings;
+  if (!result) return { settings: globalSettings, sourceName: 'Global' };
 
   const { deck, ancestors } = result;
   const hierarchy = [...ancestors, deck];
@@ -319,11 +319,20 @@ export const getEffectiveSrsSettings = (
   for (let i = hierarchy.length - 1; i >= 0; i--) {
     const currentDeck = hierarchy[i];
     if (currentDeck.hasCustomSettings && currentDeck.srsSettings) {
-      return currentDeck.srsSettings;
+      return { settings: currentDeck.srsSettings, sourceName: currentDeck.name };
     }
   }
 
-  return globalSettings;
+  return { settings: globalSettings, sourceName: 'Global' };
+};
+
+
+export const getEffectiveSrsSettings = (
+  decks: DeckData[],
+  deckId: string,
+  globalSettings: SrsSettings
+): SrsSettings => {
+  return getEffectiveSrsSettingsWithSource(decks, deckId, globalSettings).settings;
 };
 
 const parseSteps = (steps: string): number[] => {

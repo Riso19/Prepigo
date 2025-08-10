@@ -9,28 +9,32 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { updateDeck } from '@/lib/deck-utils';
+import { updateDeck, getEffectiveSrsSettingsWithSource } from '@/lib/deck-utils';
 import { showSuccess } from '@/utils/toast';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 
 interface DeckSettingsFormProps {
   deck: DeckData;
 }
 
 export const DeckSettingsForm = ({ deck }: DeckSettingsFormProps) => {
-  const { setDecks } = useDecks();
+  const { decks, setDecks } = useDecks();
   const { settings: globalSettings } = useSettings();
+
+  const { settings: effectiveSettings, sourceName } = useMemo(() => {
+    return getEffectiveSrsSettingsWithSource(decks, deck.id, globalSettings);
+  }, [decks, deck.id, globalSettings]);
 
   const form = useForm<SrsSettings>({
     resolver: zodResolver(srsSettingsSchema),
-    values: deck.srsSettings ?? globalSettings,
+    values: effectiveSettings,
   });
 
   const scheduler = form.watch('scheduler');
 
   useEffect(() => {
-    form.reset(deck.srsSettings ?? globalSettings);
-  }, [deck, globalSettings, form]);
+    form.reset(effectiveSettings);
+  }, [effectiveSettings, form]);
 
   const onSubmit = (data: SrsSettings) => {
     const updatedDeck = {
@@ -45,9 +49,19 @@ export const DeckSettingsForm = ({ deck }: DeckSettingsFormProps) => {
     const updatedDeck = {
       ...deck,
       hasCustomSettings: enabled,
-      srsSettings: enabled ? (deck.srsSettings ?? globalSettings) : undefined,
+      srsSettings: enabled ? effectiveSettings : undefined,
     };
     setDecks(prevDecks => updateDeck(prevDecks, updatedDeck));
+  };
+
+  const getSourceDescription = () => {
+    if (deck.hasCustomSettings) {
+      return "These are custom settings for this deck.";
+    }
+    if (sourceName === 'Global') {
+      return "These are the global application settings.";
+    }
+    return `These settings are inherited from the "${sourceName}" deck.`;
   };
 
   return (
@@ -65,6 +79,7 @@ export const DeckSettingsForm = ({ deck }: DeckSettingsFormProps) => {
                 onCheckedChange={handleToggleCustomSettings}
               />
             </div>
+            <p className="text-sm text-muted-foreground pt-2 italic">{getSourceDescription()}</p>
           </CardHeader>
           {deck.hasCustomSettings && (
             <CardContent className="space-y-8 pt-6">
