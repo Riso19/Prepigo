@@ -12,6 +12,7 @@ import { McqData } from '@/data/questionBanks';
 import { Rating } from 'ts-fsrs';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { TagHeatmap } from './TagHeatmap';
+import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 
 const LEECH_THRESHOLD_FSRS = 4;
 
@@ -137,13 +138,34 @@ export const PerformanceAnalytics = () => {
       <Card>
         <CardHeader>
           <CardTitle>{title}</CardTitle>
+          <CardDescription>Key metrics for your {title.toLowerCase()} performance.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4 text-sm">
-            <div className="flex items-center gap-2"><Target className="h-4 w-4 text-green-500" /><span className="text-muted-foreground">Accuracy (Retention)</span><span className="font-bold ml-auto">{data.overallAccuracy.toFixed(1)}%</span></div>
-            <div className="flex items-center gap-2"><Repeat className="h-4 w-4 text-blue-500" /><span className="text-muted-foreground">First-Pass Accuracy</span><span className="font-bold ml-auto">{data.firstPassAccuracy.toFixed(1)}%</span></div>
-            <div className="flex items-center gap-2"><Clock className="h-4 w-4 text-purple-500" /><span className="text-muted-foreground">Avg. Recall Time</span><span className="font-bold ml-auto">{data.avgRecallTime.toFixed(2)}s</span></div>
-            <div className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-red-500" /><span className="text-muted-foreground">Leech Count</span><span className="font-bold ml-auto">{data.leechCount}</span></div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2"><Target className="h-4 w-4 text-green-500" /><span className="text-muted-foreground">Accuracy (Retention)</span><span className="font-bold ml-auto">{data.overallAccuracy.toFixed(1)}%</span></div>
+              </TooltipTrigger>
+              <TooltipContent><p>The percentage of correct reviews (Hard, Good, or Easy).</p></TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2"><Repeat className="h-4 w-4 text-blue-500" /><span className="text-muted-foreground">First-Pass Accuracy</span><span className="font-bold ml-auto">{data.firstPassAccuracy.toFixed(1)}%</span></div>
+              </TooltipTrigger>
+              <TooltipContent><p>Your accuracy on the very first time you review an item.</p></TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2"><Clock className="h-4 w-4 text-purple-500" /><span className="text-muted-foreground">Avg. Recall Time</span><span className="font-bold ml-auto">{data.avgRecallTime.toFixed(2)}s</span></div>
+              </TooltipTrigger>
+              <TooltipContent><p>The average time taken for correct reviews.</p></TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-red-500" /><span className="text-muted-foreground">Leech Count</span><span className="font-bold ml-auto">{data.leechCount}</span></div>
+              </TooltipTrigger>
+              <TooltipContent><p>The number of items you have failed multiple times.</p></TooltipContent>
+            </Tooltip>
           </div>
           
           <Accordion type="single" collapsible className="w-full pt-4 border-t">
