@@ -1,17 +1,17 @@
 import { useMemo } from 'react';
 import { useDecks } from '@/contexts/DecksContext';
 import { useQuestionBanks } from '@/contexts/QuestionBankContext';
-import { useSettings } from '@/contexts/SettingsContext';
 import { useQuery } from '@tanstack/react-query';
 import { getAllReviewLogsFromDB, getAllMcqReviewLogsFromDB, McqReviewLog } from '@/lib/idb';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Loader2, Target, Repeat, Clock, AlertTriangle, Tag, Percent, BrainCircuit } from 'lucide-react';
+import { Loader2, Target, Repeat, Clock, AlertTriangle, Tag } from 'lucide-react';
 import { getAllFlashcardsFromDeck } from '@/lib/card-utils';
 import { getAllMcqsFromBank } from '@/lib/question-bank-utils';
 import { FlashcardData, ReviewLog } from '@/data/decks';
 import { McqData } from '@/data/questionBanks';
 import { Rating } from 'ts-fsrs';
-import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { TagHeatmap } from './TagHeatmap';
 
 const LEECH_THRESHOLD_FSRS = 4;
 
@@ -75,14 +75,17 @@ const calculateAnalytics = (
     }
   });
 
-  const weakestTags = Object.entries(tagStats)
+  const allTagAnalytics = Object.entries(tagStats)
     .map(([tag, stats]) => ({
       tag,
       accuracy: stats.total > 0 ? (stats.correct / stats.total) * 100 : 0,
       reviews: stats.total,
     }))
-    .filter(t => t.reviews >= 5) // Only consider tags with at least 5 reviews
-    .sort((a, b) => a.accuracy - b.accuracy)
+    .filter(t => t.reviews >= 1)
+    .sort((a, b) => a.accuracy - b.accuracy);
+
+  const weakestTags = allTagAnalytics
+    .filter(t => t.reviews >= 5)
     .slice(0, 5);
 
   return {
@@ -91,6 +94,7 @@ const calculateAnalytics = (
     firstPassAccuracy,
     leechCount,
     weakestTags,
+    allTagAnalytics,
   };
 };
 
@@ -141,19 +145,25 @@ export const PerformanceAnalytics = () => {
             <div className="flex items-center gap-2"><Clock className="h-4 w-4 text-purple-500" /><span className="text-muted-foreground">Avg. Recall Time</span><span className="font-bold ml-auto">{data.avgRecallTime.toFixed(2)}s</span></div>
             <div className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-red-500" /><span className="text-muted-foreground">Leech Count</span><span className="font-bold ml-auto">{data.leechCount}</span></div>
           </div>
-          {data.weakestTags.length > 0 && (
-            <div className="pt-4 border-t">
-              <h4 className="font-semibold mb-2 flex items-center gap-2"><Tag className="h-4 w-4" />Weakest Tags</h4>
-              <div className="space-y-2 text-sm">
-                {data.weakestTags.map(t => (
-                  <div key={t.tag} className="flex items-center justify-between">
-                    <span className="font-medium">{t.tag}</span>
-                    <span className="text-muted-foreground">{t.accuracy.toFixed(1)}% accuracy ({t.reviews} reviews)</span>
+          
+          <Accordion type="single" collapsible className="w-full pt-4 border-t">
+            <AccordionItem value="heatmap">
+              <AccordionTrigger className="text-base font-semibold">Weakest Tags & Heatmap</AccordionTrigger>
+              <AccordionContent className="pt-2 space-y-4">
+                {data.weakestTags.length > 0 ? (
+                  <div className="space-y-2 text-sm">
+                    {data.weakestTags.map(t => (
+                      <div key={t.tag} className="flex items-center justify-between">
+                        <span className="font-medium">{t.tag}</span>
+                        <span className="text-muted-foreground">{t.accuracy.toFixed(1)}% accuracy ({t.reviews} reviews)</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
+                ) : <p className="text-sm text-muted-foreground">No tags with enough reviews to identify weak spots yet.</p>}
+                <TagHeatmap tags={data.allTagAnalytics} />
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </CardContent>
       </Card>
     );
