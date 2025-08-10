@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Settings } from "lucide-react";
+import { PlusCircle, Settings, Loader2 } from "lucide-react";
 import { useQuestionBanks } from "@/contexts/QuestionBankContext";
 import QuestionBankItem from "@/components/QuestionBankItem";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -10,6 +10,8 @@ import { moveQuestionBank, buildMcqSessionQueue } from "@/lib/question-bank-util
 import { Link } from "react-router-dom";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useExams } from "@/contexts/ExamsContext";
+import { useQuery } from "@tanstack/react-query";
+import { getAllMcqReviewLogsFromDB } from "@/lib/idb";
 
 const RootDroppable = () => {
   const { setNodeRef, isOver } = useDroppable({
@@ -34,6 +36,11 @@ const QuestionBankManager = () => {
   const { exams } = useExams();
   const [isAddBankOpen, setIsAddBankOpen] = useState(false);
   const [dueMcqCount, setDueMcqCount] = useState(0);
+
+  const { data: logs, isLoading } = useQuery({
+    queryKey: ['mcqReviewLogs'],
+    queryFn: getAllMcqReviewLogsFromDB,
+  });
 
   useEffect(() => {
     if (questionBanks.length > 0) {
@@ -87,10 +94,12 @@ const QuestionBankManager = () => {
           </div>
         </CardHeader>
         <CardContent>
-          {questionBanks.length > 0 ? (
+          {isLoading ? (
+            <div className="flex justify-center items-center py-12"><Loader2 className="h-8 w-8 animate-spin" /></div>
+          ) : questionBanks.length > 0 ? (
             <div className="space-y-2">
               {questionBanks.map((bank) => (
-                <QuestionBankItem key={bank.id} bank={bank} />
+                <QuestionBankItem key={bank.id} bank={bank} allLogs={logs || []} />
               ))}
             </div>
           ) : (

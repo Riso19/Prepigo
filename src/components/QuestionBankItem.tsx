@@ -7,7 +7,7 @@ import { ChevronRight, Folder, MoreVertical, Plus, Settings, GripVertical, Trash
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AddSubQuestionBankDialog } from "./AddSubQuestionBankDialog";
-import { deleteQuestionBank, getMcqDueCounts } from "@/lib/question-bank-utils";
+import { deleteQuestionBank, getMcqDueCounts, getAllMcqsFromBank } from "@/lib/question-bank-utils";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useQuestionBanks } from "@/contexts/QuestionBankContext";
 import { showSuccess } from "@/utils/toast";
@@ -22,8 +22,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useSettings } from "@/contexts/SettingsContext";
+import { McqReviewLog } from "@/lib/idb";
+import { calculateAccuracy } from "@/lib/analytics-utils";
 
-const QuestionBankItem = ({ bank }: { bank: QuestionBankData }) => {
+const QuestionBankItem = ({ bank, allLogs }: { bank: QuestionBankData; allLogs: McqReviewLog[] }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isAddSubBankOpen, setIsAddSubBankOpen] = useState(false);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
@@ -42,6 +44,19 @@ const QuestionBankItem = ({ bank }: { bank: QuestionBankData }) => {
   const dueCounts = useMemo(() => {
     return getMcqDueCounts(bank, questionBanks, settings);
   }, [bank, questionBanks, settings]);
+
+  const accuracy = useMemo(() => {
+    const allMcqIds = new Set(getAllMcqsFromBank(bank).map(m => m.id));
+    if (allMcqIds.size === 0) return null;
+    return calculateAccuracy(allMcqIds, allLogs);
+  }, [bank, allLogs]);
+
+  const getStrengthColor = (acc: number | null) => {
+    if (acc === null) return "text-primary";
+    if (acc < 60) return "text-red-500";
+    if (acc < 85) return "text-yellow-500";
+    return "text-green-500";
+  };
 
   const totalDue = dueCounts.newCount + dueCounts.learnCount + dueCounts.dueCount;
 
@@ -68,7 +83,7 @@ const QuestionBankItem = ({ bank }: { bank: QuestionBankData }) => {
             <CollapsibleTrigger asChild>
               <button className="flex items-center gap-3 flex-grow text-left p-1 rounded-md">
                 <ChevronRight className={cn("h-5 w-5 transition-transform duration-200", isOpen && "rotate-90", !hasSubBanks && "invisible")} />
-                <Folder className="h-5 w-5 text-primary" />
+                <Folder className={cn("h-5 w-5", getStrengthColor(accuracy))} />
                 <span className="font-semibold">{bank.name}</span>
               </button>
             </CollapsibleTrigger>
@@ -133,7 +148,7 @@ const QuestionBankItem = ({ bank }: { bank: QuestionBankData }) => {
           {hasSubBanks && (
             <div className="space-y-2 pt-2">
               {bank.subBanks!.map((subBank) => (
-                <QuestionBankItem key={subBank.id} bank={subBank} />
+                <QuestionBankItem key={subBank.id} bank={subBank} allLogs={allLogs} />
               ))}
             </div>
           )}

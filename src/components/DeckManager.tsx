@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { PlusCircle } from "lucide-react";
+import { PlusCircle, Loader2 } from "lucide-react";
 import { useDecks } from "@/contexts/DecksContext";
 import DeckItem from "@/components/DeckItem";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -10,6 +10,8 @@ import { moveDeck, buildSessionQueue } from "@/lib/deck-utils";
 import { Link, useNavigate } from "react-router-dom";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useExams } from "@/contexts/ExamsContext";
+import { useQuery } from "@tanstack/react-query";
+import { getAllReviewLogsFromDB } from "@/lib/idb";
 
 const RootDroppable = () => {
   const { setNodeRef, isOver } = useDroppable({
@@ -35,6 +37,11 @@ const DeckManager = () => {
   const [isAddDeckOpen, setIsAddDeckOpen] = useState(false);
   const [dueCount, setDueCount] = useState(0);
   const navigate = useNavigate();
+
+  const { data: logs, isLoading } = useQuery({
+    queryKey: ['cardReviewLogs'],
+    queryFn: getAllReviewLogsFromDB,
+  });
 
   useEffect(() => {
     if (decks.length > 0) {
@@ -80,10 +87,12 @@ const DeckManager = () => {
           </div>
         </CardHeader>
         <CardContent>
-          {decks.length > 0 ? (
+          {isLoading ? (
+            <div className="flex justify-center items-center py-12"><Loader2 className="h-8 w-8 animate-spin" /></div>
+          ) : decks.length > 0 ? (
             <div className="space-y-2">
               {decks.map((deck) => (
-                <DeckItem key={deck.id} deck={deck} />
+                <DeckItem key={deck.id} deck={deck} allLogs={logs || []} />
               ))}
             </div>
           ) : (

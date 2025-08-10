@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { DeckData } from "@/data/decks";
+import { DeckData, ReviewLog } from "@/data/decks";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "./ui/button";
 import { ChevronRight, Folder, MoreVertical, Plus, BookOpen, Settings, GripVertical, Trash2 } from "lucide-react";
@@ -22,8 +22,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { calculateAccuracy } from "@/lib/analytics-utils";
+import { getAllFlashcardsFromDeck } from "@/lib/card-utils";
 
-const DeckItem = ({ deck }: { deck: DeckData }) => {
+const DeckItem = ({ deck, allLogs }: { deck: DeckData; allLogs: ReviewLog[] }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isAddSubDeckOpen, setIsAddSubDeckOpen] = useState(false);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
@@ -42,6 +44,19 @@ const DeckItem = ({ deck }: { deck: DeckData }) => {
   const dueCounts = useMemo(() => {
     return getDeckDueCounts(deck, decks, settings);
   }, [deck, decks, settings]);
+
+  const accuracy = useMemo(() => {
+    const allFlashcardIds = new Set(getAllFlashcardsFromDeck(deck).map(c => c.id));
+    if (allFlashcardIds.size === 0) return null;
+    return calculateAccuracy(allFlashcardIds, allLogs);
+  }, [deck, allLogs]);
+
+  const getStrengthColor = (acc: number | null) => {
+    if (acc === null) return "text-primary";
+    if (acc < 60) return "text-red-500";
+    if (acc < 85) return "text-yellow-500";
+    return "text-green-500";
+  };
 
   const totalDue = dueCounts.newCount + dueCounts.learnCount + dueCounts.dueCount;
 
@@ -68,7 +83,7 @@ const DeckItem = ({ deck }: { deck: DeckData }) => {
             <CollapsibleTrigger asChild>
               <button className="flex items-center gap-3 flex-grow text-left p-1 rounded-md">
                 <ChevronRight className={cn("h-5 w-5 transition-transform duration-200", isOpen && "rotate-90", !hasSubDecks && "invisible")} />
-                <Folder className="h-5 w-5 text-primary" />
+                <Folder className={cn("h-5 w-5", getStrengthColor(accuracy))} />
                 <span className="font-semibold">{deck.name}</span>
               </button>
             </CollapsibleTrigger>
@@ -127,7 +142,7 @@ const DeckItem = ({ deck }: { deck: DeckData }) => {
           {hasSubDecks && (
             <div className="space-y-2 pt-2">
               {deck.subDecks!.map((subDeck) => (
-                <DeckItem key={subDeck.id} deck={subDeck} />
+                <DeckItem key={subDeck.id} deck={subDeck} allLogs={allLogs} />
               ))}
             </div>
           )}
