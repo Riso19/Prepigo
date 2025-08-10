@@ -187,6 +187,21 @@ const DeckViewPage = () => {
         <Button variant="ghost" onClick={() => navigate('/')} className="mb-4">
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Decks
         </Button>
+
+        <Accordion type="single" collapsible className="w-full mb-6">
+          <AccordionItem value="deck-settings">
+            <AccordionTrigger>
+              <div className="flex items-center gap-2 text-lg font-semibold">
+                <Settings className="h-5 w-5" />
+                Deck Specific Settings
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="pt-4">
+              <DeckSettingsForm deck={deck} />
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+
         <Card>
           <CardHeader>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -216,20 +231,6 @@ const DeckViewPage = () => {
             )}
           </CardContent>
         </Card>
-
-        <Accordion type="single" collapsible className="w-full mt-6">
-          <AccordionItem value="deck-settings">
-            <AccordionTrigger>
-              <div className="flex items-center gap-2 text-lg font-semibold">
-                <Settings className="h-5 w-5" />
-                Deck Specific Settings
-              </div>
-            </AccordionTrigger>
-            <AccordionContent className="pt-4">
-              <DeckSettingsForm deck={deck} />
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
       </div>
 
       <AlertDialog open={!!cardToDelete} onOpenChange={() => setCardToDelete(null)}>
