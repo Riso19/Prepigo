@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useDecks } from '@/contexts/DecksContext';
 import { findDeckById, getAllFlashcardsFromDeck, deleteFlashcard, findDeckPathById, getEffectiveSrsSettings } from '@/lib/deck-utils';
@@ -27,7 +27,6 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { DeckSettingsForm } from '@/components/DeckSettingsForm';
 import { useSettings } from '@/contexts/SettingsContext';
 import { FlashcardStatus } from '@/components/FlashcardStatus';
-import { useVirtualizer } from '@tanstack/react-virtual';
 
 const DeckViewPage = () => {
   const { deckId } = useParams<{ deckId: string }>();
@@ -36,7 +35,6 @@ const DeckViewPage = () => {
   const [cardToDelete, setCardToDelete] = useState<FlashcardData | null>(null);
   const isMobile = useIsMobile();
   const { settings: globalSettings } = useSettings();
-  const parentRef = useRef<HTMLDivElement>(null);
 
   const deck = useMemo(() => (deckId ? findDeckById(decks, deckId) : null), [decks, deckId]);
   const deckPath = useMemo(() => (deckId ? findDeckPathById(decks, deckId)?.join(' / ') : null), [decks, deckId]);
@@ -69,17 +67,10 @@ const DeckViewPage = () => {
   }
 
   const renderDesktopView = () => {
-    const rowVirtualizer = useVirtualizer({
-      count: flashcards.length,
-      getScrollElement: () => parentRef.current,
-      estimateSize: () => 88,
-      overscan: 5,
-    });
-
     return (
-      <div ref={parentRef} className="h-[70vh] overflow-auto rounded-md border">
+      <div className="rounded-md border">
         <Table>
-          <TableHeader className="sticky top-0 bg-background z-10">
+          <TableHeader>
             <TableRow>
               <TableHead className="w-[100px]">Type</TableHead>
               <TableHead>Front / Question</TableHead>
@@ -89,72 +80,58 @@ const DeckViewPage = () => {
               <TableHead className="text-right w-[100px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}>
-            {rowVirtualizer.getVirtualItems().map(virtualRow => {
-              const card = flashcards[virtualRow.index];
-              return (
-                <TableRow
-                  key={virtualRow.key}
-                  data-index={virtualRow.index}
-                  ref={rowVirtualizer.measureElement}
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    transform: `translateY(${virtualRow.start}px)`,
-                  }}
-                >
-                  <TableCell className="capitalize font-medium">{card.type === 'imageOcclusion' ? 'Image' : card.type}</TableCell>
-                  <TableCell>
-                    {card.type === 'imageOcclusion' ? (
-                      <MediaAwareImage src={card.imageUrl} alt="Occlusion preview" className="h-16 w-auto rounded-md object-contain bg-muted" />
-                    ) : (
-                      <HtmlRenderer html={card.type === 'basic' ? card.question : card.text} className="prose dark:prose-invert max-w-none" />
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {card.type === 'basic' ? (
-                      <HtmlRenderer html={card.answer} className="prose dark:prose-invert max-w-none" />
-                    ) : (
-                      <HtmlRenderer html={card.description || ''} className="prose dark:prose-invert max-w-none" />
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1 max-w-[200px]">
-                      {card.tags?.map(tag => <Badge key={tag} variant="outline" className="font-normal">{tag}</Badge>)}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <FlashcardStatus card={card} scheduler={effectiveSettings.scheduler} />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" asChild>
-                            <Link to={`/deck/${deck.id}/edit/${card.id}`}>
-                              <Pencil className="h-4 w-4" />
-                              <span className="sr-only">Edit</span>
-                            </Link>
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Edit</TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" onClick={() => setCardToDelete(card)} className="text-destructive hover:text-destructive focus:text-destructive focus:bg-destructive/10">
-                            <Trash2 className="h-4 w-4" />
-                            <span className="sr-only">Delete</span>
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Delete</TooltipContent>
-                      </Tooltip>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
+          <TableBody>
+            {flashcards.map(card => (
+              <TableRow key={card.id}>
+                <TableCell className="capitalize font-medium">{card.type === 'imageOcclusion' ? 'Image' : card.type}</TableCell>
+                <TableCell>
+                  {card.type === 'imageOcclusion' ? (
+                    <MediaAwareImage src={card.imageUrl} alt="Occlusion preview" className="h-16 w-auto rounded-md object-contain bg-muted" />
+                  ) : (
+                    <HtmlRenderer html={card.type === 'basic' ? card.question : card.text} className="prose dark:prose-invert max-w-none" />
+                  )}
+                </TableCell>
+                <TableCell>
+                  {card.type === 'basic' ? (
+                    <HtmlRenderer html={card.answer} className="prose dark:prose-invert max-w-none" />
+                  ) : (
+                    <HtmlRenderer html={card.description || ''} className="prose dark:prose-invert max-w-none" />
+                  )}
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap gap-1 max-w-[200px]">
+                    {card.tags?.map(tag => <Badge key={tag} variant="outline" className="font-normal">{tag}</Badge>)}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <FlashcardStatus card={card} scheduler={effectiveSettings.scheduler} />
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex items-center justify-end gap-2">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" asChild>
+                          <Link to={`/deck/${deck.id}/edit/${card.id}`}>
+                            <Pencil className="h-4 w-4" />
+                            <span className="sr-only">Edit</span>
+                          </Link>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Edit</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" onClick={() => setCardToDelete(card)} className="text-destructive hover:text-destructive focus:text-destructive focus:bg-destructive/10">
+                          <Trash2 className="h-4 w-4" />
+                          <span className="sr-only">Delete</span>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Delete</TooltipContent>
+                    </Tooltip>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
           </TableBody>
         </Table>
       </div>
@@ -162,93 +139,68 @@ const DeckViewPage = () => {
   };
 
   const renderMobileView = () => {
-    const rowVirtualizer = useVirtualizer({
-      count: flashcards.length,
-      getScrollElement: () => parentRef.current,
-      estimateSize: () => 420,
-      overscan: 5,
-    });
-
     return (
-      <div ref={parentRef} className="h-[70vh] overflow-auto">
-        <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
-          {rowVirtualizer.getVirtualItems().map(virtualRow => {
-            const card = flashcards[virtualRow.index];
-            return (
-              <div
-                key={virtualRow.key}
-                ref={rowVirtualizer.measureElement}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  transform: `translateY(${virtualRow.start}px)`,
-                  padding: '0.5rem 0.1rem',
-                }}
-              >
-                <Card>
-                  <CardContent className="p-4 space-y-4">
-                    <div className="flex justify-between items-start gap-4">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Type</p>
-                        <p className="font-semibold capitalize">{card.type === 'imageOcclusion' ? 'Image' : card.type}</p>
-                      </div>
-                      <div className="flex items-center justify-end gap-2 flex-shrink-0">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" asChild>
-                              <Link to={`/deck/${deck.id}/edit/${card.id}`}>
-                                <Pencil className="h-4 w-4" />
-                                <span className="sr-only">Edit</span>
-                              </Link>
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Edit</TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={() => setCardToDelete(card)} className="text-destructive hover:text-destructive focus:text-destructive focus:bg-destructive/10">
-                              <Trash2 className="h-4 w-4" />
-                              <span className="sr-only">Delete</span>
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Delete</TooltipContent>
-                        </Tooltip>
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-muted-foreground">Front / Question</p>
-                      {card.type === 'imageOcclusion' ? (
-                        <MediaAwareImage src={card.imageUrl} alt="Occlusion preview" className="w-full h-auto rounded-md object-contain bg-muted" />
-                      ) : (
-                        <HtmlRenderer html={card.type === 'basic' ? card.question : card.text} className="prose dark:prose-invert max-w-none" />
-                      )}
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-muted-foreground">Back / Answer</p>
-                      {card.type === 'basic' ? (
-                        <HtmlRenderer html={card.answer} className="prose dark:prose-invert max-w-none" />
-                      ) : (
-                        <HtmlRenderer html={card.description || ''} className="prose dark:prose-invert max-w-none" />
-                      )}
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-muted-foreground">Tags</p>
-                      <div className="flex flex-wrap gap-1">
-                        {card.tags?.map(tag => <Badge key={tag} variant="outline" className="font-normal">{tag}</Badge>)}
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-muted-foreground">Status</p>
-                      <FlashcardStatus card={card} scheduler={effectiveSettings.scheduler} />
-                    </div>
-                  </CardContent>
-                </Card>
+      <div className="space-y-4">
+        {flashcards.map(card => (
+          <Card key={card.id}>
+            <CardContent className="p-4 space-y-4">
+              <div className="flex justify-between items-start gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Type</p>
+                  <p className="font-semibold capitalize">{card.type === 'imageOcclusion' ? 'Image' : card.type}</p>
+                </div>
+                <div className="flex items-center justify-end gap-2 flex-shrink-0">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="ghost" size="icon" asChild>
+                        <Link to={`/deck/${deck.id}/edit/${card.id}`}>
+                          <Pencil className="h-4 w-4" />
+                          <span className="sr-only">Edit</span>
+                        </Link>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Edit</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="ghost" size="icon" onClick={() => setCardToDelete(card)} className="text-destructive hover:text-destructive focus:text-destructive focus:bg-destructive/10">
+                        <Trash2 className="h-4 w-4" />
+                        <span className="sr-only">Delete</span>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Delete</TooltipContent>
+                  </Tooltip>
+                </div>
               </div>
-            );
-          })}
-        </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">Front / Question</p>
+                {card.type === 'imageOcclusion' ? (
+                  <MediaAwareImage src={card.imageUrl} alt="Occlusion preview" className="w-full h-auto rounded-md object-contain bg-muted" />
+                ) : (
+                  <HtmlRenderer html={card.type === 'basic' ? card.question : card.text} className="prose dark:prose-invert max-w-none" />
+                )}
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">Back / Answer</p>
+                {card.type === 'basic' ? (
+                  <HtmlRenderer html={card.answer} className="prose dark:prose-invert max-w-none" />
+                ) : (
+                  <HtmlRenderer html={card.description || ''} className="prose dark:prose-invert max-w-none" />
+                )}
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">Tags</p>
+                <div className="flex flex-wrap gap-1">
+                  {card.tags?.map(tag => <Badge key={tag} variant="outline" className="font-normal">{tag}</Badge>)}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">Status</p>
+                <FlashcardStatus card={card} scheduler={effectiveSettings.scheduler} />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
     );
   };
