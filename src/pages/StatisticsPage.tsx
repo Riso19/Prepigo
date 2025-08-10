@@ -14,9 +14,11 @@ import { format, subDays, startOfDay, isSameDay, differenceInDays } from 'date-f
 import { Loader2, TrendingUp, CalendarDays, Flame, CheckCircle, BookOpen, Loader, Clock, Zap } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { State } from 'ts-fsrs';
-import { FlashcardData, ReviewLog } from '@/data/decks';
-import { McqData } from '@/data/questionBanks';
+import { DeckData, FlashcardData, ReviewLog } from '@/data/decks';
+import { McqData, QuestionBankData } from '@/data/questionBanks';
 import { PerformanceAnalytics } from '@/components/PerformanceAnalytics';
+import { PerformanceGraph } from '@/components/PerformanceGraph';
+import { calculateAccuracy } from '@/lib/analytics-utils';
 
 const StatisticsPage = () => {
   const { decks } = useDecks();
@@ -157,6 +159,51 @@ const StatisticsPage = () => {
       };
     });
   }, [logs]);
+
+  const performanceGraphData = useMemo(() => {
+    if (!logs) return { deckPerformance: [], qBankPerformance: [] };
+
+    const getDeckPerformance = (deckList: DeckData[], path: string[] = []): { name: string; accuracy: number }[] => {
+        return deckList.flatMap(deck => {
+            const currentPath = [...path, deck.name];
+            const deckFlashcardIds = new Set(deck.flashcards.map(c => c.id));
+            let currentDeckPerformance: { name: string; accuracy: number }[] = [];
+            
+            if (deckFlashcardIds.size > 0) {
+                const accuracy = calculateAccuracy(deckFlashcardIds, logs.cardLogs);
+                if (accuracy !== null) {
+                    currentDeckPerformance.push({ name: currentPath.join(' / '), accuracy });
+                }
+            }
+
+            const subDeckPerformance = deck.subDecks ? getDeckPerformance(deck.subDecks, currentPath) : [];
+            return [...currentDeckPerformance, ...subDeckPerformance];
+        });
+    };
+
+    const getQBankPerformance = (bankList: QuestionBankData[], path: string[] = []): { name: string; accuracy: number }[] => {
+        return bankList.flatMap(bank => {
+            const currentPath = [...path, bank.name];
+            const bankMcqIds = new Set(bank.mcqs.map(m => m.id));
+            let currentBankPerformance: { name: string; accuracy: number }[] = [];
+
+            if (bankMcqIds.size > 0) {
+                const accuracy = calculateAccuracy(bankMcqIds, logs.mcqLogs);
+                if (accuracy !== null) {
+                    currentBankPerformance.push({ name: currentPath.join(' / '), accuracy });
+                }
+            }
+
+            const subBankPerformance = bank.subBanks ? getQBankPerformance(bank.subBanks, currentPath) : [];
+            return [...currentBankPerformance, ...subBankPerformance];
+        });
+    };
+
+    return {
+        deckPerformance: getDeckPerformance(decks),
+        qBankPerformance: getQBankPerformance(questionBanks),
+    };
+  }, [logs, decks, questionBanks]);
 
   const calculateDifficulty = (items: (FlashcardData | McqData)[], scheduler: 'fsrs' | 'fsrs6') => {
     const reviewedItems = items.filter(item => {
@@ -325,6 +372,27 @@ const StatisticsPage = () => {
 
         <h2 className="text-xl sm:text-2xl font-bold mt-8 mb-4">Performance Analytics</h2>
         <PerformanceAnalytics />
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Deck Performance</CardTitle>
+              <CardDescription>Accuracy per deck and sub-deck.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <PerformanceGraph data={performanceGraphData.deckPerformance} />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Question Bank Performance</CardTitle>
+              <CardDescription>Accuracy per question bank and sub-bank.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <PerformanceGraph data={performanceGraphData.qBankPerformance} />
+            </CardContent>
+          </Card>
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mt-6">
           <Card className="lg:col-span-2">
