@@ -235,3 +235,37 @@ export const buildMcqSessionQueue = (
 
   return [...learningCombined, ...shuffle([...sortedReviews, ...sortedNew])];
 };
+
+// Immutably merge new question banks into existing ones
+export const mergeQuestionBanks = (existingBanks: QuestionBankData[], newBanks: QuestionBankData[]): QuestionBankData[] => {
+  const bankMap = new Map<string, QuestionBankData>();
+
+  // Add all existing banks to the map
+  for (const bank of existingBanks) {
+    bankMap.set(bank.name, { ...bank });
+  }
+
+  // Merge new banks
+  for (const newBank of newBanks) {
+    const existingBank = bankMap.get(newBank.name);
+    if (existingBank) {
+      // Merge MCQs
+      const existingMcqIds = new Set(existingBank.mcqs.map(mcq => mcq.id));
+      const mcqsToMerge = newBank.mcqs.filter(mcq => !existingMcqIds.has(mcq.id));
+      
+      // Merge sub-banks recursively
+      const mergedSubBanks = mergeQuestionBanks(existingBank.subBanks || [], newBank.subBanks || []);
+
+      bankMap.set(newBank.name, {
+        ...existingBank,
+        mcqs: [...existingBank.mcqs, ...mcqsToMerge],
+        subBanks: mergedSubBanks,
+      });
+    } else {
+      // Add new bank
+      bankMap.set(newBank.name, newBank);
+    }
+  }
+
+  return Array.from(bankMap.values());
+};

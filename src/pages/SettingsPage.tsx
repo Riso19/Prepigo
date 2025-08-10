@@ -14,7 +14,7 @@ import { Separator } from '@/components/ui/separator';
 import { useRef, useState } from 'react';
 import { useDecks } from '@/contexts/DecksContext';
 import { DeckData, decksSchema, FlashcardData } from '@/data/decks';
-import { clearDecksDB, getReviewLogsForCard, saveMediaToDB, clearMediaDB } from '@/lib/idb';
+import { clearDecksDB, getReviewLogsForCard, saveMediaToDB, clearMediaDB, clearQuestionBanksDB, clearMcqReviewLogsDB } from '@/lib/idb';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,16 +34,29 @@ import { importAnkiFile } from '@/lib/anki-importer';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { importAnkiTxtFile } from '@/lib/anki-txt-importer';
+import { useQuestionBanks } from '@/contexts/QuestionBankContext';
+import { questionBanksSchema } from '@/data/questionBanks';
+import { mergeQuestionBanks } from '@/lib/question-bank-utils';
 
 const SettingsPage = () => {
   const { settings, setSettings, isLoading } = useSettings();
   const { decks, setDecks } = useDecks();
+  const { questionBanks, setQuestionBanks } = useQuestionBanks();
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mcqFileInputRef = useRef<HTMLInputElement>(null);
+
   const [isResetAlertOpen, setIsResetAlertOpen] = useState(false);
+  
   const [isImportAlertOpen, setIsImportAlertOpen] = useState(false);
   const [fileToImport, setFileToImport] = useState<File | null>(null);
   const [includeScheduling, setIncludeScheduling] = useState(true);
   const [replaceOnImport, setReplaceOnImport] = useState(false);
+  
+  const [isMcqImportAlertOpen, setIsMcqImportAlertOpen] = useState(false);
+  const [fileToImportMcq, setFileToImportMcq] = useState<File | null>(null);
+  const [replaceOnMcqImport, setReplaceOnMcqImport] = useState(false);
+
   const [rescheduleOnSave, setRescheduleOnSave] = useState(false);
 
   const form = useForm<SrsSettings>({
@@ -225,13 +238,84 @@ const SettingsPage = () => {
     }
   };
 
+  const handleExportMcqs = () => {
+    const dataStr = JSON.stringify(questionBanks, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `prepigo_mcq_backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showSuccess("MCQ data exported successfully!");
+  };
+
+  const handleMcqFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.json')) {
+      showError("Unsupported file type. Please select a .json file for MCQs.");
+      if (mcqFileInputRef.current) mcqFileInputRef.current.value = "";
+      return;
+    }
+
+    setFileToImportMcq(file);
+    setIsMcqImportAlertOpen(true);
+  };
+
+  const confirmMcqImport = async () => {
+    if (!fileToImportMcq) return;
+    setIsMcqImportAlertOpen(false);
+
+    const toastId = toast.loading("Importing MCQs...");
+    try {
+        const content = await fileToImportMcq.text();
+        let parsedData;
+        try {
+            parsedData = JSON.parse(content);
+        } catch (jsonError) {
+            throw new Error(`Invalid JSON format. Parser error: ${(jsonError as Error).message}`);
+        }
+        
+        const validation = questionBanksSchema.safeParse(parsedData);
+        if (!validation.success) {
+            const errorDetails = validation.error.flatten().formErrors.join(', ');
+            console.error("MCQ JSON validation failed:", validation.error.flatten());
+            throw new Error(`Backup file has incorrect data structure. Details: ${errorDetails}`);
+        }
+        
+        const importedBanks = validation.data;
+
+        if (replaceOnMcqImport) {
+            setQuestionBanks(importedBanks);
+        } else {
+            setQuestionBanks(prevBanks => mergeQuestionBanks(prevBanks, importedBanks));
+        }
+        
+        toast.success("MCQ data imported successfully!", { id: toastId });
+    } catch (error) {
+        const err = error as Error;
+        console.error("MCQ Import Error:", err);
+        toast.error(`MCQ import failed: ${err.message}`, { id: toastId, duration: 15000 });
+    } finally {
+        setFileToImportMcq(null);
+        if (mcqFileInputRef.current) mcqFileInputRef.current.value = "";
+        setReplaceOnMcqImport(false);
+    }
+  };
+
   const handleReset = async () => {
     setIsResetAlertOpen(false);
     const toastId = toast.loading("Resetting all data...");
     try {
         await clearDecksDB();
+        await clearQuestionBanksDB();
         await clearSettingsDB();
         await clearMediaDB();
+        await clearMcqReviewLogsDB();
         toast.success("All data has been reset. The app will now reload.", { id: toastId });
         setTimeout(() => {
             window.location.reload();
@@ -687,13 +771,29 @@ const SettingsPage = () => {
 
                 <div className="space-y-4">
                   <h3 className="text-lg font-semibold">Data Management</h3>
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                    <Button onClick={handleExport} variant="outline" type="button">Export Data</Button>
-                    <Button asChild variant="outline" type="button"><Label htmlFor="import-file" className="cursor-pointer">Import Data</Label></Button>
-                    <Input id="import-file" type="file" className="hidden" onChange={handleFileSelect} accept=".json,.apkg,.anki2,.anki21,.txt" ref={fileInputRef} />
-                    <Button variant="destructive" onClick={() => setIsResetAlertOpen(true)} className="sm:ml-auto" type="button">Reset All Data</Button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div className="space-y-2 p-4 border rounded-lg">
+                        <h4 className="font-medium">Flashcards</h4>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                            <Button onClick={handleExport} variant="outline" type="button" className="flex-1">Export Decks</Button>
+                            <Button asChild variant="outline" type="button" className="flex-1"><Label htmlFor="import-file" className="cursor-pointer w-full text-center">Import Decks</Label></Button>
+                            <Input id="import-file" type="file" className="hidden" onChange={handleFileSelect} accept=".json,.apkg,.anki2,.anki21,.txt" ref={fileInputRef} />
+                        </div>
+                    </div>
+                    <div className="space-y-2 p-4 border rounded-lg">
+                        <h4 className="font-medium">MCQs</h4>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                            <Button onClick={handleExportMcqs} variant="outline" type="button" className="flex-1">Export MCQs</Button>
+                            <Button asChild variant="outline" type="button" className="flex-1"><Label htmlFor="import-mcq-file" className="cursor-pointer w-full text-center">Import MCQs</Label></Button>
+                            <Input id="import-mcq-file" type="file" className="hidden" onChange={handleMcqFileSelect} accept=".json" ref={mcqFileInputRef} />
+                        </div>
+                    </div>
                   </div>
-                  <p className="text-sm text-muted-foreground">Export your decks, or import from a backup. Resetting restores the app to its initial state.</p>
+                  <div className="p-4 border rounded-lg mt-6">
+                    <h4 className="font-medium">Application Data</h4>
+                    <p className="text-sm text-muted-foreground mb-4">This will permanently delete all decks, MCQs, and settings.</p>
+                    <Button variant="destructive" onClick={() => setIsResetAlertOpen(true)} type="button" className="w-full sm:w-auto">Reset All Data</Button>
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-start pt-4">
@@ -741,6 +841,33 @@ const SettingsPage = () => {
             <AlertDialogCancel onClick={() => setFileToImport(null)}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={confirmImport}>Import</AlertDialogAction>
           </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={isMcqImportAlertOpen} onOpenChange={setIsMcqImportAlertOpen}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>Import MCQ Data</AlertDialogTitle>
+                <AlertDialogDescription>
+                    You can merge the imported question banks with your existing ones, or replace everything. Merging will add new banks and MCQs, but will not overwrite existing ones with the same name or ID.
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="space-y-4 pt-2">
+                <div className="flex items-center space-x-2">
+                    <Checkbox
+                        id="replace-on-mcq-import"
+                        checked={replaceOnMcqImport}
+                        onCheckedChange={(checked) => setReplaceOnMcqImport(!!checked)}
+                    />
+                    <Label htmlFor="replace-on-mcq-import" className="cursor-pointer font-semibold text-destructive">
+                        Replace all existing MCQ data with this import
+                    </Label>
+                </div>
+            </div>
+            <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setFileToImportMcq(null)}>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={confirmMcqImport}>Import</AlertDialogAction>
+            </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
