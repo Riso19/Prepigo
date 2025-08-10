@@ -7,14 +7,16 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { HtmlRenderer } from './HtmlRenderer';
 import { CheckCircle2, Pencil, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { McqStatus } from './McqStatus';
 
 interface McqListItemProps {
   mcq: McqData;
   bankId: string;
   onDelete: (mcq: McqData) => void;
+  scheduler: 'fsrs' | 'fsrs6';
 }
 
-export const McqListItem = ({ mcq, bankId, onDelete }: McqListItemProps) => {
+export const McqListItem = ({ mcq, bankId, onDelete, scheduler }: McqListItemProps) => {
   return (
     <Card className="w-full overflow-hidden">
       <CardContent className="p-4 md:p-6">
@@ -48,6 +50,11 @@ export const McqListItem = ({ mcq, bankId, onDelete }: McqListItemProps) => {
                 </div>
               </div>
             )}
+
+            <div>
+              <h4 className="text-sm font-semibold text-muted-foreground mb-2">Status</h4>
+              <McqStatus mcq={mcq} scheduler={scheduler} />
+            </div>
 
             <div className="flex items-center justify-end gap-2 pt-2">
               <Tooltip>

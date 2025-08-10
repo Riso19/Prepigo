@@ -18,12 +18,14 @@ import { ArrowLeft, Home, PlusCircle } from 'lucide-react';
 import { McqData } from '@/data/questionBanks';
 import { showSuccess } from '@/utils/toast';
 import { McqListItem } from '@/components/McqListItem';
+import { useSettings } from '@/contexts/SettingsContext';
 
 const QuestionBankViewPage = () => {
   const { bankId } = useParams<{ bankId: string }>();
   const { questionBanks, setQuestionBanks } = useQuestionBanks();
   const navigate = useNavigate();
   const [mcqToDelete, setMcqToDelete] = useState<McqData | null>(null);
+  const { settings } = useSettings();
 
   const bank = useMemo(() => (bankId ? findQuestionBankById(questionBanks, bankId) : null), [questionBanks, bankId]);
   const bankPath = useMemo(() => (bankId ? findQuestionBankPathById(questionBanks, bankId)?.join(' / ') : null), [questionBanks, bankId]);
@@ -82,6 +84,7 @@ const QuestionBankViewPage = () => {
                     mcq={mcq} 
                     bankId={bank.id} 
                     onDelete={setMcqToDelete} 
+                    scheduler={settings.scheduler === 'sm2' ? 'fsrs' : settings.scheduler}
                   />
                 ))}
               </div>
