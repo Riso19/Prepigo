@@ -8,8 +8,6 @@ import { AddQuestionBankDialog } from "./AddQuestionBankDialog";
 import { DndContext, DragEndEvent, useDroppable } from "@dnd-kit/core";
 import { moveQuestionBank, buildMcqSessionQueue } from "@/lib/question-bank-utils";
 import { Link } from "react-router-dom";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { McqSettingsForm } from "./McqSettingsForm";
 import { useSettings } from "@/contexts/SettingsContext";
 
 const RootDroppable = () => {
@@ -34,7 +32,6 @@ const QuestionBankManager = () => {
   const { setQuestionBanks } = useQuestionBanks();
   const { settings } = useSettings();
   const [isAddBankOpen, setIsAddBankOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [dueMcqCount, setDueMcqCount] = useState(0);
 
   useEffect(() => {
@@ -79,20 +76,12 @@ const QuestionBankManager = () => {
               <Button onClick={() => setIsAddBankOpen(true)}>
                 <PlusCircle className="mr-2 h-4 w-4" /> Add New Bank
               </Button>
-              <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="ghost" size="icon">
-                    <Settings className="h-5 w-5" />
-                    <span className="sr-only">MCQ Settings</span>
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-[600px]">
-                  <DialogHeader>
-                    <DialogTitle>MCQ Spaced Repetition Settings</DialogTitle>
-                  </DialogHeader>
-                  <McqSettingsForm setDialogOpen={setIsSettingsOpen} />
-                </DialogContent>
-              </Dialog>
+              <Button variant="ghost" size="icon" asChild>
+                <Link to="/settings/mcq">
+                  <Settings className="h-5 w-5" />
+                  <span className="sr-only">MCQ Settings</span>
+                </Link>
+              </Button>
             </div>
           </div>
         </CardHeader>

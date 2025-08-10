@@ -19,6 +19,7 @@ import QuestionBankViewPage from "./pages/QuestionBankViewPage";
 import EditMcqPage from "./pages/EditMcqPage";
 import PracticeMcqPage from "./pages/PracticeMcqPage";
 import ReviewMcqPage from "./pages/ReviewMcqPage";
+import McqSettingsPage from "./pages/McqSettingsPage";
 
 const queryClient = new QueryClient();
 
@@ -44,6 +45,7 @@ const App = () => (
                 <Route path="/deck/:deckId/view" element={<DeckViewPage />} />
                 <Route path="/deck/:deckId/edit/:flashcardId" element={<EditFlashcardPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/settings/mcq" element={<McqSettingsPage />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
