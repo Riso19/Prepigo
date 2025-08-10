@@ -31,9 +31,9 @@ const ClozePlayer = ({ text, description, isFlipped, onClick }: ClozePlayerProps
   };
 
   return (
-    <div className="w-full h-[25rem] cursor-pointer" onClick={onClick}>
+    <div className="w-full min-h-[20rem] cursor-pointer" onClick={onClick}>
       <Card className="w-full h-full flex flex-col">
-        <CardContent className="p-6 text-center w-full flex-grow flex flex-col items-center justify-center overflow-y-auto">
+        <CardContent className="p-6 text-center w-full flex-grow flex flex-col items-center justify-center">
           <div className="text-2xl font-semibold w-full">
             {renderClozeText(isFlipped)}
           </div>

@@ -414,17 +414,24 @@ const StudyPage = () => {
   };
 
   return (
-    <div className="min-h-screen w-full bg-secondary/50 flex flex-col items-center justify-center p-4 sm:p-6 md:p-8">
-       <Button variant="ghost" onClick={() => navigate("/")} className="absolute top-4 left-4">
+    <div className="h-screen w-full bg-secondary/50 flex flex-col p-4 sm:p-6 md:p-8">
+      <Button variant="ghost" onClick={() => navigate("/")} className="absolute top-4 left-4 z-10">
         <ArrowLeft className="mr-2 h-4 w-4" /> Back to Decks
       </Button>
-      <div className="w-full max-w-2xl mx-auto flex flex-col items-center gap-6">
-        <h1 className="text-3xl font-bold text-center">Studying: {deck.name}</h1>
+      
+      <header className="w-full max-w-2xl mx-auto text-center flex-shrink-0 mb-4">
+        <h1 className="text-3xl font-bold">Studying: {deck.name}</h1>
+      </header>
+
+      <main className="w-full max-w-2xl mx-auto flex-grow flex flex-col items-center justify-center overflow-y-auto py-6 gap-6">
         {renderCard()}
-        <div className="text-sm text-muted-foreground">
+        <div className="text-sm text-muted-foreground flex-shrink-0">
           {sessionQueue.length > 0 && `Card ${currentCardIndex + 1} of ${sessionQueue.length}`}
         </div>
-        <div className="w-full mt-4">
+      </main>
+
+      <footer className="w-full max-w-2xl mx-auto flex-shrink-0 pt-4">
+        <div className="w-full">
           {isFlipped ? (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full">
               <Button onClick={() => handleRating(Rating.Again)} className="relative bg-red-500 hover:bg-red-600 text-white font-bold h-16 text-base flex flex-col"><span>Again</span><span className="text-xs font-normal opacity-80">{getIntervalText(Rating.Again)}</span><span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">1</span></Button>
@@ -436,7 +443,7 @@ const StudyPage = () => {
             <Button onClick={() => setIsFlipped(true)} className="w-full h-16 text-lg relative">Show Answer<span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">Space</span></Button>
           )}
         </div>
-      </div>
+      </footer>
     </div>
   );
 };
