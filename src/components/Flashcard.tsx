@@ -14,15 +14,15 @@ const Flashcard = ({ question, answer, isFlipped, onClick }: FlashcardProps) => 
   const resolvedAnswer = useResolvedHtml(answer);
 
   return (
-    <div className="w-full min-h-[20rem] [perspective:1000px] cursor-pointer" onClick={onClick}>
+    <div className="w-full min-h-[20rem] [perspective:1000px] cursor-pointer grid" onClick={onClick}>
       <div
         className={cn(
-          "relative w-full h-full transition-transform duration-700 [transform-style:preserve-3d]",
+          "transition-transform duration-700 [transform-style:preserve-3d] grid [grid-area:1/1]",
           isFlipped && "[transform:rotateY(180deg)]"
         )}
       >
         {/* Front of the card */}
-        <div className="absolute w-full h-full [backface-visibility:hidden]">
+        <div className="[backface-visibility:hidden] [grid-area:1/1]">
           <Card className="w-full h-full flex flex-col">
             <CardContent className="p-6 text-center flex-grow flex flex-col items-center justify-center">
               <p className="text-lg font-semibold text-muted-foreground">Question:</p>
@@ -31,7 +31,7 @@ const Flashcard = ({ question, answer, isFlipped, onClick }: FlashcardProps) => 
           </Card>
         </div>
         {/* Back of the card */}
-        <div className="absolute w-full h-full [backface-visibility:hidden] [transform:rotateY(180deg)]">
+        <div className="[backface-visibility:hidden] [transform:rotateY(180deg)] [grid-area:1/1]">
           <Card className="w-full h-full flex flex-col bg-secondary">
             <CardContent className="p-6 text-center flex-grow flex flex-col items-center justify-center">
               <p className="text-lg font-semibold text-muted-foreground">Answer:</p>

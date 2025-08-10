@@ -40,7 +40,7 @@ const ImageOcclusionPlayer = ({ imageUrl, occlusions, questionOcclusionId, descr
 
   return (
     <div className="w-full min-h-[20rem] max-w-2xl cursor-pointer" onClick={onClick}>
-      <Card className="w-full h-full flex flex-col">
+      <Card className="w-full flex flex-col">
         <CardContent className="p-0">
           <div className="relative flex items-center justify-center">
             {resolvedImageUrl && <img ref={imgRef} src={resolvedImageUrl} alt="Study card" className="w-full h-auto block object-contain" />}
