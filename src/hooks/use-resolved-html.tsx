@@ -1,79 +1,102 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { getMediaFromDB } from '@/lib/idb';
 
 const resolvedUrlCache = new Map<string, string>();
+const proxyUrl = 'https://images.weserv.nl/?url=';
 
 export const unresolveMediaHtml = (html: string): string => {
     let unprocessedHtml = html;
+
+    // Un-resolve media:// URLs from blob URLs
     for (const [fileName, objectUrl] of resolvedUrlCache.entries()) {
-        // We need to handle both the URL being in quotes and potentially being encoded
         const urlToReplace = new URL(objectUrl).toString();
-        // Using split and join for compatibility with older TS lib versions
         unprocessedHtml = unprocessedHtml.split(urlToReplace).join(`media://${fileName}`);
     }
+
+    // Un-proxy http/s URLs
+    const proxyRegex = new RegExp(`src="${proxyUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^"]+)"`, 'g');
+    unprocessedHtml = unprocessedHtml.replace(proxyRegex, (_match, encodedUrl) => {
+        try {
+            const originalUrl = decodeURIComponent(encodedUrl);
+            return `src="${originalUrl}"`;
+        } catch (e) {
+            return _match;
+        }
+    });
+
     return unprocessedHtml;
 };
 
 export const useResolvedHtml = (html: string | undefined) => {
   const [resolvedHtml, setResolvedHtml] = useState(html || '');
 
-  const mediaFileNames = useMemo(() => {
-    if (!html) return [];
-    const mediaUrlRegex = /src="media:\/\/([^"]+)"/g;
-    return [...html.matchAll(mediaUrlRegex)].map(match => match[1]);
-  }, [html]);
-
   useEffect(() => {
     if (!html) {
       setResolvedHtml('');
       return;
     }
-    if (mediaFileNames.length === 0) {
-      setResolvedHtml(html);
-      return;
-    }
 
     let isMounted = true;
 
-    const resolveUrls = async () => {
+    const resolveHtmlContent = async () => {
       let tempHtml = html;
-      const urlsToResolve = mediaFileNames.filter(name => !resolvedUrlCache.has(name));
-      
-      if (urlsToResolve.length > 0) {
-        const resolutions = await Promise.all(urlsToResolve.map(async (fileName) => {
-          const blob = await getMediaFromDB(fileName);
-          if (blob) {
-            const objectUrl = URL.createObjectURL(blob);
-            return { fileName, url: objectUrl };
-          }
-          return { fileName, url: null };
-        }));
+
+      // 1. Proxy HTTP/HTTPS images
+      const httpRegex = /src="(https?:\/\/[^"]+)"/g;
+      tempHtml = tempHtml.replace(httpRegex, (_match, url) => {
+        return `src="${proxyUrl}${encodeURIComponent(url)}"`;
+      });
+
+      // 2. Resolve media:// images
+      const mediaRegex = /src="(media:\/\/([^"]+))"/g;
+      const mediaMatches = [...tempHtml.matchAll(mediaRegex)];
+      const mediaFileNamesToResolve = mediaMatches
+        .map(match => match[2])
+        .filter(name => !resolvedUrlCache.has(name));
+
+      if (mediaFileNamesToResolve.length > 0) {
+        const resolutions = await Promise.all(
+          [...new Set(mediaFileNamesToResolve)].map(async (fileName) => {
+            try {
+              const blob = await getMediaFromDB(fileName);
+              if (blob) {
+                const objectUrl = URL.createObjectURL(blob);
+                return { fileName, url: objectUrl };
+              }
+            } catch (error) {
+              console.error(`Failed to load media ${fileName}`, error);
+            }
+            return { fileName, url: null };
+          })
+        );
 
         if (!isMounted) {
           resolutions.forEach(res => res.url && URL.revokeObjectURL(res.url));
           return;
         }
-        
+
         resolutions.forEach(({ fileName, url }) => {
           if (url) resolvedUrlCache.set(fileName, url);
         });
       }
 
-      for (const [fileName, url] of resolvedUrlCache.entries()) {
-        tempHtml = tempHtml.replace(new RegExp(`src="media://${fileName}"`, 'g'), `src="${url}"`);
-      }
-      
+      // Replace all media URLs with cached versions
+      tempHtml = tempHtml.replace(mediaRegex, (_match, _fullSrc, fileName) => {
+        const resolvedUrl = resolvedUrlCache.get(fileName);
+        return resolvedUrl ? `src="${resolvedUrl}"` : 'src=""';
+      });
+
       if (isMounted) {
         setResolvedHtml(tempHtml);
       }
     };
 
-    resolveUrls();
+    resolveHtmlContent();
 
     return () => {
       isMounted = false;
     };
-  }, [html, mediaFileNames]);
+  }, [html]);
 
   return resolvedHtml;
 };
