@@ -109,7 +109,7 @@ export const ExamItem = ({ exam }: ExamItemProps) => {
             </div>
             <Progress value={progress.percentage} className="mt-2" />
             <p className="text-xs text-center text-muted-foreground mt-1">
-              Readiness is based on mastered items (due after exam) and partial credit for items in progress.
+              Readiness is a weighted score based on item status (New, Learning, Young, Mature, Mastered).
             </p>
           </div>
           <div className="pt-4 border-t">

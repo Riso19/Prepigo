@@ -5,6 +5,7 @@ import { State } from "ts-fsrs";
 import { SrsSettings } from "@/contexts/SettingsContext";
 import { McqData, QuestionBankData } from "@/data/questionBanks";
 import { getAllMcqsFromBank } from "./question-bank-utils";
+import { getItemStatus, ItemStatus } from "./srs-utils";
 
 export const getCardsForExam = (exam: ExamData, allDecks: DeckData[], settings: SrsSettings): FlashcardData[] => {
   const allDecksFlat = (d: DeckData[]): DeckData[] => d.flatMap(deck => [deck, ...(deck.subDecks ? allDecksFlat(deck.subDecks) : [])]);
@@ -128,41 +129,46 @@ export const calculateExamProgress = (
   }
 
   const examDate = new Date(exam.date);
+  let weightedScore = 0;
   let masteredCount = 0;
   let inProgressCount = 0;
   let newItemsCount = 0;
 
+  const statusWeights: Record<string, number> = {
+    "Mastered": 1.0,
+    "Mature": 0.8,
+    "Young": 0.6,
+    "Learning": 0.3,
+    "Relearning": 0.3,
+    "New": 0.0,
+    "Suspended": 0.0,
+  };
+
   for (const item of itemsInScope) {
     const scheduler = settings.scheduler;
-    let isNew = true;
+    const status = getItemStatus(item, scheduler);
+    
     let dueDate: Date | null = null;
-
-    if (scheduler === 'sm2') {
-      const sm2State = item.srs?.sm2;
-      if (sm2State && sm2State.state !== 'new' && sm2State.state) {
-        isNew = false;
-        dueDate = new Date(sm2State.due);
-      }
-    } else { // fsrs or fsrs6
-      const srsData = scheduler === 'fsrs6' ? item.srs?.fsrs6 : item.srs?.fsrs;
-      if (srsData && srsData.state !== State.New) {
-        isNew = false;
-        dueDate = new Date(srsData.due);
-      }
+    if (scheduler === 'sm2' && 'question' in item) {
+        dueDate = item.srs?.sm2 ? new Date(item.srs.sm2.due) : null;
+    } else {
+        const srsData = scheduler === 'fsrs6' ? item.srs?.fsrs6 : item.srs?.fsrs;
+        dueDate = srsData ? new Date(srsData.due) : null;
     }
 
-    if (isNew) {
-      newItemsCount++;
+    if (status === 'New' || status === 'Suspended') {
+        newItemsCount++;
+        weightedScore += statusWeights.New;
     } else if (dueDate && dueDate > examDate) {
-      masteredCount++;
+        masteredCount++;
+        weightedScore += statusWeights.Mastered;
     } else {
-      inProgressCount++;
+        inProgressCount++;
+        weightedScore += statusWeights[status];
     }
   }
   
-  // Give half credit for items in progress
-  const weightedProgress = masteredCount + inProgressCount * 0.5;
-  const percentage = total > 0 ? Math.round((weightedProgress / total) * 100) : 100;
+  const percentage = total > 0 ? Math.round((weightedScore / total) * 100) : 100;
 
   return {
     mastered: masteredCount,
