@@ -15,6 +15,8 @@ import SettingsPage from "./pages/SettingsPage";
 import { QuestionBankProvider } from "./contexts/QuestionBankContext";
 import QuestionBankPage from "./pages/QuestionBankPage";
 import CreateMcqPage from "./pages/CreateMcqPage";
+import QuestionBankViewPage from "./pages/QuestionBankViewPage";
+import EditMcqPage from "./pages/EditMcqPage";
 
 const queryClient = new QueryClient();
 
@@ -31,6 +33,8 @@ const App = () => (
                 <Route path="/" element={<Index />} />
                 <Route path="/question-bank" element={<QuestionBankPage />} />
                 <Route path="/question-bank/:bankId/add" element={<CreateMcqPage />} />
+                <Route path="/question-bank/:bankId/view" element={<QuestionBankViewPage />} />
+                <Route path="/question-bank/:bankId/edit/:mcqId" element={<EditMcqPage />} />
                 <Route path="/study/:deckId" element={<StudyPage />} />
                 <Route path="/deck/:deckId/add" element={<CreateFlashcardPage />} />
                 <Route path="/deck/:deckId/view" element={<DeckViewPage />} />

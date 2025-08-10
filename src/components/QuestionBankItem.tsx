@@ -78,9 +78,11 @@ const QuestionBankItem = ({ bank }: { bank: QuestionBankData }) => {
                   <HelpCircle className="mr-2 h-4 w-4" />
                   Practice MCQs
                 </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Settings className="mr-2 h-4 w-4" />
-                  Manage MCQs
+                <DropdownMenuItem asChild>
+                  <Link to={`/question-bank/${bank.id}/view`}>
+                    <Settings className="mr-2 h-4 w-4" />
+                    Manage MCQs
+                  </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link to={`/question-bank/${bank.id}/add`}>
