@@ -38,6 +38,7 @@ import { importAnkiTxtFile } from '@/lib/anki-txt-importer';
 import { useQuestionBanks } from '@/contexts/QuestionBankContext';
 import { QuestionBankData, questionBanksSchema } from '@/data/questionBanks';
 import { mergeQuestionBanks } from '@/lib/question-bank-utils';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 const SettingsPage = () => {
   const { settings, setSettings, isLoading } = useSettings();
@@ -864,6 +865,13 @@ const SettingsPage = () => {
                     <CardDescription>Customize the look and feel of the app.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
+                    <div className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                      <div className="space-y-0.5">
+                        <Label>Theme</Label>
+                        <p className="text-sm text-muted-foreground">Select the application theme.</p>
+                      </div>
+                      <ThemeToggle />
+                    </div>
                     <FormField control={form.control} name="disableFlipAnimation" render={({ field }) => (
                         <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
                           <div className="space-y-0.5">

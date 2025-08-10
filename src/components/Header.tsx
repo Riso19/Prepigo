@@ -2,6 +2,7 @@ import { Stethoscope, Settings, BookCopy, HelpCircle, CalendarCheck2, BarChart3 
 import { NavLink } from "react-router-dom";
 import { Button } from "./ui/button";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "./ThemeToggle";
 
 const Header = () => {
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -33,12 +34,15 @@ const Header = () => {
             </NavLink>
           </nav>
         </div>
-        <Button variant="ghost" size="icon" asChild>
-          <NavLink to="/settings">
-            <Settings className="h-5 w-5 text-muted-foreground hover:text-primary" />
-            <span className="sr-only">Settings</span>
-          </NavLink>
-        </Button>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <Button variant="ghost" size="icon" asChild>
+            <NavLink to="/settings">
+              <Settings className="h-5 w-5 text-muted-foreground hover:text-primary" />
+              <span className="sr-only">Settings</span>
+            </NavLink>
+          </Button>
+        </div>
       </div>
     </header>
   );
