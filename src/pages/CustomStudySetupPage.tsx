@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useDecks } from '@/contexts/DecksContext';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -18,6 +18,7 @@ import { FlashcardData, DeckData } from '@/data/decks';
 import { Rating, State } from 'ts-fsrs';
 import Header from '@/components/Header';
 import { toast } from 'sonner';
+import { Loader2 } from 'lucide-react';
 
 const customStudySchema = z.object({
   cardLimit: z.coerce.number().int().min(1, "Must be at least 1 card."),
@@ -36,6 +37,8 @@ const CustomStudySetupPage = () => {
   const { decks } = useDecks();
   const allTags = useMemo(() => getAllTags(decks), [decks]);
   const navigate = useNavigate();
+  const [availableCardCount, setAvailableCardCount] = useState<number | null>(null);
+  const [isCalculating, setIsCalculating] = useState(false);
 
   const form = useForm<CustomStudyFormValues>({
     resolver: zodResolver(customStudySchema),
@@ -51,38 +54,102 @@ const CustomStudySetupPage = () => {
     },
   });
 
-  const filterType = form.watch('filterType');
+  const watchedValues = form.watch();
+
+  useEffect(() => {
+    const calculateCount = async () => {
+      setIsCalculating(true);
+      const { selectedDeckIds, filterType, failedDays, tags, tagFilterType } = watchedValues;
+
+      if (!selectedDeckIds || selectedDeckIds.size === 0) {
+        setAvailableCardCount(0);
+        setIsCalculating(false);
+        return;
+      }
+
+      const getAllDecksFlat = (d: DeckData[]): DeckData[] => {
+        return d.flatMap(deck => [deck, ...(deck.subDecks ? getAllDecksFlat(deck.subDecks) : [])]);
+      };
+      const allDecks = getAllDecksFlat(decks);
+
+      const cardSet = new Set<FlashcardData>();
+      selectedDeckIds.forEach(id => {
+        const deck = allDecks.find(d => d.id === id);
+        if (deck) {
+          deck.flashcards.forEach(card => cardSet.add(card));
+        }
+      });
+      let cardsToFilter = Array.from(cardSet);
+
+      if (tags.length > 0) {
+        cardsToFilter = cardsToFilter.filter(card => {
+          if (!card.tags || card.tags.length === 0) return false;
+          if (tagFilterType === 'any') {
+            return tags.some(tag => card.tags!.includes(tag));
+          } else {
+            return tags.every(tag => card.tags!.includes(tag));
+          }
+        });
+      }
+
+      const now = new Date();
+      switch (filterType) {
+        case 'new':
+          cardsToFilter = cardsToFilter.filter(c => !c.srs?.fsrs || c.srs.fsrs.state === State.New);
+          break;
+        case 'due':
+          cardsToFilter = cardsToFilter.filter(c => c.srs?.fsrs && new Date(c.srs.fsrs.due) <= now);
+          break;
+        case 'failed':
+          const days = failedDays || 7;
+          const cutoffDate = new Date();
+          cutoffDate.setDate(now.getDate() - days);
+          const allLogs = await getAllReviewLogsFromDB();
+          const recentFailedCardIds = new Set<string>();
+          allLogs.forEach(log => {
+            if (new Date(log.review) >= cutoffDate && (log.rating === Rating.Again || log.rating === Rating.Hard)) {
+              recentFailedCardIds.add(log.cardId);
+            }
+          });
+          cardsToFilter = cardsToFilter.filter(c => recentFailedCardIds.has(c.id));
+          break;
+      }
+
+      setAvailableCardCount(cardsToFilter.length);
+      setIsCalculating(false);
+    };
+
+    const handler = setTimeout(() => {
+      calculateCount();
+    }, 300);
+
+    return () => clearTimeout(handler);
+  }, [watchedValues, decks]);
 
   const onSubmit = async (values: CustomStudyFormValues) => {
+    if (availableCardCount === 0) {
+        toast.error("No cards found matching your criteria.");
+        return;
+    }
+    
     const loadingToast = toast.loading("Building custom study session...");
     
-    let filteredCards: FlashcardData[] = [];
-    const selectedDecks = decks.filter(d => values.selectedDeckIds.has(d.id));
-    selectedDecks.forEach(deck => {
-        filteredCards.push(...getAllFlashcardsFromDeck(deck));
+    // The calculation logic is the same as in the useEffect, so we can reuse it.
+    // This is slightly inefficient but ensures consistency. A refactor could memoize the result.
+    const getAllDecksFlat = (d: DeckData[]): DeckData[] => d.flatMap(deck => [deck, ...(deck.subDecks ? getAllDecksFlat(deck.subDecks) : [])]);
+    const allDecks = getAllDecksFlat(decks);
+    const cardSet = new Set<FlashcardData>();
+    values.selectedDeckIds.forEach(id => {
+        const deck = allDecks.find(d => d.id === id);
+        if (deck) deck.flashcards.forEach(card => cardSet.add(card));
     });
-    
-    const subDecksToSearch = decks.flatMap(d => d.subDecks || []);
-    const findAndAdd = (currentDecks: DeckData[]) => {
-        currentDecks.forEach(deck => {
-            if(values.selectedDeckIds.has(deck.id) && !selectedDecks.find(d => d.id === deck.id)) {
-                filteredCards.push(...getAllFlashcardsFromDeck(deck));
-            }
-            if (deck.subDecks) findAndAdd(deck.subDecks);
-        })
-    }
-    findAndAdd(subDecksToSearch);
-
-    filteredCards = [...new Set(filteredCards)];
+    let filteredCards = Array.from(cardSet);
 
     if (values.tags.length > 0) {
         filteredCards = filteredCards.filter(card => {
             if (!card.tags || card.tags.length === 0) return false;
-            if (values.tagFilterType === 'any') {
-                return values.tags.some(tag => card.tags!.includes(tag));
-            } else {
-                return values.tags.every(tag => card.tags!.includes(tag));
-            }
+            if (values.tagFilterType === 'any') return values.tags.some(tag => card.tags!.includes(tag));
+            else return values.tags.every(tag => card.tags!.includes(tag));
         });
     }
 
@@ -98,23 +165,10 @@ const CustomStudySetupPage = () => {
             const failedDays = values.failedDays || 7;
             const cutoffDate = new Date();
             cutoffDate.setDate(now.getDate() - failedDays);
-            
             const allLogs = await getAllReviewLogsFromDB();
-            const recentFailedCardIds = new Set<string>();
-            
-            allLogs.forEach(log => {
-                if (new Date(log.review) >= cutoffDate && (log.rating === Rating.Again || log.rating === Rating.Hard)) {
-                    recentFailedCardIds.add(log.cardId);
-                }
-            });
-            
+            const recentFailedCardIds = new Set<string>(allLogs.filter(log => new Date(log.review) >= cutoffDate && (log.rating === Rating.Again || log.rating === Rating.Hard)).map(log => log.cardId));
             filteredCards = filteredCards.filter(c => recentFailedCardIds.has(c.id));
             break;
-    }
-
-    if (filteredCards.length === 0) {
-        toast.error("No cards found matching your criteria.", { id: loadingToast });
-        return;
     }
 
     switch (values.order) {
@@ -130,15 +184,10 @@ const CustomStudySetupPage = () => {
     }
 
     const finalQueue = filteredCards.slice(0, values.cardLimit);
-
     toast.success(`Starting session with ${finalQueue.length} cards.`, { id: loadingToast });
 
     navigate('/study/custom', {
-        state: {
-            queue: finalQueue,
-            srsEnabled: values.srsEnabled,
-            title: 'Custom Study Session'
-        }
+        state: { queue: finalQueue, srsEnabled: values.srsEnabled, title: 'Custom Study Session' }
     });
   };
 
@@ -189,7 +238,7 @@ const CustomStudySetupPage = () => {
                             <FormMessage />
                         </FormItem>
                     )} />
-                    {filterType === 'failed' && (
+                    {watchedValues.filterType === 'failed' && (
                         <FormField control={form.control} name="failedDays" render={({ field }) => (
                             <FormItem>
                                 <FormLabel>Number of days</FormLabel>
@@ -241,7 +290,16 @@ const CustomStudySetupPage = () => {
                     )} />
                     <FormField control={form.control} name="cardLimit" render={({ field }) => (
                         <FormItem>
-                            <FormLabel>Number of cards</FormLabel>
+                            <FormLabel className="flex items-center gap-2">
+                                <span>Number of cards</span>
+                                <span className="text-muted-foreground font-normal">
+                                    {isCalculating ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                        `(${availableCardCount ?? 0} available)`
+                                    )}
+                                </span>
+                            </FormLabel>
                             <FormControl><Input type="number" {...field} /></FormControl>
                             <FormMessage />
                         </FormItem>
