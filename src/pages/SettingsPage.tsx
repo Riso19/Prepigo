@@ -14,7 +14,7 @@ import { Separator } from '@/components/ui/separator';
 import { useRef, useState } from 'react';
 import { useDecks } from '@/contexts/DecksContext';
 import { DeckData, decksSchema, FlashcardData } from '@/data/decks';
-import { clearDecksDB, getReviewLogsForCard, saveMediaToDB, clearMediaDB, clearQuestionBanksDB, clearMcqReviewLogsDB, getMediaFromDB, saveSingleMediaToDB } from '@/lib/idb';
+import { clearDecksDB, getReviewLogsForCard, saveMediaToDB, clearMediaDB, clearQuestionBanksDB, clearMcqReviewLogsDB, getMediaFromDB, saveSingleMediaToDB, getReviewLogsForMcq } from '@/lib/idb';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,6 +30,7 @@ import { Switch } from '@/components/ui/switch';
 import { updateFlashcard, mergeDecks } from '@/lib/deck-utils';
 import { getAllFlashcardsFromDeck } from '@/lib/card-utils';
 import { fsrs, createEmptyCard, generatorParameters, Card as FsrsCard, Rating } from 'ts-fsrs';
+import { fsrs6, Card as Fsrs6Card, generatorParameters as fsrs6GeneratorParameters } from '@/lib/fsrs6';
 import { toast } from 'sonner';
 import { importAnkiFile } from '@/lib/anki-importer';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -37,8 +38,20 @@ import { Progress } from '@/components/ui/progress';
 import { importAnkiTxtFile } from '@/lib/anki-txt-importer';
 import { useQuestionBanks } from '@/contexts/QuestionBankContext';
 import { QuestionBankData, questionBanksSchema } from '@/data/questionBanks';
-import { mergeQuestionBanks } from '@/lib/question-bank-utils';
+import { mergeQuestionBanks, updateMcq } from '@/lib/question-bank-utils';
+import { getAllMcqsFromBank } from '@/lib/question-bank-utils';
 import { ThemeToggle } from '@/components/ThemeToggle';
+
+const parseSteps = (steps: string): number[] => {
+  return steps.trim().split(/\s+/).filter(s => s).map(stepStr => {
+    const value = parseFloat(stepStr);
+    if (isNaN(value)) return 1;
+    if (stepStr.endsWith('d')) return value * 24 * 60;
+    if (stepStr.endsWith('h')) return value * 60;
+    if (stepStr.endsWith('s')) return Math.max(1, value / 60);
+    return value;
+  });
+};
 
 const SettingsPage = () => {
   const { settings, setSettings, isLoading } = useSettings();
@@ -121,6 +134,10 @@ const SettingsPage = () => {
   };
 
   const onSubmit = async (data: SrsSettings) => {
+    const oldScheduler = settings.scheduler;
+    const newScheduler = data.scheduler;
+    const schedulerChanged = oldScheduler !== newScheduler;
+
     if (data.newCardInsertionOrder !== settings.newCardInsertionOrder) {
         const loadingToast = toast.loading("Updating new card order...");
         const updateOrderRecursive = (decksToUpdate: DeckData[]): DeckData[] => {
@@ -146,40 +163,83 @@ const SettingsPage = () => {
     setSettings(data);
     showSuccess("Settings saved successfully!");
 
-    if (rescheduleOnSave && data.scheduler === 'fsrs') {
-      const toastId = toast.loading("Starting reschedule...");
+    if (rescheduleOnSave || schedulerChanged) {
+      const toastId = toast.loading(schedulerChanged ? "Scheduler changed, starting full reschedule..." : "Starting reschedule...");
       try {
         await new Promise(resolve => setTimeout(resolve, 50));
 
-        const allFlashcards: FlashcardData[] = decks.flatMap(deck => getAllFlashcardsFromDeck(deck));
-        const totalCards = allFlashcards.length;
-        const fsrsInstance = fsrs(generatorParameters(data.fsrsParameters));
-        let currentDecks = decks;
-        let processedCount = 0;
+        // Reschedule Flashcards
+        if (newScheduler === 'fsrs' || newScheduler === 'fsrs6') {
+          const allFlashcards: FlashcardData[] = decks.flatMap(deck => getAllFlashcardsFromDeck(deck));
+          const totalCards = allFlashcards.length;
+          const fsrsInstance = newScheduler === 'fsrs6' 
+            ? fsrs6(fsrs6GeneratorParameters(data.fsrs6Parameters), { learning: parseSteps(data.learningSteps), relearning: parseSteps(data.relearningSteps) })
+            : fsrs(generatorParameters(data.fsrsParameters));
+          
+          let currentDecks = decks;
+          let processedCount = 0;
 
-        for (const card of allFlashcards) {
-          processedCount++;
-          const reviewLogs = await getReviewLogsForCard(card.id);
-          if (reviewLogs.length > 0) {
-            reviewLogs.sort((a, b) => new Date(a.review).getTime() - new Date(b.review).getTime());
-            let fsrsCard: FsrsCard = createEmptyCard(new Date(reviewLogs[0].review));
-            for (const log of reviewLogs) {
-              const rating = log.rating as Rating;
-              const schedulingResult = fsrsInstance.repeat(fsrsCard, new Date(log.review));
-              fsrsCard = schedulingResult[rating].card;
+          for (const card of allFlashcards) {
+            processedCount++;
+            const reviewLogs = await getReviewLogsForCard(card.id);
+            if (reviewLogs.length > 0) {
+              reviewLogs.sort((a, b) => new Date(a.review).getTime() - new Date(b.review).getTime());
+              let fsrsCard: FsrsCard | Fsrs6Card = createEmptyCard(new Date(reviewLogs[0].review));
+              for (const log of reviewLogs) {
+                const rating = log.rating as Rating;
+                const schedulingResult = fsrsInstance.repeat(fsrsCard, new Date(log.review));
+                fsrsCard = schedulingResult[rating].card;
+              }
+              const updatedSrsData = { ...fsrsCard, due: fsrsCard.due.toISOString(), last_review: fsrsCard.last_review?.toISOString() };
+              const updatedCard: FlashcardData = {
+                ...card,
+                srs: { ...card.srs, ...(newScheduler === 'fsrs6' ? { fsrs6: updatedSrsData } : { fsrs: updatedSrsData }) }
+              };
+              currentDecks = updateFlashcard(currentDecks, updatedCard);
             }
-            const updatedCard: FlashcardData = {
-              ...card,
-              srs: { ...card.srs, fsrs: { ...fsrsCard, due: fsrsCard.due.toISOString(), last_review: fsrsCard.last_review?.toISOString() } }
-            };
-            currentDecks = updateFlashcard(currentDecks, updatedCard);
+            if (processedCount % 10 === 0 || processedCount === totalCards) {
+              toast.loading(`Rescheduling flashcards... (${processedCount}/${totalCards})`, { id: toastId });
+            }
           }
-          if (processedCount % 10 === 0 || processedCount === totalCards) {
-            toast.loading(`Rescheduling cards... (${processedCount}/${totalCards})`, { id: toastId });
-          }
+          setDecks(currentDecks);
         }
-        setDecks(currentDecks);
-        toast.success(`Rescheduling complete! ${totalCards} cards processed.`, { id: toastId });
+
+        // Reschedule MCQs
+        const mcqScheduler = newScheduler === 'sm2' ? 'fsrs' : newScheduler;
+        const allMcqs = questionBanks.flatMap(getAllMcqsFromBank);
+        const totalMcqs = allMcqs.length;
+        const mcqFsrsInstance = mcqScheduler === 'fsrs6'
+            ? fsrs6(fsrs6GeneratorParameters(data.mcqFsrs6Parameters), { learning: parseSteps(data.learningSteps), relearning: parseSteps(data.relearningSteps) })
+            : fsrs(data.mcqFsrsParameters);
+        
+        let currentQuestionBanks = questionBanks;
+        let processedMcqs = 0;
+
+        for (const mcq of allMcqs) {
+            processedMcqs++;
+            const reviewLogs = await getReviewLogsForMcq(mcq.id);
+            if (reviewLogs.length > 0) {
+                reviewLogs.sort((a, b) => new Date(a.review).getTime() - new Date(b.review).getTime());
+                let fsrsCard: FsrsCard | Fsrs6Card = createEmptyCard(new Date(reviewLogs[0].review));
+                for (const log of reviewLogs) {
+                    const rating = log.rating as Rating;
+                    const schedulingResult = mcqFsrsInstance.repeat(fsrsCard, new Date(log.review));
+                    fsrsCard = schedulingResult[rating].card;
+                }
+                const updatedSrsData = { ...fsrsCard, due: fsrsCard.due.toISOString(), last_review: fsrsCard.last_review?.toISOString() };
+                const updatedMcq = {
+                    ...mcq,
+                    srs: { ...mcq.srs, ...(mcqScheduler === 'fsrs6' ? { fsrs6: updatedSrsData } : { fsrs: updatedSrsData }) }
+                };
+                currentQuestionBanks = updateMcq(currentQuestionBanks, updatedMcq);
+            }
+            if (processedMcqs % 10 === 0 || processedMcqs === totalMcqs) {
+                toast.loading(`Rescheduling MCQs... (${processedMcqs}/${totalMcqs})`, { id: toastId });
+            }
+        }
+        setQuestionBanks(currentQuestionBanks);
+
+        toast.success(`Rescheduling complete!`, { id: toastId });
       } catch (error) {
         console.error("Failed to reschedule cards:", error);
         toast.error("An error occurred during rescheduling.", { id: toastId });
@@ -464,7 +524,7 @@ const SettingsPage = () => {
                             </SelectContent>
                           </Select>
                           <FormDescription>
-                            FSRS is a modern, evidence-based algorithm. SM-2 is a classic, simpler alternative.
+                            FSRS is a modern, evidence-based algorithm. SM-2 is a classic, simpler alternative. Changing this will automatically reschedule all items.
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
@@ -544,6 +604,22 @@ const SettingsPage = () => {
                         </FormItem>
                       )} />
                     </CardContent>
+                     <CardFooter>
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm w-full">
+                        <div className="space-y-0.5">
+                          <FormLabel>Reschedule cards on change</FormLabel>
+                          <FormDescription>
+                            Recalculates all card schedules. This can cause many cards to become due. Use sparingly and create a backup first.
+                          </FormDescription>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={rescheduleOnSave}
+                            onCheckedChange={setRescheduleOnSave}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    </CardFooter>
                   </Card>
                 )}
 
