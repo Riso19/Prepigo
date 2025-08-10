@@ -106,7 +106,7 @@ const StatisticsPage = () => {
               ))}
             </Pie>
             <Tooltip />
-            <Legend />
+            <Legend formatter={(value, entry) => `${value} (${entry.payload.value})`} />
           </PieChart>
         </ResponsiveContainer>
       </>
