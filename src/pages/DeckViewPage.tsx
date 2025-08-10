@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useDecks } from '@/contexts/DecksContext';
-import { findDeckById, getAllFlashcardsFromDeck, deleteFlashcard, findDeckPathById } from '@/lib/deck-utils';
+import { findDeckById, getAllFlashcardsFromDeck, deleteFlashcard, findDeckPathById, getEffectiveSrsSettings } from '@/lib/deck-utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -25,6 +25,8 @@ import { HtmlRenderer } from '@/components/HtmlRenderer';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { DeckSettingsForm } from '@/components/DeckSettingsForm';
+import { useSettings } from '@/contexts/SettingsContext';
+import { FlashcardStatus } from '@/components/FlashcardStatus';
 
 const DeckViewPage = () => {
   const { deckId } = useParams<{ deckId: string }>();
@@ -32,10 +34,18 @@ const DeckViewPage = () => {
   const navigate = useNavigate();
   const [cardToDelete, setCardToDelete] = useState<FlashcardData | null>(null);
   const isMobile = useIsMobile();
+  const { settings: globalSettings } = useSettings();
 
   const deck = useMemo(() => (deckId ? findDeckById(decks, deckId) : null), [decks, deckId]);
   const deckPath = useMemo(() => (deckId ? findDeckPathById(decks, deckId)?.join(' / ') : null), [decks, deckId]);
   const flashcards = useMemo(() => (deck ? getAllFlashcardsFromDeck(deck) : []), [deck]);
+
+  const effectiveSettings = useMemo(() => {
+    if (deck) {
+      return getEffectiveSrsSettings(decks, deck.id, globalSettings);
+    }
+    return globalSettings;
+  }, [deck, decks, globalSettings]);
 
   const handleDeleteConfirm = () => {
     if (cardToDelete) {
@@ -64,6 +74,7 @@ const DeckViewPage = () => {
           <TableHead>Front / Question</TableHead>
           <TableHead>Back / Answer</TableHead>
           <TableHead>Tags</TableHead>
+          <TableHead>Status</TableHead>
           <TableHead className="text-right w-[100px]">Actions</TableHead>
         </TableRow>
       </TableHeader>
@@ -89,6 +100,9 @@ const DeckViewPage = () => {
               <div className="flex flex-wrap gap-1 max-w-[200px]">
                 {card.tags?.map(tag => <Badge key={tag} variant="outline" className="font-normal">{tag}</Badge>)}
               </div>
+            </TableCell>
+            <TableCell>
+              <FlashcardStatus card={card} scheduler={effectiveSettings.scheduler} />
             </TableCell>
             <TableCell className="text-right">
               <div className="flex items-center justify-end gap-2">
@@ -174,6 +188,10 @@ const DeckViewPage = () => {
               <div className="flex flex-wrap gap-1">
                 {card.tags?.map(tag => <Badge key={tag} variant="outline" className="font-normal">{tag}</Badge>)}
               </div>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-muted-foreground">Status</p>
+              <FlashcardStatus card={card} scheduler={effectiveSettings.scheduler} />
             </div>
           </CardContent>
         </Card>
