@@ -25,6 +25,7 @@ import { useQuestionBanks } from '@/contexts/QuestionBankContext';
 import { findDeckById } from '@/lib/deck-utils';
 import { findQuestionBankById } from '@/lib/question-bank-utils';
 import { Badge } from './ui/badge';
+import { cn } from '@/lib/utils';
 
 interface ExamItemProps {
   exam: ExamData;
@@ -65,6 +66,12 @@ export const ExamItem = ({ exam }: ExamItemProps) => {
     return `${daysLeft} days left`;
   };
 
+  const getReadinessColor = (percentage: number) => {
+    if (percentage < 50) return "text-destructive";
+    if (percentage < 75) return "text-yellow-500";
+    return "text-green-500";
+  };
+
   return (
     <>
       <Card>
@@ -89,16 +96,19 @@ export const ExamItem = ({ exam }: ExamItemProps) => {
             </DropdownMenu>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            <div className="flex justify-between items-center text-sm">
-              <span className="font-medium">Progress</span>
-              <span className="text-muted-foreground">{progress.mastered} / {progress.total} items mastered</span>
+        <CardContent className="space-y-4">
+          <div>
+            <div className="text-center">
+              <p className="text-sm font-medium text-muted-foreground">Readiness Score</p>
+              <p className={cn("text-4xl font-bold", getReadinessColor(progress.percentage))}>
+                {progress.percentage}%
+              </p>
+              <p className="text-xs text-muted-foreground">{progress.mastered} / {progress.total} items mastered</p>
             </div>
-            <Progress value={progress.percentage} />
-            <p className="text-xs text-muted-foreground">An item is "mastered" when its next review is after the exam date.</p>
+            <Progress value={progress.percentage} className="mt-2" />
+            <p className="text-xs text-center text-muted-foreground mt-1">An item is "mastered" when its next review is after the exam date.</p>
           </div>
-          <div className="mt-4 pt-4 border-t">
+          <div className="pt-4 border-t">
             <h4 className="text-sm font-semibold mb-2">Scope</h4>
             <div className="space-y-3">
               {deckNames.length > 0 && (
