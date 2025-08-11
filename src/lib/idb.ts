@@ -2,9 +2,10 @@ import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { DeckData, ReviewLog } from '@/data/decks';
 import { QuestionBankData } from '@/data/questionBanks';
 import { ExamData } from '@/data/exams';
+import { ExamLog } from '@/data/examLogs';
 
 const DB_NAME = 'PrepigoDB';
-const DB_VERSION = 8; // Increment version to trigger upgrade
+const DB_VERSION = 9; // Increment version to trigger upgrade
 const DECKS_STORE = 'decks';
 const REVIEW_LOGS_STORE = 'review_logs';
 const MEDIA_STORE = 'media';
@@ -12,6 +13,7 @@ const SESSION_STATE_STORE = 'session_state';
 const QUESTION_BANKS_STORE = 'question_banks';
 const MCQ_REVIEW_LOGS_STORE = 'mcq_review_logs';
 const EXAMS_STORE = 'exams';
+const EXAM_LOGS_STORE = 'exam_logs';
 
 export type McqReviewLog = Omit<ReviewLog, 'cardId'> & { mcqId: string };
 
@@ -45,6 +47,10 @@ interface PrepigoDB extends DBSchema {
   [EXAMS_STORE]: {
     key: string;
     value: ExamData;
+  };
+  [EXAM_LOGS_STORE]: {
+    key: string;
+    value: ExamLog;
   };
 }
 
@@ -89,6 +95,11 @@ const getDb = () => {
         if (oldVersion < 8) {
             if (!db.objectStoreNames.contains(EXAMS_STORE)) {
                 db.createObjectStore(EXAMS_STORE, { keyPath: 'id' });
+            }
+        }
+        if (oldVersion < 9) {
+            if (!db.objectStoreNames.contains(EXAM_LOGS_STORE)) {
+                db.createObjectStore(EXAM_LOGS_STORE, { keyPath: 'id' });
             }
         }
       },
@@ -246,4 +257,20 @@ export const saveExamsToDB = async (exams: ExamData[]): Promise<void> => {
 export const clearExamsDB = async (): Promise<void> => {
   const db = await getDb();
   await db.clear(EXAMS_STORE);
+};
+
+// --- Exam Log Functions ---
+export const saveExamLogToDB = async (log: ExamLog): Promise<void> => {
+  const db = await getDb();
+  await db.put(EXAM_LOGS_STORE, log);
+};
+
+export const getAllExamLogsFromDB = async (): Promise<ExamLog[]> => {
+  const db = await getDb();
+  return db.getAll(EXAM_LOGS_STORE);
+};
+
+export const getExamLogFromDB = async (id: string): Promise<ExamLog | undefined> => {
+  const db = await getDb();
+  return db.get(EXAM_LOGS_STORE, id);
 };

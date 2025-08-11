@@ -13,7 +13,7 @@ import { Switch } from '@/components/ui/switch';
 import { QuestionBankTreeSelector } from '@/components/QuestionBankTreeSelector';
 import { TagEditor } from '@/components/TagEditor';
 import { getAllTagsFromQuestionBanks, getAllMcqsFromBank } from '@/lib/question-bank-utils';
-import { getAllMcqReviewLogsFromDB, McqReviewLog } from '@/lib/idb';
+import { getAllMcqReviewLogsFromDB } from '@/lib/idb';
 import { McqData, QuestionBankData } from '@/data/questionBanks';
 import { Rating, State } from 'ts-fsrs';
 import Header from '@/components/Header';
@@ -24,8 +24,14 @@ import { useExams } from '@/contexts/ExamsContext';
 import { format } from 'date-fns';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
+import { Separator } from '@/components/ui/separator';
 
 const customMcqPracticeSchema = z.object({
+  mode: z.enum(['practice', 'exam']),
+  examName: z.string().optional(),
+  timeLimit: z.coerce.number().int().optional(),
+  marksPerCorrect: z.coerce.number().optional(),
+  negativeMarksPerWrong: z.coerce.number().optional(),
   mcqLimit: z.coerce.number().int().min(1, "Must be at least 1 MCQ."),
   srsEnabled: z.boolean(),
   selectedBankIds: z.set(z.string()).min(1, "Please select at least one bank."),
@@ -36,6 +42,21 @@ const customMcqPracticeSchema = z.object({
   order: z.enum(['random', 'sequentialNewest', 'sequentialOldest']),
   filterDifficultyMin: z.number().min(1).max(10).optional(),
   filterDifficultyMax: z.number().min(1).max(10).optional(),
+}).superRefine((data, ctx) => {
+  if (data.mode === 'exam') {
+    if (!data.examName || data.examName.trim().length === 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Exam name is required.", path: ["examName"] });
+    }
+    if (!data.timeLimit || data.timeLimit < 1) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Time limit must be at least 1 minute.", path: ["timeLimit"] });
+    }
+    if (data.marksPerCorrect === undefined || data.marksPerCorrect < 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Marks must be 0 or greater.", path: ["marksPerCorrect"] });
+    }
+    if (data.negativeMarksPerWrong === undefined || data.negativeMarksPerWrong < 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Negative marks must be 0 or greater.", path: ["negativeMarksPerWrong"] });
+    }
+  }
 });
 
 type CustomMcqPracticeFormValues = z.infer<typeof customMcqPracticeSchema>;
@@ -54,6 +75,11 @@ const CustomMcqPracticeSetupPage = () => {
   const form = useForm<CustomMcqPracticeFormValues>({
     resolver: zodResolver(customMcqPracticeSchema),
     defaultValues: {
+      mode: 'practice',
+      examName: '',
+      timeLimit: 60,
+      marksPerCorrect: 1,
+      negativeMarksPerWrong: 0,
       mcqLimit: 20,
       srsEnabled: true,
       selectedBankIds: new Set(),
@@ -68,6 +94,7 @@ const CustomMcqPracticeSetupPage = () => {
   });
 
   const watchedValues = form.watch();
+  const isExamMode = watchedValues.mode === 'exam';
 
   useEffect(() => {
     if (selectedExamId) {
@@ -182,7 +209,7 @@ const CustomMcqPracticeSetupPage = () => {
         return;
     }
     
-    const loadingToast = toast.loading("Building custom practice session...");
+    const loadingToast = toast.loading("Building session...");
     
     const getAllBanksFlat = (b: QuestionBankData[]): QuestionBankData[] => b.flatMap(bank => [bank, ...(bank.subBanks ? getAllBanksFlat(bank.subBanks) : [])]);
     const allBanks = getAllBanksFlat(questionBanks);
@@ -240,19 +267,32 @@ const CustomMcqPracticeSetupPage = () => {
         case 'random':
             filteredMcqs.sort(() => Math.random() - 0.5);
             break;
-        // Note: MCQs don't have a creation order like flashcards, so sequential is less meaningful
         case 'sequentialNewest':
         case 'sequentialOldest':
-            // No-op, order is preserved from bank structure
             break;
     }
 
     const finalQueue = filteredMcqs.slice(0, values.mcqLimit);
-    toast.success(`Starting session with ${finalQueue.length} MCQs.`, { id: loadingToast });
-
-    navigate('/mcq-review/custom', {
-        state: { queue: finalQueue, srsEnabled: values.srsEnabled, title: 'Custom Practice Session' }
-    });
+    
+    if (values.mode === 'exam') {
+        toast.success(`Starting exam with ${finalQueue.length} questions.`, { id: loadingToast });
+        navigate('/exam/session', {
+            state: { 
+                queue: finalQueue, 
+                examSettings: {
+                    name: values.examName,
+                    timeLimit: values.timeLimit,
+                    marksPerCorrect: values.marksPerCorrect,
+                    negativeMarksPerWrong: values.negativeMarksPerWrong,
+                }
+            }
+        });
+    } else {
+        toast.success(`Starting session with ${finalQueue.length} MCQs.`, { id: loadingToast });
+        navigate('/mcq-review/custom', {
+            state: { queue: finalQueue, srsEnabled: values.srsEnabled, title: 'Custom Practice Session' }
+        });
+    }
   };
 
   return (
@@ -262,12 +302,55 @@ const CustomMcqPracticeSetupPage = () => {
         <Card className="w-full max-w-4xl mx-auto">
           <CardHeader>
             <CardTitle className="text-2xl">Custom MCQ Practice Session</CardTitle>
-            <CardDescription>Create a temporary, filtered question bank for focused practice.</CardDescription>
+            <CardDescription>Create a temporary, filtered question bank for focused practice or a simulated exam.</CardDescription>
           </CardHeader>
           <CardContent>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
                 
+                <FormField
+                  control={form.control}
+                  name="mode"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                      <div className="space-y-0.5">
+                        <FormLabel className="text-base">Exam Mode</FormLabel>
+                        <FormDescription>Simulate a timed exam with scoring.</FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value === 'exam'}
+                          onCheckedChange={(checked) => field.onChange(checked ? 'exam' : 'practice')}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                {isExamMode && (
+                  <Card className="bg-secondary/50">
+                    <CardHeader><CardTitle>Exam Settings</CardTitle></CardHeader>
+                    <CardContent className="space-y-6">
+                      <FormField control={form.control} name="examName" render={({ field }) => (
+                        <FormItem><FormLabel>Exam Name</FormLabel><FormControl><Input placeholder="e.g., Mid-term Practice Test" {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <FormField control={form.control} name="timeLimit" render={({ field }) => (
+                          <FormItem><FormLabel>Time Limit (minutes)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="marksPerCorrect" render={({ field }) => (
+                          <FormItem><FormLabel>Marks (Correct)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="negativeMarksPerWrong" render={({ field }) => (
+                          <FormItem><FormLabel>Negative Marks (Wrong)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                <Separator />
+
                 {exams.length > 0 && (
                     <div className="space-y-2">
                         <FormLabel>Load from Exam Schedule</FormLabel>
@@ -420,18 +503,22 @@ const CustomMcqPracticeSetupPage = () => {
                     )} />
                 </div>
 
-                <FormField control={form.control} name="srsEnabled" render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                        <div className="space-y-0.5">
-                            <FormLabel>Enable Spaced Repetition</FormLabel>
-                            <FormDescription>If disabled, your answers won't be graded or affect scheduling.</FormDescription>
-                        </div>
-                        <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-                    </FormItem>
-                )} />
+                {!isExamMode && (
+                  <FormField control={form.control} name="srsEnabled" render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                          <div className="space-y-0.5">
+                              <FormLabel>Enable Spaced Repetition</FormLabel>
+                              <FormDescription>If disabled, your answers won't be graded or affect scheduling.</FormDescription>
+                          </div>
+                          <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                      </FormItem>
+                  )} />
+                )}
 
                 <div className="flex justify-end">
-                    <Button type="submit" size="lg">Start Custom Practice</Button>
+                    <Button type="submit" size="lg">
+                      {isExamMode ? 'Start Exam' : 'Start Custom Practice'}
+                    </Button>
                 </div>
               </form>
             </Form>
