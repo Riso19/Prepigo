@@ -45,15 +45,21 @@ export const calculateDueStats = (items: (FlashcardData | McqData)[], settings: 
         srsData = item.srs?.fsrs;
     }
 
-    if (srsData && ('state' in srsData && srsData.state !== State.New)) {
+    if (srsData && srsData.due) {
       const dueDate = startOfDay(new Date(srsData.due));
       if (dueDate <= today) {
         if (isSameDay(dueDate, today)) {
           dueToday++;
         } else {
           overdue++;
-          if ('difficulty' in srsData) {
+          if (scheduler !== 'sm2' && 'difficulty' in srsData) {
             weightedOverdueLoad += srsData.difficulty;
+          } else if (scheduler === 'sm2' && 'easinessFactor' in srsData) {
+            // Convert SM-2 easiness (lower is harder) to FSRS difficulty (higher is harder)
+            // Easiness ranges from 1.3 up. FSRS difficulty is 1-10.
+            // Map 2.5 (default) to ~1, and 1.3 (hardest) to ~10.
+            const sm2Difficulty = 1 + 9 * Math.max(0, (2.5 - srsData.easinessFactor) / (2.5 - 1.3));
+            weightedOverdueLoad += sm2Difficulty;
           }
         }
       }
