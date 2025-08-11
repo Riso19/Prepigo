@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
@@ -961,7 +961,14 @@ const SettingsPage = () => {
                 <Separator />
 
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold">Data Management</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-semibold">Data Management</h3>
+                    <Button variant="ghost" size="icon" asChild>
+                      <Link to="/settings/import-export-guide">
+                        <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                      </Link>
+                    </Button>
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <div className="space-y-2 p-4 border rounded-lg">
                         <h4 className="font-medium">Flashcards</h4>
