@@ -6,13 +6,13 @@ import { saveExamLogToDB } from '@/lib/idb';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Clock, Flag, ArrowLeft, ArrowRight, CheckSquare, Pause, Eraser, Eye } from 'lucide-react';
 import McqPlayer from '@/components/McqPlayer';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { PauseOverlay } from '@/components/PauseOverlay';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ExamTracker } from '@/components/ExamTracker';
 
 const ReviewGrid = ({
   queue,
@@ -193,33 +193,22 @@ const ExamSessionPage = () => {
               <Clock className="h-5 w-5" />
               <span>{Math.floor(timeLeft / 60).toString().padStart(2, '0')}:{ (timeLeft % 60).toString().padStart(2, '0')}</span>
             </div>
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="outline" size="sm">{currentQuestionIndex + 1} / {queue.length}</Button>
-              </SheetTrigger>
-              <SheetContent>
-                <SheetHeader><SheetTitle>Question Palette</SheetTitle></SheetHeader>
-                <div className="grid grid-cols-5 gap-2 py-4">
-                  {queue.map((_: McqData, index: number) => {
-                    const isAnswered = answers[index] !== undefined && answers[index] !== null;
-                    const isMarked = marked.has(index);
-                    return (
-                      <Button
-                        key={index}
-                        variant={currentQuestionIndex === index ? 'default' : (isAnswered ? 'secondary' : 'outline')}
-                        className={cn("h-10 w-10 relative", isMarked && "ring-2 ring-yellow-500")}
-                        onClick={() => setCurrentQuestionIndex(index)}
-                      >
-                        {index + 1}
-                      </Button>
-                    );
-                  })}
-                </div>
-              </SheetContent>
-            </Sheet>
           </div>
         </div>
       </header>
+
+      <div className="sticky top-[73px] bg-background/95 backdrop-blur-sm z-10 py-2 border-b">
+        <div className="container mx-auto">
+            <ExamTracker
+                queue={queue}
+                answers={answers}
+                marked={marked}
+                currentIndex={currentQuestionIndex}
+                onNavigate={(index) => setCurrentQuestionIndex(index)}
+            />
+        </div>
+      </div>
+
       <main className="flex-grow container mx-auto p-4 md:p-8 flex flex-col items-center">
         {isReviewScreen ? (
           <ReviewGrid queue={queue} answers={answers} marked={marked} onNavigate={handleNavigateFromReview} onSubmit={() => setIsSubmitAlertOpen(true)} />
