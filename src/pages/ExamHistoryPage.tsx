@@ -7,14 +7,17 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
-import { ArrowRight, History } from 'lucide-react';
+import { History } from 'lucide-react';
 
 const ExamHistoryPage = () => {
   const [examLogs, setExamLogs] = useState<ExamLog[]>([]);
+  const [hasMistakes, setHasMistakes] = useState(false);
 
   useEffect(() => {
     getAllExamLogsFromDB().then(logs => {
-      setExamLogs(logs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+      const sortedLogs = logs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setExamLogs(sortedLogs);
+      setHasMistakes(sortedLogs.some(log => log.results.incorrectCount > 0));
     });
   }, []);
 
@@ -24,8 +27,20 @@ const ExamHistoryPage = () => {
       <main className="flex-grow container mx-auto p-4 md:p-8">
         <Card className="w-full max-w-4xl mx-auto">
           <CardHeader>
-            <CardTitle className="text-2xl">Exam History</CardTitle>
-            <CardDescription>Review your past exam attempts and performance.</CardDescription>
+            <div className="flex justify-between items-center">
+              <div>
+                <CardTitle className="text-2xl">Exam History</CardTitle>
+                <CardDescription>Review your past exam attempts and performance.</CardDescription>
+              </div>
+              {hasMistakes && (
+                <Button asChild>
+                  <Link to="/exam/mistakes/all/setup">
+                    <History className="mr-2 h-4 w-4" />
+                    Review All Mistakes
+                  </Link>
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             {examLogs.length > 0 ? (
@@ -53,14 +68,6 @@ const ExamHistoryPage = () => {
                               View Results
                             </Link>
                           </Button>
-                          {log.results.incorrectCount > 0 && (
-                            <Button asChild variant="outline" size="sm" className="ml-2">
-                              <Link to={`/exam/mistakes/${log.id}/setup`}>
-                                <History className="mr-2 h-4 w-4" />
-                                Review Mistakes
-                              </Link>
-                            </Button>
-                          )}
                         </TableCell>
                       </TableRow>
                     );

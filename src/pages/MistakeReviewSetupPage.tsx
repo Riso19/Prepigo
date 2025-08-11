@@ -10,8 +10,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { QuestionBankTreeSelector } from '@/components/QuestionBankTreeSelector';
-import { findMcqById, getAllMcqsFromBank } from '@/lib/question-bank-utils';
-import { getExamLogFromDB } from '@/lib/idb';
+import { findMcqById } from '@/lib/question-bank-utils';
+import { getExamLogFromDB, getAllExamLogsFromDB } from '@/lib/idb';
 import { McqData, QuestionBankData } from '@/data/questionBanks';
 import Header from '@/components/Header';
 import { toast } from 'sonner';
@@ -35,6 +35,8 @@ const MistakeReviewSetupPage = () => {
   const [incorrectMcqs, setIncorrectMcqs] = useState<McqData[]>([]);
   const [availableMcqs, setAvailableMcqs] = useState<McqData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [pageTitle, setPageTitle] = useState("Review Mistakes");
+  const [pageDescription, setPageDescription] = useState("");
 
   const form = useForm<MistakeReviewFormValues>({
     resolver: zodResolver(mistakeReviewSchema),
@@ -48,27 +50,50 @@ const MistakeReviewSetupPage = () => {
   const watchedValues = form.watch();
 
   useEffect(() => {
-    if (logId) {
-      getExamLogFromDB(logId).then(log => {
+    const loadMistakes = async () => {
+      setIsLoading(true);
+      let mistakes: McqData[] = [];
+      if (logId === 'all') {
+        const logs = await getAllExamLogsFromDB();
+        const mistakeMap = new Map<string, McqData>();
+        logs.forEach(log => {
+          log.entries
+            .filter(entry => !entry.isCorrect && entry.selectedOptionId !== null)
+            .forEach(entry => {
+              if (!mistakeMap.has(entry.mcq.id)) {
+                mistakeMap.set(entry.mcq.id, entry.mcq);
+              }
+            });
+        });
+        mistakes = Array.from(mistakeMap.values());
+        setPageTitle("Review All Mistakes");
+        setPageDescription(`Create a practice session from the ${mistakes.length} unique questions you've answered incorrectly across all exams.`);
+      } else if (logId) {
+        const log = await getExamLogFromDB(logId);
         if (log) {
           setExamLog(log);
-          const mistakes = log.entries
+          mistakes = log.entries
             .filter(entry => !entry.isCorrect && entry.selectedOptionId !== null)
             .map(entry => entry.mcq);
-          setIncorrectMcqs(mistakes);
-          
-          const mistakeBankIds = new Set<string>();
-          mistakes.forEach(mcq => {
-            const result = findMcqById(questionBanks, mcq.id);
-            if (result) {
-              mistakeBankIds.add(result.bankId);
-            }
-          });
-          form.setValue('selectedBankIds', mistakeBankIds);
+          setPageTitle("Review Mistakes");
+          setPageDescription(`Create a focused practice session from the ${mistakes.length} questions you answered incorrectly in "${log.name}".`);
         }
-        setIsLoading(false);
+      }
+
+      setIncorrectMcqs(mistakes);
+      
+      const mistakeBankIds = new Set<string>();
+      mistakes.forEach(mcq => {
+        const result = findMcqById(questionBanks, mcq.id);
+        if (result) {
+          mistakeBankIds.add(result.bankId);
+        }
       });
-    }
+      form.setValue('selectedBankIds', mistakeBankIds);
+      setIsLoading(false);
+    };
+
+    loadMistakes();
   }, [logId, questionBanks, form]);
 
   useEffect(() => {
@@ -123,7 +148,7 @@ const MistakeReviewSetupPage = () => {
       state: {
         queue: finalQueue,
         srsEnabled: values.srsEnabled,
-        title: `Reviewing Mistakes: ${examLog?.name}`
+        title: `Reviewing Mistakes: ${examLog?.name || 'All Exams'}`
       }
     });
   };
@@ -132,7 +157,7 @@ const MistakeReviewSetupPage = () => {
     return <div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   }
 
-  if (!examLog) {
+  if (!examLog && logId !== 'all') {
     return <div className="flex items-center justify-center min-h-screen">Exam log not found.</div>;
   }
 
@@ -145,8 +170,8 @@ const MistakeReviewSetupPage = () => {
             <Button asChild variant="ghost" className="mb-4 -ml-4">
               <Link to="/exam-history"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Exam History</Link>
             </Button>
-            <CardTitle className="text-2xl">Review Mistakes</CardTitle>
-            <CardDescription>Create a focused practice session from the {incorrectMcqs.length} questions you answered incorrectly in "{examLog.name}".</CardDescription>
+            <CardTitle className="text-2xl">{pageTitle}</CardTitle>
+            <CardDescription>{pageDescription}</CardDescription>
           </CardHeader>
           <CardContent>
             <Form {...form}>
