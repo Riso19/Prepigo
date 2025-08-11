@@ -11,7 +11,7 @@ import Header from '@/components/Header';
 import { useSettings, SrsSettings, clearSettingsDB, srsSettingsSchema } from '@/contexts/SettingsContext';
 import { showSuccess, showError } from '@/utils/toast';
 import { Separator } from '@/components/ui/separator';
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { useDecks } from '@/contexts/DecksContext';
 import { DeckData, decksSchema, FlashcardData } from '@/data/decks';
 import { clearDecksDB, getReviewLogsForCard, saveMediaToDB, clearMediaDB, clearQuestionBanksDB, clearMcqReviewLogsDB, getMediaFromDB, saveSingleMediaToDB, getReviewLogsForMcq } from '@/lib/idb';
@@ -38,10 +38,11 @@ import { Progress } from '@/components/ui/progress';
 import { importAnkiTxtFile } from '@/lib/anki-txt-importer';
 import { useQuestionBanks } from '@/contexts/QuestionBankContext';
 import { QuestionBankData, questionBanksSchema } from '@/data/questionBanks';
-import { mergeQuestionBanks, updateMcq, collectMediaFilenamesFromMcqs } from '@/lib/question-bank-utils';
+import { mergeQuestionBanks, updateMcq, collectMediaFilenamesFromMcqs, addMcqToBank } from '@/lib/question-bank-utils';
 import { getAllMcqsFromBank } from '@/lib/question-bank-utils';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import JSZip from 'jszip';
+import { importHtmlMcqs } from '@/lib/html-mcq-importer';
 
 const parseSteps = (steps: string): number[] => {
   return steps.trim().split(/\s+/).filter(s => s).map(stepStr => {
@@ -61,6 +62,7 @@ const SettingsPage = () => {
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mcqFileInputRef = useRef<HTMLInputElement>(null);
+  const htmlFileInputRef = useRef<HTMLInputElement>(null);
 
   const [isResetAlertOpen, setIsResetAlertOpen] = useState(false);
   
@@ -73,6 +75,11 @@ const SettingsPage = () => {
   const [fileToImportMcq, setFileToImportMcq] = useState<File | null>(null);
   const [replaceOnMcqImport, setReplaceOnMcqImport] = useState(false);
 
+  const [isHtmlImportAlertOpen, setIsHtmlImportAlertOpen] = useState(false);
+  const [fileToImportHtml, setFileToImportHtml] = useState<File | null>(null);
+  const [targetBankId, setTargetBankId] = useState<string>('');
+  const [flatBanks, setFlatBanks] = useState<{ id: string; name: string }[]>([]);
+
   const [rescheduleOnSave, setRescheduleOnSave] = useState(false);
 
   const form = useForm<SrsSettings>({
@@ -82,6 +89,20 @@ const SettingsPage = () => {
   });
 
   const scheduler = form.watch('scheduler');
+
+  useEffect(() => {
+    const flattenBanks = (banksToFlatten: QuestionBankData[], level = 0): { id: string; name: string }[] => {
+        let result: { id: string; name: string }[] = [];
+        for (const bank of banksToFlatten) {
+            result.push({ id: bank.id, name: '—'.repeat(level) + (level > 0 ? ' ' : '') + bank.name });
+            if (bank.subBanks) {
+                result = result.concat(flattenBanks(bank.subBanks, level + 1));
+            }
+        }
+        return result;
+    };
+    setFlatBanks(flattenBanks(questionBanks));
+  }, [questionBanks]);
 
   const blobToBase64 = (blob: Blob): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -462,6 +483,65 @@ const SettingsPage = () => {
         setFileToImportMcq(null);
         if (mcqFileInputRef.current) mcqFileInputRef.current.value = "";
         setReplaceOnMcqImport(false);
+    }
+  };
+
+  const handleHtmlFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.html')) {
+      showError("Please select an HTML file.");
+      if (htmlFileInputRef.current) htmlFileInputRef.current.value = "";
+      return;
+    }
+
+    setFileToImportHtml(file);
+    if (questionBanks.length > 0) {
+        setTargetBankId(questionBanks[0].id);
+    }
+    setIsHtmlImportAlertOpen(true);
+  };
+
+  const confirmHtmlImport = async () => {
+    if (!fileToImportHtml || !targetBankId) {
+        showError("No file or target bank selected.");
+        return;
+    }
+    setIsHtmlImportAlertOpen(false);
+
+    const toastId = toast.loading("Starting HTML import...");
+    const onProgress = (progress: { message: string; value: number }) => {
+        toast.loading(
+            <div className="flex flex-col gap-2">
+                <p>{progress.message}</p>
+                <Progress value={progress.value} className="w-full" />
+            </div>,
+            { id: toastId }
+        );
+    };
+
+    try {
+        const content = await fileToImportHtml.text();
+        const importedMcqs = await importHtmlMcqs(content, onProgress);
+
+        if (importedMcqs.length > 0) {
+            let currentBanks = questionBanks;
+            for (const mcq of importedMcqs) {
+                currentBanks = addMcqToBank(currentBanks, targetBankId, mcq);
+            }
+            setQuestionBanks(currentBanks);
+            toast.success(`Successfully imported ${importedMcqs.length} MCQs!`, { id: toastId });
+        } else {
+            throw new Error("No valid MCQs were found in the file.");
+        }
+    } catch (error) {
+        const err = error as Error;
+        console.error("HTML Import Error:", err);
+        toast.error(`Import failed: ${err.message}`, { id: toastId, duration: 15000 });
+    } finally {
+        setFileToImportHtml(null);
+        if (htmlFileInputRef.current) htmlFileInputRef.current.value = "";
     }
   };
 
@@ -989,6 +1069,18 @@ const SettingsPage = () => {
                         </div>
                     </div>
                   </div>
+                  <div className="p-4 border rounded-lg mt-6 bg-yellow-50 border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-800/50">
+                    <h4 className="font-medium text-yellow-800 dark:text-yellow-300">Temporary HTML MCQ Importer</h4>
+                    <p className="text-sm text-yellow-700 dark:text-yellow-400 mb-4">
+                      This is a temporary tool to import MCQs from a specific HTML format.
+                    </p>
+                    <Button asChild variant="outline" type="button" className="w-full sm:w-auto">
+                      <Label htmlFor="import-html-file" className="cursor-pointer w-full text-center">
+                        Import from HTML
+                      </Label>
+                    </Button>
+                    <Input id="import-html-file" type="file" className="hidden" onChange={handleHtmlFileSelect} accept=".html" ref={htmlFileInputRef} />
+                  </div>
                   <div className="p-4 border rounded-lg mt-6">
                     <h4 className="font-medium">Application Data</h4>
                     <p className="text-sm text-muted-foreground mb-4">This will permanently delete all decks, MCQs, and settings.</p>
@@ -1068,6 +1160,42 @@ const SettingsPage = () => {
                 <AlertDialogCancel onClick={() => setFileToImportMcq(null)}>Cancel</AlertDialogCancel>
                 <AlertDialogAction onClick={confirmMcqImport}>Import</AlertDialogAction>
             </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={isHtmlImportAlertOpen} onOpenChange={setIsHtmlImportAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Import MCQs from HTML</AlertDialogTitle>
+            <AlertDialogDescription>
+              Select a question bank to import the new MCQs into. This will add the questions to the selected bank.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-4 pt-2">
+            <Label htmlFor="target-bank-select">Target Question Bank</Label>
+            <Select
+              value={targetBankId}
+              onValueChange={setTargetBankId}
+              disabled={questionBanks.length === 0}
+            >
+              <SelectTrigger id="target-bank-select">
+                <SelectValue placeholder="Select a bank..." />
+              </SelectTrigger>
+              <SelectContent>
+                {flatBanks.length > 0 ? (
+                  flatBanks.map(bank => (
+                    <SelectItem key={bank.id} value={bank.id}>{bank.name}</SelectItem>
+                  ))
+                ) : (
+                  <SelectItem value="disabled" disabled>No question banks found. Please create one first.</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setFileToImportHtml(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmHtmlImport} disabled={!targetBankId}>Import</AlertDialogAction>
+          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
