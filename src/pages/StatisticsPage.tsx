@@ -29,10 +29,10 @@ import { DifficultyTrendChart } from '@/components/DifficultyTrendChart';
 const ForecastTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
-      <div className="rounded-lg border bg-background p-2 shadow-sm">
-        <p className="text-sm font-bold text-foreground">{label}</p>
-        <p className="text-sm text-muted-foreground">
-          Reviews: <span className="font-bold ml-2 text-primary">{payload[0].value}</span>
+      <div className="rounded-lg border bg-white p-2 shadow-sm">
+        <p className="text-sm font-bold text-gray-800">{label}</p>
+        <p className="text-sm text-gray-600">
+          Reviews: <span className="font-bold ml-2" style={{ color: '#8884d8' }}>{payload[0].value}</span>
         </p>
       </div>
     );
@@ -657,22 +657,22 @@ const StatisticsPage = () => {
               ) : (
                 <ResponsiveContainer width="100%" height={isMobile ? 250 : 300}>
                   <BarChart data={forecastData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
                     <XAxis
                       dataKey="date"
-                      tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
-                      tickLine={{ stroke: 'hsl(var(--muted-foreground))' }}
+                      tick={{ fontSize: 12, fill: '#333' }}
+                      tickLine={{ stroke: '#ccc' }}
                     />
                     <YAxis
                       allowDecimals={false}
-                      tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
-                      tickLine={{ stroke: 'hsl(var(--muted-foreground))' }}
+                      tick={{ fontSize: 12, fill: '#333' }}
+                      tickLine={{ stroke: '#ccc' }}
                     />
                     <Tooltip
                       content={<ForecastTooltip />}
-                      cursor={{ fill: 'hsl(var(--muted))' }}
+                      cursor={{ fill: '#fafafa' }}
                     />
-                    <Bar dataKey="reviews" fill="hsl(var(--primary))" />
+                    <Bar dataKey="reviews" fill="#8884d8" />
                   </BarChart>
                 </ResponsiveContainer>
               )}
