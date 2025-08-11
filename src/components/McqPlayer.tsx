@@ -62,7 +62,7 @@ const McqPlayer = ({ mcq, selectedOptionId, isSubmitted, onOptionSelect, isExamM
               >
                 <RadioGroupItem value={option.id} id={option.id} className="mt-1" />
                 <div className="flex-grow">
-                  <HtmlRenderer html={option.text} className="prose dark:prose-invert max-w-none" />
+                  <HtmlRenderer html={option.text} className={cn("prose dark:prose-invert max-w-none", !option.isCorrect && "text-muted-foreground")} />
                 </div>
                 {showExplanation && option.isCorrect && <CheckCircle2 className="h-6 w-6 text-green-500 flex-shrink-0" />}
                 {showExplanation && !option.isCorrect && (isExamMode ? examAnswer!.selectedOptionId : selectedOptionId) === option.id && <XCircle className="h-6 w-6 text-red-500 flex-shrink-0" />}
