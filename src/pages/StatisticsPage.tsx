@@ -26,6 +26,20 @@ import { ReviewTimeDistributionChart } from '@/components/ReviewTimeDistribution
 import { DailyActivityChart } from '@/components/DailyActivityChart';
 import { DifficultyTrendChart } from '@/components/DifficultyTrendChart';
 
+const ForecastTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="rounded-lg border bg-background p-2 shadow-sm">
+        <p className="text-sm font-bold text-foreground">{label}</p>
+        <p className="text-sm text-muted-foreground">
+          Reviews: <span className="font-bold ml-2 text-primary">{payload[0].value}</span>
+        </p>
+      </div>
+    );
+  }
+  return null;
+};
+
 const StatisticsPage = () => {
   const { decks } = useDecks();
   const { questionBanks } = useQuestionBanks();
@@ -643,10 +657,21 @@ const StatisticsPage = () => {
               ) : (
                 <ResponsiveContainer width="100%" height={isMobile ? 250 : 300}>
                   <BarChart data={forecastData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                    <YAxis allowDecimals={false} />
-                    <Tooltip />
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+                      tickLine={{ stroke: 'hsl(var(--muted-foreground))' }}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+                      tickLine={{ stroke: 'hsl(var(--muted-foreground))' }}
+                    />
+                    <Tooltip
+                      content={<ForecastTooltip />}
+                      cursor={{ fill: 'hsl(var(--muted))' }}
+                    />
                     <Bar dataKey="reviews" fill="hsl(var(--primary))" />
                   </BarChart>
                 </ResponsiveContainer>
