@@ -440,8 +440,11 @@ const SettingsPage = () => {
       if (!importedBanks) {
         throw new Error("Could not find question bank data in the file.");
       }
+      
+      // Deep copy to prevent any potential reference issues from the source file.
+      const deepCopiedBanks = JSON.parse(JSON.stringify(importedBanks));
 
-      const validation = questionBanksSchema.safeParse(importedBanks);
+      const validation = questionBanksSchema.safeParse(deepCopiedBanks);
       if (!validation.success) {
         console.error("MCQ JSON validation failed:", validation.error.issues);
         
