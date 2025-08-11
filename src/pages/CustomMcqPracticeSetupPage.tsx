@@ -95,6 +95,13 @@ const CustomMcqPracticeSetupPage = () => {
 
   const watchedValues = form.watch();
   const isExamMode = watchedValues.mode === 'exam';
+  const isSrsOn = watchedValues.srsEnabled;
+
+  useEffect(() => {
+    if (!isSrsOn) {
+        form.setValue('filterType', 'all');
+    }
+  }, [isSrsOn, form]);
 
   useEffect(() => {
     if (selectedExamId) {
@@ -404,7 +411,7 @@ const CustomMcqPracticeSetupPage = () => {
                     <FormField control={form.control} name="filterType" render={({ field }) => (
                         <FormItem>
                             <FormLabel>Filter by MCQ state</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!isSrsOn}>
                                 <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                                 <SelectContent>
                                     <SelectItem value="all">All MCQs</SelectItem>
@@ -414,10 +421,11 @@ const CustomMcqPracticeSetupPage = () => {
                                     <SelectItem value="difficulty">Filter by difficulty (FSRS only)</SelectItem>
                                 </SelectContent>
                             </Select>
+                            {!isSrsOn && <FormDescription>State filters are disabled when SRS is off.</FormDescription>}
                             <FormMessage />
                         </FormItem>
                     )} />
-                    {watchedValues.filterType === 'failed' && (
+                    {watchedValues.filterType === 'failed' && isSrsOn && (
                         <FormField control={form.control} name="failedDays" render={({ field }) => (
                             <FormItem>
                                 <FormLabel>Number of days</FormLabel>
@@ -428,7 +436,7 @@ const CustomMcqPracticeSetupPage = () => {
                     )}
                 </div>
 
-                {watchedValues.filterType === 'difficulty' && (
+                {watchedValues.filterType === 'difficulty' && isSrsOn && (
                     <div className="p-4 border rounded-md space-y-4">
                         <div className="flex justify-between">
                             <FormLabel>Difficulty Range</FormLabel>
