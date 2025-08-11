@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, History } from 'lucide-react';
 
 const ExamHistoryPage = () => {
   const [examLogs, setExamLogs] = useState<ExamLog[]>([]);
@@ -50,9 +50,17 @@ const ExamHistoryPage = () => {
                         <TableCell className="text-right">
                           <Button asChild variant="ghost" size="sm">
                             <Link to={`/exam/results/${log.id}`}>
-                              View Results <ArrowRight className="ml-2 h-4 w-4" />
+                              View Results
                             </Link>
                           </Button>
+                          {log.results.incorrectCount > 0 && (
+                            <Button asChild variant="outline" size="sm" className="ml-2">
+                              <Link to={`/exam/mistakes/${log.id}/setup`}>
+                                <History className="mr-2 h-4 w-4" />
+                                Review Mistakes
+                              </Link>
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     );

@@ -31,6 +31,7 @@ import CustomMcqPracticeSetupPage from "./pages/CustomMcqPracticeSetupPage";
 import ExamSessionPage from "./pages/ExamSessionPage";
 import ExamResultsPage from "./pages/ExamResultsPage";
 import ExamHistoryPage from "./pages/ExamHistoryPage";
+import MistakeReviewSetupPage from "./pages/MistakeReviewSetupPage";
 
 const queryClient = new QueryClient();
 
@@ -69,6 +70,7 @@ const App = () => (
                     <Route path="/exam-history" element={<ExamHistoryPage />} />
                     <Route path="/exam/session" element={<ExamSessionPage />} />
                     <Route path="/exam/results/:logId" element={<ExamResultsPage />} />
+                    <Route path="/exam/mistakes/:logId/setup" element={<MistakeReviewSetupPage />} />
                     <Route path="/statistics" element={<StatisticsPage />} />
                     {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                     <Route path="*" element={<NotFound />} />

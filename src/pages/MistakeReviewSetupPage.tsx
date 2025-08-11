@@ -1,0 +1,213 @@
+import { useState, useMemo, useEffect } from 'react';
+import { useQuestionBanks } from '@/contexts/QuestionBankContext';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { useNavigate, useParams, Link } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { QuestionBankTreeSelector } from '@/components/QuestionBankTreeSelector';
+import { findMcqById, getAllMcqsFromBank } from '@/lib/question-bank-utils';
+import { getExamLogFromDB } from '@/lib/idb';
+import { McqData, QuestionBankData } from '@/data/questionBanks';
+import Header from '@/components/Header';
+import { toast } from 'sonner';
+import { Loader2, ArrowLeft } from 'lucide-react';
+import { ExamLog } from '@/data/examLogs';
+
+const mistakeReviewSchema = z.object({
+  mcqLimit: z.coerce.number().int().min(1, "Must be at least 1 MCQ."),
+  srsEnabled: z.boolean(),
+  selectedBankIds: z.set(z.string()).min(1, "Please select at least one bank."),
+});
+
+type MistakeReviewFormValues = z.infer<typeof mistakeReviewSchema>;
+
+const MistakeReviewSetupPage = () => {
+  const { logId } = useParams<{ logId: string }>();
+  const { questionBanks } = useQuestionBanks();
+  const navigate = useNavigate();
+  
+  const [examLog, setExamLog] = useState<ExamLog | null>(null);
+  const [incorrectMcqs, setIncorrectMcqs] = useState<McqData[]>([]);
+  const [availableMcqs, setAvailableMcqs] = useState<McqData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const form = useForm<MistakeReviewFormValues>({
+    resolver: zodResolver(mistakeReviewSchema),
+    defaultValues: {
+      mcqLimit: 20,
+      srsEnabled: true,
+      selectedBankIds: new Set(),
+    },
+  });
+
+  const watchedValues = form.watch();
+
+  useEffect(() => {
+    if (logId) {
+      getExamLogFromDB(logId).then(log => {
+        if (log) {
+          setExamLog(log);
+          const mistakes = log.entries
+            .filter(entry => !entry.isCorrect && entry.selectedOptionId !== null)
+            .map(entry => entry.mcq);
+          setIncorrectMcqs(mistakes);
+          
+          const mistakeBankIds = new Set<string>();
+          mistakes.forEach(mcq => {
+            const result = findMcqById(questionBanks, mcq.id);
+            if (result) {
+              mistakeBankIds.add(result.bankId);
+            }
+          });
+          form.setValue('selectedBankIds', mistakeBankIds);
+        }
+        setIsLoading(false);
+      });
+    }
+  }, [logId, questionBanks, form]);
+
+  useEffect(() => {
+    if (incorrectMcqs.length > 0) {
+      const { selectedBankIds } = watchedValues;
+      if (!selectedBankIds || selectedBankIds.size === 0) {
+        setAvailableMcqs([]);
+        return;
+      }
+
+      const allSelectedAndSubBankIds = new Set<string>();
+      const getSubBankIds = (bank: QuestionBankData) => {
+        allSelectedAndSubBankIds.add(bank.id);
+        bank.subBanks?.forEach(getSubBankIds);
+      };
+
+      const traverse = (banks: QuestionBankData[]) => {
+        for (const bank of banks) {
+          if (selectedBankIds.has(bank.id)) {
+            getSubBankIds(bank);
+          } else if (bank.subBanks) {
+            traverse(bank.subBanks);
+          }
+        }
+      };
+      traverse(questionBanks);
+
+      const filtered = incorrectMcqs.filter(mcq => {
+        const result = findMcqById(questionBanks, mcq.id);
+        return result && allSelectedAndSubBankIds.has(result.bankId);
+      });
+      setAvailableMcqs(filtered);
+    }
+  }, [watchedValues.selectedBankIds, incorrectMcqs, questionBanks]);
+
+  const onSubmit = (values: MistakeReviewFormValues) => {
+    if (availableMcqs.length === 0) {
+      toast.error("No incorrect MCQs found in the selected banks.");
+      return;
+    }
+    if (values.mcqLimit > availableMcqs.length) {
+      toast.error(`You requested ${values.mcqLimit} questions, but only ${availableMcqs.length} are available.`);
+      return;
+    }
+
+    const finalQueue = [...availableMcqs]
+      .sort(() => Math.random() - 0.5)
+      .slice(0, values.mcqLimit);
+
+    toast.success(`Starting mistake review with ${finalQueue.length} MCQs.`);
+    navigate('/mcq-practice/custom', {
+      state: {
+        queue: finalQueue,
+        srsEnabled: values.srsEnabled,
+        title: `Reviewing Mistakes: ${examLog?.name}`
+      }
+    });
+  };
+
+  if (isLoading) {
+    return <div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+  }
+
+  if (!examLog) {
+    return <div className="flex items-center justify-center min-h-screen">Exam log not found.</div>;
+  }
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Header />
+      <main className="flex-grow container mx-auto p-4 md:p-8">
+        <Card className="w-full max-w-2xl mx-auto">
+          <CardHeader>
+            <Button asChild variant="ghost" className="mb-4 -ml-4">
+              <Link to="/exam-history"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Exam History</Link>
+            </Button>
+            <CardTitle className="text-2xl">Review Mistakes</CardTitle>
+            <CardDescription>Create a focused practice session from the {incorrectMcqs.length} questions you answered incorrectly in "{examLog.name}".</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+                <FormField
+                  control={form.control}
+                  name="selectedBankIds"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Filter by Question Bank</FormLabel>
+                      <FormControl>
+                        <QuestionBankTreeSelector
+                          banks={questionBanks}
+                          selectedBankIds={field.value}
+                          onSelectionChange={(newIds) => field.onChange(newIds)}
+                        />
+                      </FormControl>
+                      <FormDescription>Select the topics you want to review mistakes from.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="mcqLimit"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-2">
+                        <span>Number of questions</span>
+                        <span className="text-muted-foreground font-normal">
+                          ({availableMcqs.length} available)
+                        </span>
+                      </FormLabel>
+                      <FormControl><Input type="number" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="srsEnabled"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                      <div className="space-y-0.5">
+                        <FormLabel>Enable Spaced Repetition</FormLabel>
+                        <FormDescription>If enabled, your answers will update your SRS data.</FormDescription>
+                      </div>
+                      <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                    </FormItem>
+                  )}
+                />
+                <div className="flex justify-end">
+                  <Button type="submit" size="lg">Start Review</Button>
+                </div>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+      </main>
+    </div>
+  );
+};
+
+export default MistakeReviewSetupPage;
