@@ -217,6 +217,11 @@ const CustomMcqPracticeSetupPage = () => {
         toast.error("No MCQs found matching your criteria.");
         return;
     }
+
+    if (values.mcqLimit > availableMcqCount) {
+      toast.error(`You requested ${values.mcqLimit} questions, but only ${availableMcqCount} are available with the current filters.`);
+      return;
+    }
     
     const loadingToast = toast.loading("Building session...");
     
