@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Settings, Loader2 } from "lucide-react";
+import { PlusCircle, Settings, Loader2, History } from "lucide-react";
 import { useQuestionBanks } from "@/contexts/QuestionBankContext";
-import QuestionBankItem from "@/components/QuestionBankItem";
+import QuestionBankItem from "./QuestionBankItem";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { AddQuestionBankDialog } from "./AddQuestionBankDialog";
 import { DndContext, DragEndEvent, useDroppable } from "@dnd-kit/core";
@@ -67,7 +67,7 @@ const QuestionBankManager = () => {
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <CardTitle className="text-2xl">My Question Banks</CardTitle>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap justify-end">
               {dueMcqCount > 0 && (
                 <Button asChild className="relative">
                   <Link to="/mcq-review/all">
@@ -83,6 +83,12 @@ const QuestionBankManager = () => {
               </Button>
               <Button onClick={() => setIsAddBankOpen(true)}>
                 <PlusCircle className="mr-2 h-4 w-4" /> Add New Bank
+              </Button>
+              <Button variant="ghost" size="icon" asChild>
+                <Link to="/exam-history">
+                  <History className="h-5 w-5" />
+                  <span className="sr-only">Exam History</span>
+                </Link>
               </Button>
               <Button variant="ghost" size="icon" asChild>
                 <Link to="/settings/mcq">
