@@ -498,3 +498,33 @@ export const mergeQuestionBanks = (existingBanks: QuestionBankData[], newBanks: 
 
   return Array.from(bankMap.values());
 };
+
+export const collectMediaFilenamesFromMcqs = (banks: QuestionBankData[]): Set<string> => {
+  const filenames = new Set<string>();
+  const mediaRegex = /src="media:\/\/([^"]+)"/g;
+
+  const searchHtml = (html: string) => {
+    if (!html) return;
+    let match;
+    const localRegex = new RegExp(mediaRegex);
+    while ((match = localRegex.exec(html)) !== null) {
+      filenames.add(match[1]);
+    }
+  };
+
+  const traverse = (currentBanks: QuestionBankData[]) => {
+    for (const bank of currentBanks) {
+      for (const mcq of bank.mcqs) {
+        searchHtml(mcq.question);
+        searchHtml(mcq.explanation);
+        mcq.options.forEach(opt => searchHtml(opt.text));
+      }
+      if (bank.subBanks) {
+        traverse(bank.subBanks);
+      }
+    }
+  };
+
+  traverse(banks);
+  return filenames;
+};

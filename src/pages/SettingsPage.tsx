@@ -38,9 +38,10 @@ import { Progress } from '@/components/ui/progress';
 import { importAnkiTxtFile } from '@/lib/anki-txt-importer';
 import { useQuestionBanks } from '@/contexts/QuestionBankContext';
 import { QuestionBankData, questionBanksSchema } from '@/data/questionBanks';
-import { mergeQuestionBanks, updateMcq } from '@/lib/question-bank-utils';
+import { mergeQuestionBanks, updateMcq, collectMediaFilenamesFromMcqs } from '@/lib/question-bank-utils';
 import { getAllMcqsFromBank } from '@/lib/question-bank-utils';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import JSZip from 'jszip';
 
 const parseSteps = (steps: string): number[] => {
   return steps.trim().split(/\s+/).filter(s => s).map(stepStr => {
@@ -101,36 +102,6 @@ const SettingsPage = () => {
       uInt8Array[i] = raw.charCodeAt(i);
     }
     return new Blob([uInt8Array], { type: contentType });
-  };
-
-  const collectMediaFilenamesFromMcqs = (banks: QuestionBankData[]): Set<string> => {
-    const filenames = new Set<string>();
-    const mediaRegex = /src="media:\/\/([^"]+)"/g;
-  
-    const searchHtml = (html: string) => {
-      if (!html) return;
-      const localRegex = new RegExp(mediaRegex);
-      let match;
-      while ((match = localRegex.exec(html)) !== null) {
-        filenames.add(match[1]);
-      }
-    };
-  
-    const traverse = (currentBanks: QuestionBankData[]) => {
-      for (const bank of currentBanks) {
-        for (const mcq of bank.mcqs) {
-          searchHtml(mcq.question);
-          searchHtml(mcq.explanation);
-          mcq.options.forEach(opt => searchHtml(opt.text));
-        }
-        if (bank.subBanks) {
-          traverse(bank.subBanks);
-        }
-      }
-    };
-  
-    traverse(banks);
-    return filenames;
   };
 
   const onSubmit = async (data: SrsSettings) => {
@@ -354,29 +325,41 @@ const SettingsPage = () => {
   const handleExportMcqs = async () => {
     const toastId = toast.loading("Preparing MCQ export...");
     try {
+      const zip = new JSZip();
+
+      const metadata = {
+        exportDate: new Date().toISOString(),
+        appName: 'Prepigo',
+        appVersion: '1.0.0',
+        format: 'zip-v1'
+      };
+
       const mediaFilenames = collectMediaFilenamesFromMcqs(questionBanks);
-      const mediaToExport: { [key: string]: string } = {};
-  
-      for (const filename of mediaFilenames) {
-        const blob = await getMediaFromDB(filename);
-        if (blob) {
-          const base64 = await blobToBase64(blob);
-          mediaToExport[filename] = base64;
+
+      const exportData = { metadata, questionBanks };
+      zip.file("data.json", JSON.stringify(exportData, null, 2));
+
+      if (mediaFilenames.size > 0) {
+        const mediaFolder = zip.folder("media");
+        if (mediaFolder) {
+          let processed = 0;
+          for (const filename of mediaFilenames) {
+            const blob = await getMediaFromDB(filename);
+            if (blob) {
+              mediaFolder.file(filename, blob);
+            }
+            processed++;
+            toast.loading(`Packaging media... (${processed}/${mediaFilenames.size})`, { id: toastId });
+          }
         }
       }
-  
-      const exportData = {
-        version: 2,
-        questionBanks: questionBanks,
-        media: mediaToExport,
-      };
-  
-      const dataStr = JSON.stringify(exportData, null, 2);
-      const blob = new Blob([dataStr], { type: "application/json" });
-      const downloadUrl = URL.createObjectURL(blob);
+
+      toast.loading("Generating download...", { id: toastId });
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const downloadUrl = URL.createObjectURL(zipBlob);
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.download = `prepigo_mcq_backup_${new Date().toISOString().split('T')[0]}.json`;
+      link.download = `prepigo_mcq_backup_${new Date().toISOString().split('T')[0]}.zip`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -392,8 +375,8 @@ const SettingsPage = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.endsWith('.json')) {
-      showError("Unsupported file type. Please select a .json file for MCQs.");
+    if (!file.name.endsWith('.json') && !file.name.endsWith('.zip')) {
+      showError("Unsupported file type. Please select a .json or .zip file for MCQs.");
       if (mcqFileInputRef.current) mcqFileInputRef.current.value = "";
       return;
     }
@@ -408,27 +391,46 @@ const SettingsPage = () => {
 
     const toastId = toast.loading("Importing MCQs...");
     try {
-        const content = await fileToImportMcq.text();
-        let parsedData;
-        try {
-            parsedData = JSON.parse(content);
-        } catch (jsonError) {
-            throw new Error(`Invalid JSON format. Parser error: ${(jsonError as Error).message}`);
-        }
-        
         let importedBanks: QuestionBankData[];
-        
-        if (parsedData.version === 2 && parsedData.questionBanks && parsedData.media) {
-          toast.loading("Importing media files...", { id: toastId });
-          const mediaMap = parsedData.media as { [key: string]: string };
-          for (const fileName in mediaMap) {
-            const base64Data = mediaMap[fileName];
-            const blob = base64ToBlob(base64Data);
-            await saveSingleMediaToDB(fileName, blob);
-          }
-          importedBanks = parsedData.questionBanks;
-        } else {
-          importedBanks = Array.isArray(parsedData) ? parsedData : parsedData.questionBanks;
+        const fileName = fileToImportMcq.name.toLowerCase();
+
+        if (fileName.endsWith('.zip')) {
+            toast.loading("Unzipping package...", { id: toastId });
+            const zip = await JSZip.loadAsync(fileToImportMcq);
+            const dataFile = zip.file("data.json");
+            if (!dataFile) throw new Error("data.json not found in zip archive.");
+
+            const content = await dataFile.async("string");
+            const parsedData = JSON.parse(content);
+            importedBanks = parsedData.questionBanks;
+
+            const mediaFolder = zip.folder("media");
+            if (mediaFolder) {
+                const mediaFiles = Object.values(mediaFolder.files).filter(f => !f.dir);
+                let processed = 0;
+                for (const file of mediaFiles) {
+                    const blob = await file.async("blob");
+                    await saveSingleMediaToDB(file.name.replace('media/', ''), blob);
+                    processed++;
+                    toast.loading(`Importing media... (${processed}/${mediaFiles.length})`, { id: toastId });
+                }
+            }
+        } else { // Legacy JSON format
+            const content = await fileToImportMcq.text();
+            const parsedData = JSON.parse(content);
+            
+            if (parsedData.version === 2 && parsedData.questionBanks && parsedData.media) {
+              toast.loading("Importing media files...", { id: toastId });
+              const mediaMap = parsedData.media as { [key: string]: string };
+              for (const fileName in mediaMap) {
+                const base64Data = mediaMap[fileName];
+                const blob = base64ToBlob(base64Data);
+                await saveSingleMediaToDB(fileName, blob);
+              }
+              importedBanks = parsedData.questionBanks;
+            } else {
+              importedBanks = Array.isArray(parsedData) ? parsedData : parsedData.questionBanks;
+            }
         }
 
         if (!importedBanks) {
@@ -983,7 +985,7 @@ const SettingsPage = () => {
                         <div className="flex flex-col sm:flex-row gap-2">
                             <Button onClick={handleExportMcqs} variant="outline" type="button" className="flex-1">Export MCQs</Button>
                             <Button asChild variant="outline" type="button" className="flex-1"><Label htmlFor="import-mcq-file" className="cursor-pointer w-full text-center">Import MCQs</Label></Button>
-                            <Input id="import-mcq-file" type="file" className="hidden" onChange={handleMcqFileSelect} accept=".json" ref={mcqFileInputRef} />
+                            <Input id="import-mcq-file" type="file" className="hidden" onChange={handleMcqFileSelect} accept=".json,.zip" ref={mcqFileInputRef} />
                         </div>
                     </div>
                   </div>
