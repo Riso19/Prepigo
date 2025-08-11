@@ -264,6 +264,13 @@ export const calculateLearningCurve = (logs: (ReviewLog | McqReviewLog)[]) => {
 
         let reviewCountSinceLapse = 0;
         for (const log of itemLogs) {
+            // A lapse is when a card in the review state is forgotten.
+            const isLapse = log.state === State.Review && log.rating === Rating.Again;
+            
+            if (isLapse) {
+                reviewCountSinceLapse = 0;
+            }
+
             reviewCountSinceLapse++;
 
             if (reviewCountSinceLapse <= maxReviews) {
@@ -272,10 +279,6 @@ export const calculateLearningCurve = (logs: (ReviewLog | McqReviewLog)[]) => {
                 if (log.rating > Rating.Again) {
                     accuracyByReviewNum[index].correct++;
                 }
-            }
-
-            if (log.rating === Rating.Again) {
-                reviewCountSinceLapse = 0; // Reset for the next review
             }
         }
     });
