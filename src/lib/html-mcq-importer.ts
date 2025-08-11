@@ -21,7 +21,6 @@ const processImages = async (html: string): Promise<string> => {
     const matches = [...html.matchAll(imgRegex)];
 
     for (const match of matches) {
-        const originalSrcWithQuotes = match[0];
         const originalSrc = match[1];
         const blob = base64ToBlob(originalSrc);
         const fileExtension = blob.type.split('/')[1] || 'png';
@@ -105,7 +104,9 @@ export const importHtmlMcqs = async (
         .replace(/<\/p>/g, '<br>') // Replace closing p tags with line breaks
         .replace(/&nbsp;/g, ' '); // Replace non-breaking spaces
 
-    const blocks = cleanedContent.split(/<b>Q\.\d+\)<\/b>/).filter(block => block.trim() !== '');
+    // Split using a positive lookahead to keep the delimiter part of the next block.
+    // This ensures each block starts with the question marker.
+    const blocks = cleanedContent.split(/(?=<b>Q\.\d+\)<\/b>)/).filter(block => block.trim().startsWith('<b>Q.'));
     
     const mcqs: McqData[] = [];
     let processedCount = 0;
@@ -113,7 +114,7 @@ export const importHtmlMcqs = async (
     onProgress({ message: `Found ${blocks.length} potential questions...`, value: 10 });
 
     for (let i = 0; i < blocks.length; i++) {
-        const blockContent = `<b>Q.${i + 1})</b>` + blocks[i];
+        const blockContent = blocks[i];
         const mcq = await parseMcqBlock(blockContent);
         if (mcq) {
             mcqs.push(mcq);
