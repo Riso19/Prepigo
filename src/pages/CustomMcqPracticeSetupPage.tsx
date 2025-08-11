@@ -126,7 +126,7 @@ const CustomMcqPracticeSetupPage = () => {
   useEffect(() => {
     const calculateCount = async () => {
       setIsCalculating(true);
-      const { selectedBankIds, filterType, failedDays, tags, tagFilterType } = watchedValues;
+      const { selectedBankIds, filterType, failedDays, tags, tagFilterType, srsEnabled } = watchedValues;
 
       if (!selectedBankIds || selectedBankIds.size === 0) {
         setAvailableMcqCount(0);
@@ -159,44 +159,46 @@ const CustomMcqPracticeSetupPage = () => {
         });
       }
 
-      const now = new Date();
-      const scheduler = settings.scheduler === 'sm2' ? 'fsrs' : settings.scheduler;
-      switch (filterType) {
-        case 'new':
-          mcqsToFilter = mcqsToFilter.filter(m => {
-            const srsData = scheduler === 'fsrs6' ? m.srs?.fsrs6 : m.srs?.fsrs;
-            return !srsData || srsData.state === State.New;
-          });
-          break;
-        case 'due':
-          mcqsToFilter = mcqsToFilter.filter(m => {
-            const srsData = scheduler === 'fsrs6' ? m.srs?.fsrs6 : m.srs?.fsrs;
-            return !!srsData && new Date(srsData.due) <= now;
-          });
-          break;
-        case 'failed':
-          const days = failedDays || 7;
-          const cutoffDate = new Date();
-          cutoffDate.setDate(now.getDate() - days);
-          const allLogs = await getAllMcqReviewLogsFromDB();
-          const recentFailedMcqIds = new Set<string>();
-          allLogs.forEach(log => {
-            if (new Date(log.review) >= cutoffDate && (log.rating === Rating.Again || log.rating === Rating.Hard)) {
-              recentFailedMcqIds.add(log.mcqId);
-            }
-          });
-          mcqsToFilter = mcqsToFilter.filter(m => recentFailedMcqIds.has(m.id));
-          break;
-        case 'difficulty':
-            const min = watchedValues.filterDifficultyMin || 1;
-            const max = watchedValues.filterDifficultyMax || 10;
+      if (srsEnabled) {
+        const now = new Date();
+        const scheduler = settings.scheduler === 'sm2' ? 'fsrs' : settings.scheduler;
+        switch (filterType) {
+          case 'new':
             mcqsToFilter = mcqsToFilter.filter(m => {
-                const srsData = scheduler === 'fsrs6' ? m.srs?.fsrs6 : m.srs?.fsrs;
-                if (!srsData || srsData.state === State.New) return false;
-                const difficulty = srsData.difficulty;
-                return difficulty >= min && difficulty <= max;
+              const srsData = scheduler === 'fsrs6' ? m.srs?.fsrs6 : m.srs?.fsrs;
+              return !srsData || srsData.state === State.New;
             });
             break;
+          case 'due':
+            mcqsToFilter = mcqsToFilter.filter(m => {
+              const srsData = scheduler === 'fsrs6' ? m.srs?.fsrs6 : m.srs?.fsrs;
+              return !!srsData && new Date(srsData.due) <= now;
+            });
+            break;
+          case 'failed':
+            const days = failedDays || 7;
+            const cutoffDate = new Date();
+            cutoffDate.setDate(now.getDate() - days);
+            const allLogs = await getAllMcqReviewLogsFromDB();
+            const recentFailedMcqIds = new Set<string>();
+            allLogs.forEach(log => {
+              if (new Date(log.review) >= cutoffDate && (log.rating === Rating.Again || log.rating === Rating.Hard)) {
+                recentFailedMcqIds.add(log.mcqId);
+              }
+            });
+            mcqsToFilter = mcqsToFilter.filter(m => recentFailedMcqIds.has(m.id));
+            break;
+          case 'difficulty':
+              const min = watchedValues.filterDifficultyMin || 1;
+              const max = watchedValues.filterDifficultyMax || 10;
+              mcqsToFilter = mcqsToFilter.filter(m => {
+                  const srsData = scheduler === 'fsrs6' ? m.srs?.fsrs6 : m.srs?.fsrs;
+                  if (!srsData || srsData.state === State.New) return false;
+                  const difficulty = srsData.difficulty;
+                  return difficulty >= min && difficulty <= max;
+              });
+              break;
+        }
       }
 
       setAvailableMcqCount(mcqsToFilter.length);
@@ -235,39 +237,41 @@ const CustomMcqPracticeSetupPage = () => {
         });
     }
 
-    const now = new Date();
-    const scheduler = settings.scheduler === 'sm2' ? 'fsrs' : settings.scheduler;
-    switch (values.filterType) {
-        case 'new':
-            filteredMcqs = filteredMcqs.filter(m => {
-                const srsData = scheduler === 'fsrs6' ? m.srs?.fsrs6 : m.srs?.fsrs;
-                return !srsData || srsData.state === State.New;
-            });
-            break;
-        case 'due':
-            filteredMcqs = filteredMcqs.filter(m => {
-                const srsData = scheduler === 'fsrs6' ? m.srs?.fsrs6 : m.srs?.fsrs;
-                return !!srsData && new Date(srsData.due) <= now;
-            });
-            break;
-        case 'failed':
-            const failedDays = values.failedDays || 7;
-            const cutoffDate = new Date();
-            cutoffDate.setDate(now.getDate() - failedDays);
-            const allLogs = await getAllMcqReviewLogsFromDB();
-            const recentFailedMcqIds = new Set<string>(allLogs.filter(log => new Date(log.review) >= cutoffDate && (log.rating === Rating.Again || log.rating === Rating.Hard)).map(log => log.mcqId));
-            filteredMcqs = filteredMcqs.filter(m => recentFailedMcqIds.has(m.id));
-            break;
-        case 'difficulty':
-            const min = values.filterDifficultyMin || 1;
-            const max = values.filterDifficultyMax || 10;
-            filteredMcqs = filteredMcqs.filter(m => {
-                const srsData = scheduler === 'fsrs6' ? m.srs?.fsrs6 : m.srs?.fsrs;
-                if (!srsData || srsData.state === State.New) return false;
-                const difficulty = srsData.difficulty;
-                return difficulty >= min && difficulty <= max;
-            });
-            break;
+    if (values.srsEnabled) {
+      const now = new Date();
+      const scheduler = settings.scheduler === 'sm2' ? 'fsrs' : settings.scheduler;
+      switch (values.filterType) {
+          case 'new':
+              filteredMcqs = filteredMcqs.filter(m => {
+                  const srsData = scheduler === 'fsrs6' ? m.srs?.fsrs6 : m.srs?.fsrs;
+                  return !srsData || srsData.state === State.New;
+              });
+              break;
+          case 'due':
+              filteredMcqs = filteredMcqs.filter(m => {
+                  const srsData = scheduler === 'fsrs6' ? m.srs?.fsrs6 : m.srs?.fsrs;
+                  return !!srsData && new Date(srsData.due) <= now;
+              });
+              break;
+          case 'failed':
+              const failedDays = values.failedDays || 7;
+              const cutoffDate = new Date();
+              cutoffDate.setDate(now.getDate() - failedDays);
+              const allLogs = await getAllMcqReviewLogsFromDB();
+              const recentFailedMcqIds = new Set<string>(allLogs.filter(log => new Date(log.review) >= cutoffDate && (log.rating === Rating.Again || log.rating === Rating.Hard)).map(log => log.mcqId));
+              filteredMcqs = filteredMcqs.filter(m => recentFailedMcqIds.has(m.id));
+              break;
+          case 'difficulty':
+              const min = values.filterDifficultyMin || 1;
+              const max = values.filterDifficultyMax || 10;
+              filteredMcqs = filteredMcqs.filter(m => {
+                  const srsData = scheduler === 'fsrs6' ? m.srs?.fsrs6 : m.srs?.fsrs;
+                  if (!srsData || srsData.state === State.New) return false;
+                  const difficulty = srsData.difficulty;
+                  return difficulty >= min && difficulty <= max;
+              });
+              break;
+      }
     }
 
     switch (values.order) {
