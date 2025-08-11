@@ -1,15 +1,15 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import { useQuestionBanks } from "@/contexts/QuestionBankContext";
 import { findQuestionBankById, getAllMcqsFromBank, updateMcq, getEffectiveMcqSrsSettings } from "@/lib/question-bank-utils";
-import { McqData } from "@/data/questionBanks";
+import { McqData, QuestionBankData } from "@/data/questionBanks";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Home, X, HelpCircle, Clock, Check, Sparkles } from "lucide-react";
 import McqPlayer from "@/components/McqPlayer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { fsrs, createEmptyCard, Card as FsrsCard, Rating } from "ts-fsrs";
+import { fsrs, createEmptyCard, Card as FsrsCard, Rating, State } from "ts-fsrs";
 import { fsrs6, Card as Fsrs6Card, generatorParameters as fsrs6GeneratorParameters } from "@/lib/fsrs6";
 import { addMcqReviewLog, McqReviewLog } from "@/lib/idb";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -48,6 +48,7 @@ const parseSteps = (steps: string): number[] => {
 
 const PracticeMcqPage = () => {
   const { bankId } = useParams<{ bankId: string }>();
+  const location = useLocation();
   const { questionBanks, setQuestionBanks } = useQuestionBanks();
   const navigate = useNavigate();
   const { settings: globalSettings } = useSettings();
@@ -61,6 +62,9 @@ const PracticeMcqPage = () => {
   const [isFinished, setIsFinished] = useState(false);
   const [dueTimeStrings, setDueTimeStrings] = useState<Record<string, string> | null>(null);
   const reviewStartTimeRef = useRef<number | null>(null);
+  
+  const [isSrsEnabled, setIsSrsEnabled] = useState(true);
+  const [customSessionTitle, setCustomSessionTitle] = useState('');
 
   const fsrsInstance = useMemo(() => {
     const settings = getEffectiveMcqSrsSettings(questionBanks, bankId || 'all', globalSettings);
@@ -74,7 +78,7 @@ const PracticeMcqPage = () => {
     return fsrs(settings.mcqFsrsParameters);
   }, [questionBanks, bankId, globalSettings]);
 
-  const bank = useMemo(() => (bankId && bankId !== 'all' ? findQuestionBankById(questionBanks, bankId) : null), [questionBanks, bankId]);
+  const bank = useMemo(() => (bankId && bankId !== 'all' && bankId !== 'custom' ? findQuestionBankById(questionBanks, bankId) : null), [questionBanks, bankId]);
   const currentQuestion = useMemo(() => sessionQueue[currentQuestionIndex], [sessionQueue, currentQuestionIndex]);
 
   useEffect(() => {
@@ -84,17 +88,39 @@ const PracticeMcqPage = () => {
   }, [currentQuestion]);
 
   useEffect(() => {
-    if (!bank && bankId !== 'all') return;
-
-    const banksToPractice = bankId === 'all' ? questionBanks : (bank ? [bank] : []);
-    if (banksToPractice.length > 0) {
-      const allMcqs = banksToPractice.flatMap(b => getAllMcqsFromBank(b));
-      setSessionQueue(shuffle(allMcqs));
+    if (bankId === 'custom' && location.state?.queue) {
+      const { queue, srsEnabled, title } = location.state;
+      setSessionQueue(queue);
+      setIsSrsEnabled(srsEnabled);
+      setCustomSessionTitle(title || 'Custom Practice');
+    } else {
+      setIsSrsEnabled(true); // SRS is always on for regular practice
+      const banksToPractice = bankId === 'all' ? questionBanks : (bank ? [bank] : []);
+      if (banksToPractice.length > 0) {
+        const allMcqs = banksToPractice.flatMap(b => getAllMcqsFromBank(b));
+        setSessionQueue(shuffle(allMcqs));
+      }
     }
-  }, [bankId, bank, questionBanks]);
+  }, [bankId, bank, questionBanks, location.state]);
+
+  const handleNext = useCallback(() => {
+    if (currentQuestionIndex < sessionQueue.length - 1) {
+      setCurrentQuestionIndex(prev => prev + 1);
+      setSelectedOptionId(null);
+      setIsSubmitted(false);
+      setIsAnswerCorrect(null);
+    } else {
+      setIsFinished(true);
+    }
+  }, [currentQuestionIndex, sessionQueue.length]);
 
   const handleGradeAndProceed = useCallback(async (rating: Rating) => {
     if (!currentQuestion) return;
+
+    if (!isSrsEnabled) {
+      handleNext();
+      return;
+    }
 
     const duration = reviewStartTimeRef.current ? Date.now() - reviewStartTimeRef.current : 0;
     const settings = getEffectiveMcqSrsSettings(questionBanks, bankId || 'all', globalSettings);
@@ -147,15 +173,8 @@ const PracticeMcqPage = () => {
     };
     setQuestionBanks(prevBanks => updateMcq(prevBanks, updatedMcq));
 
-    if (currentQuestionIndex < sessionQueue.length - 1) {
-      setCurrentQuestionIndex(prev => prev + 1);
-      setSelectedOptionId(null);
-      setIsSubmitted(false);
-      setIsAnswerCorrect(null);
-    } else {
-      setIsFinished(true);
-    }
-  }, [currentQuestion, currentQuestionIndex, sessionQueue.length, fsrsInstance, setQuestionBanks, bankId, globalSettings]);
+    handleNext();
+  }, [currentQuestion, fsrsInstance, setQuestionBanks, bankId, globalSettings, isSrsEnabled, handleNext]);
 
   const handleSelectAndSubmit = useCallback((optionId: string) => {
     if (isSubmitted) return;
@@ -175,7 +194,7 @@ const PracticeMcqPage = () => {
   }, [isSubmitted, currentQuestion]);
 
   useEffect(() => {
-    if (isSubmitted && currentQuestion && isAnswerCorrect) {
+    if (isSubmitted && currentQuestion && isAnswerCorrect && isSrsEnabled) {
         const settings = getEffectiveMcqSrsSettings(questionBanks, bankId || 'all', globalSettings);
         const srsData = settings.scheduler === 'fsrs6' ? currentQuestion.srs?.fsrs6 : currentQuestion.srs?.fsrs;
         const card: FsrsCard | Fsrs6Card = srsData
@@ -208,7 +227,7 @@ const PracticeMcqPage = () => {
     } else {
         setDueTimeStrings(null);
     }
-  }, [isSubmitted, currentQuestion, fsrsInstance, bankId, questionBanks, globalSettings, isAnswerCorrect]);
+  }, [isSubmitted, currentQuestion, fsrsInstance, bankId, questionBanks, globalSettings, isAnswerCorrect, isSrsEnabled]);
 
   const handleRestart = useCallback(() => {
     setSessionQueue(shuffle(sessionQueue));
@@ -229,7 +248,7 @@ const PracticeMcqPage = () => {
         }
       }
 
-      if (isSubmitted && isAnswerCorrect) {
+      if (isSubmitted && isSrsEnabled && isAnswerCorrect) {
         const ratingMap: { [key: string]: Rating } = {
             '1': Rating.Again, '2': Rating.Hard, '3': Rating.Good, '4': Rating.Easy, '5': Rating.Easy,
         };
@@ -253,9 +272,9 @@ const PracticeMcqPage = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isSubmitted, isAnswerCorrect, currentQuestion, handleSelectAndSubmit, handleGradeAndProceed]);
+  }, [isSubmitted, isAnswerCorrect, currentQuestion, handleSelectAndSubmit, handleGradeAndProceed, isSrsEnabled]);
 
-  const pageTitle = bankId === 'all' ? "Practicing All MCQs" : `Practicing: ${bank?.name}`;
+  const pageTitle = bankId === 'custom' ? customSessionTitle : (bankId === 'all' ? "Practicing All MCQs" : `Practicing: ${bank?.name}`);
 
   if (sessionQueue.length === 0) {
     return (
@@ -325,34 +344,42 @@ const PracticeMcqPage = () => {
       <footer className="sticky bottom-0 w-full bg-secondary/95 backdrop-blur-sm border-t z-20">
         <div className="w-full max-w-2xl mx-auto p-4">
           {isSubmitted ? (
-            isAnswerCorrect ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 md:gap-3">
-                {gradingButtons.map(({ label, tooltip, grade, rating, icon: Icon, color }) => (
-                  <Tooltip key={grade}>
-                    <TooltipTrigger asChild>
-                      <Button
-                        onClick={() => handleGradeAndProceed(rating)}
-                        className={`h-16 text-sm flex-col gap-1 text-white font-bold relative ${color}`}
-                      >
-                        <Icon className="h-4 w-4" />
-                        <span>{label}</span>
-                        {dueTimeStrings && <span className="text-xs font-normal opacity-80">{dueTimeStrings[rating]}</span>}
-                        <span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">{grade}</span>
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>{tooltip}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                ))}
-              </div>
+            isSrsEnabled ? (
+              isAnswerCorrect ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 md:gap-3">
+                  {gradingButtons.map(({ label, tooltip, grade, rating, icon: Icon, color }) => (
+                    <Tooltip key={grade}>
+                      <TooltipTrigger asChild>
+                        <Button
+                          onClick={() => handleGradeAndProceed(rating)}
+                          className={`h-16 text-sm flex-col gap-1 text-white font-bold relative ${color}`}
+                        >
+                          <Icon className="h-4 w-4" />
+                          <span>{label}</span>
+                          {dueTimeStrings && <span className="text-xs font-normal opacity-80">{dueTimeStrings[rating]}</span>}
+                          <span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">{grade}</span>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{tooltip}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  ))}
+                </div>
+              ) : (
+                <div className="h-16 flex items-center justify-center">
+                  <Button
+                    onClick={() => handleGradeAndProceed(Rating.Again)}
+                    className="w-full h-16 text-lg bg-red-500 hover:bg-red-600 text-white font-bold"
+                  >
+                    Continue
+                  </Button>
+                </div>
+              )
             ) : (
               <div className="h-16 flex items-center justify-center">
-                <Button
-                  onClick={() => handleGradeAndProceed(Rating.Again)}
-                  className="w-full h-16 text-lg bg-red-500 hover:bg-red-600 text-white font-bold"
-                >
-                  Continue
+                <Button onClick={() => handleGradeAndProceed(Rating.Good)} className="w-full h-16 text-lg">
+                  Next
                 </Button>
               </div>
             )

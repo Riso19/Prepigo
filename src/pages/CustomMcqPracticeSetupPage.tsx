@@ -289,7 +289,7 @@ const CustomMcqPracticeSetupPage = () => {
         });
     } else {
         toast.success(`Starting session with ${finalQueue.length} MCQs.`, { id: loadingToast });
-        navigate('/mcq-review/custom', {
+        navigate('/mcq-practice/custom', {
             state: { queue: finalQueue, srsEnabled: values.srsEnabled, title: 'Custom Practice Session' }
         });
     }
