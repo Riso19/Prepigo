@@ -79,7 +79,7 @@ const QuestionBankManager = () => {
                 </Button>
               )}
               <Button asChild variant="outline">
-                <Link to="/question-bank/all/practice">Practice Now</Link>
+                <Link to="/mcq-practice/setup">Custom Practice</Link>
               </Button>
               <Button onClick={() => setIsAddBankOpen(true)}>
                 <PlusCircle className="mr-2 h-4 w-4" /> Add New Bank

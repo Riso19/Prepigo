@@ -51,6 +51,7 @@ const parseSteps = (steps: string): number[] => {
 
 const ReviewMcqPage = () => {
   const { bankId } = useParams<{ bankId: string }>();
+  const location = useLocation();
   const { questionBanks, setQuestionBanks, mcqIntroductionsToday, addIntroducedMcq } = useQuestionBanks();
   const navigate = useNavigate();
   const { settings: globalSettings } = useSettings();
@@ -66,6 +67,9 @@ const ReviewMcqPage = () => {
   const [dueTimeStrings, setDueTimeStrings] = useState<Record<string, string> | null>(null);
   const [mcqExamMap, setMcqExamMap] = useState<Map<string, ExamData>>(new Map());
   const reviewStartTimeRef = useRef<number | null>(null);
+
+  const [isSrsEnabled, setIsSrsEnabled] = useState(true);
+  const [customSessionTitle, setCustomSessionTitle] = useState('');
 
   const fsrsInstance = useMemo(() => {
     const settings = getEffectiveMcqSrsSettings(questionBanks, bankId || 'all', globalSettings);
@@ -92,7 +96,14 @@ const ReviewMcqPage = () => {
   }, [currentQuestion]);
 
   useEffect(() => {
-    if (questionBanks.length > 0) {
+    if (bankId === 'custom' && location.state) {
+      const { queue, srsEnabled, title } = location.state;
+      setSessionQueue(queue || []);
+      setIsSrsEnabled(srsEnabled);
+      setCustomSessionTitle(title || 'Custom Practice');
+      setMcqExamMap(new Map());
+    } else if (questionBanks.length > 0) {
+      setIsSrsEnabled(true);
       const banksToReview = bankId && bankId !== 'all' ? [findQuestionBankById(questionBanks, bankId)].filter(Boolean) as QuestionBankData[] : questionBanks;
       if (banksToReview.length > 0) {
         const { queue, mcqExamMap: newMcqExamMap } = buildMcqSessionQueue(banksToReview, questionBanks, globalSettings, mcqIntroductionsToday, exams);
@@ -103,10 +114,26 @@ const ReviewMcqPage = () => {
         setMcqExamMap(new Map());
       }
     }
-  }, [bankId, questionBanks, globalSettings, mcqIntroductionsToday, exams]);
+  }, [bankId, location.state, questionBanks, globalSettings, mcqIntroductionsToday, exams]);
+
+  const handleNext = useCallback(() => {
+    if (currentQuestionIndex < sessionQueue.length - 1) {
+      setCurrentQuestionIndex(prev => prev + 1);
+      setSelectedOptionId(null);
+      setIsSubmitted(false);
+      setIsAnswerCorrect(null);
+    } else {
+      setIsFinished(true);
+    }
+  }, [currentQuestionIndex, sessionQueue.length]);
 
   const handleGradeAndProceed = useCallback(async (rating: Rating) => {
     if (!currentQuestion) return;
+
+    if (!isSrsEnabled) {
+      handleNext();
+      return;
+    }
 
     const duration = reviewStartTimeRef.current ? Date.now() - reviewStartTimeRef.current : 0;
     const settings = getEffectiveMcqSrsSettings(questionBanks, bankId || 'all', globalSettings);
@@ -165,15 +192,8 @@ const ReviewMcqPage = () => {
       addIntroducedMcq(currentQuestion.id);
     }
 
-    if (currentQuestionIndex < sessionQueue.length - 1) {
-      setCurrentQuestionIndex(prev => prev + 1);
-      setSelectedOptionId(null);
-      setIsSubmitted(false);
-      setIsAnswerCorrect(null);
-    } else {
-      setIsFinished(true);
-    }
-  }, [currentQuestion, currentQuestionIndex, sessionQueue.length, fsrsInstance, setQuestionBanks, bankId, globalSettings, addIntroducedMcq]);
+    handleNext();
+  }, [currentQuestion, fsrsInstance, setQuestionBanks, bankId, globalSettings, addIntroducedMcq, isSrsEnabled, handleNext]);
 
   const handleSelectAndSubmit = useCallback((optionId: string) => {
     if (isSubmitted) return;
@@ -277,7 +297,7 @@ const ReviewMcqPage = () => {
     };
   }, [isSubmitted, isAnswerCorrect, currentQuestion, handleSelectAndSubmit, handleGradeAndProceed]);
 
-  const pageTitle = bankId && bankId !== 'all' ? `Reviewing: ${findQuestionBankById(questionBanks, bankId)?.name}` : "Reviewing All Due MCQs";
+  const pageTitle = bankId === 'custom' ? customSessionTitle : (bankId && bankId !== 'all' ? `Reviewing: ${findQuestionBankById(questionBanks, bankId)?.name}` : "Reviewing All Due MCQs");
 
   if (sessionQueue.length === 0 && currentQuestionIndex === 0) {
     return (
@@ -361,34 +381,42 @@ const ReviewMcqPage = () => {
       <footer className="sticky bottom-0 w-full bg-secondary/95 backdrop-blur-sm border-t z-20">
         <div className="w-full max-w-2xl mx-auto p-4">
           {isSubmitted ? (
-            isAnswerCorrect ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 md:gap-3">
-                {gradingButtons.map(({ label, tooltip, grade, rating, icon: Icon, color }) => (
-                  <Tooltip key={grade}>
-                    <TooltipTrigger asChild>
-                      <Button
-                        onClick={() => handleGradeAndProceed(rating)}
-                        className={`h-16 text-sm flex-col gap-1 text-white font-bold relative ${color}`}
-                      >
-                        <Icon className="h-4 w-4" />
-                        <span>{label}</span>
-                        {dueTimeStrings && <span className="text-xs font-normal opacity-80">{dueTimeStrings[rating]}</span>}
-                        <span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">{grade}</span>
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>{tooltip}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                ))}
-              </div>
+            isSrsEnabled ? (
+              isAnswerCorrect ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 md:gap-3">
+                  {gradingButtons.map(({ label, tooltip, grade, rating, icon: Icon, color }) => (
+                    <Tooltip key={grade}>
+                      <TooltipTrigger asChild>
+                        <Button
+                          onClick={() => handleGradeAndProceed(rating)}
+                          className={`h-16 text-sm flex-col gap-1 text-white font-bold relative ${color}`}
+                        >
+                          <Icon className="h-4 w-4" />
+                          <span>{label}</span>
+                          {dueTimeStrings && <span className="text-xs font-normal opacity-80">{dueTimeStrings[rating]}</span>}
+                          <span className="absolute bottom-1 right-1 text-xs p-1 bg-black/20 rounded-sm">{grade}</span>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{tooltip}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  ))}
+                </div>
+              ) : (
+                <div className="h-16 flex items-center justify-center">
+                  <Button
+                    onClick={() => handleGradeAndProceed(Rating.Again)}
+                    className="w-full h-16 text-lg bg-red-500 hover:bg-red-600 text-white font-bold"
+                  >
+                    Continue
+                  </Button>
+                </div>
+              )
             ) : (
               <div className="h-16 flex items-center justify-center">
-                <Button
-                  onClick={() => handleGradeAndProceed(Rating.Again)}
-                  className="w-full h-16 text-lg bg-red-500 hover:bg-red-600 text-white font-bold"
-                >
-                  Continue
+                <Button onClick={() => handleGradeAndProceed(Rating.Good)} className="w-full h-16 text-lg">
+                  Next
                 </Button>
               </div>
             )
