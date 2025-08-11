@@ -11,7 +11,7 @@ import Header from '@/components/Header';
 import { useSettings, SrsSettings, clearSettingsDB, srsSettingsSchema } from '@/contexts/SettingsContext';
 import { showSuccess, showError } from '@/utils/toast';
 import { Separator } from '@/components/ui/separator';
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState } from 'react';
 import { useDecks } from '@/contexts/DecksContext';
 import { DeckData, decksSchema, FlashcardData } from '@/data/decks';
 import { clearDecksDB, getReviewLogsForCard, saveMediaToDB, clearMediaDB, clearQuestionBanksDB, clearMcqReviewLogsDB, getMediaFromDB, saveSingleMediaToDB, getReviewLogsForMcq } from '@/lib/idb';
@@ -54,6 +54,18 @@ const parseSteps = (steps: string): number[] => {
   });
 };
 
+const base64ToBlob = (base64: string): Blob => {
+  const parts = base64.split(';base64,');
+  const contentType = parts[0].split(':')[1];
+  const raw = window.atob(parts[1]);
+  const rawLength = raw.length;
+  const uInt8Array = new Uint8Array(rawLength);
+  for (let i = 0; i < rawLength; ++i) {
+    uInt8Array[i] = raw.charCodeAt(i);
+  }
+  return new Blob([uInt8Array], { type: contentType });
+};
+
 const SettingsPage = () => {
   const { settings, setSettings, isLoading } = useSettings();
   const { decks, setDecks } = useDecks();
@@ -82,18 +94,6 @@ const SettingsPage = () => {
   });
 
   const scheduler = form.watch('scheduler');
-
-  const base64ToBlob = (base64: string): Blob => {
-    const parts = base64.split(';base64,');
-    const contentType = parts[0].split(':')[1];
-    const raw = window.atob(parts[1]);
-    const rawLength = raw.length;
-    const uInt8Array = new Uint8Array(rawLength);
-    for (let i = 0; i < rawLength; ++i) {
-      uInt8Array[i] = raw.charCodeAt(i);
-    }
-    return new Blob([uInt8Array], { type: contentType });
-  };
 
   const onSubmit = async (data: SrsSettings) => {
     const oldScheduler = settings.scheduler;
