@@ -414,6 +414,13 @@ export const buildSessionQueue = (
   const examPriorityNew: FlashcardData[] = [];
   const examPriorityCardIds = new Set<string>();
 
+  const getDueDate = (card: FlashcardData): Date | null => {
+    if (!card.srs) return null;
+    const dueDateString = card.srs.fsrs?.due || card.srs.fsrs6?.due || card.srs.sm2?.due;
+    if (!dueDateString) return null;
+    return new Date(dueDateString);
+  };
+
   const isTrulyNew = (card: FlashcardData, s: SrsSettings) => {
     if (card.srs?.isSuspended) return false;
     if (s.scheduler === 'sm2') return !card.srs?.sm2 || card.srs.sm2.state === 'new' || !card.srs.sm2.state;
@@ -596,14 +603,30 @@ export const buildSessionQueue = (
         const examOrder = examSort(a, b);
         if (examOrder !== 0) return examOrder;
     }
-    return new Date(a.srs!.fsrs?.due || a.srs!.sm2!.due).getTime() - new Date(b.srs!.fsrs?.due || b.srs!.sm2!.due).getTime();
+    const dueDateA = getDueDate(a);
+    const dueDateB = getDueDate(b);
+    if (dueDateA && dueDateB) {
+        return dueDateA.getTime() - dueDateB.getTime();
+    }
+    if (dueDateA) return -1;
+    if (dueDateB) return 1;
+    return 0;
   });
 
   if (globalSettings.reviewSortOrder === 'dueDateRandom' && !(exams && exams.length > 0)) {
     sortedReviews = shuffle(sortedReviews);
   }
 
-  const learningCombined = [...new Set(sessionLearning)].sort((a, b) => new Date(a.srs!.fsrs?.due || a.srs!.sm2!.due).getTime() - new Date(b.srs!.fsrs?.due || b.srs!.sm2!.due).getTime());
+  const learningCombined = [...new Set(sessionLearning)].sort((a, b) => {
+    const dueDateA = getDueDate(a);
+    const dueDateB = getDueDate(b);
+    if (dueDateA && dueDateB) {
+        return dueDateA.getTime() - dueDateB.getTime();
+    }
+    if (dueDateA) return -1;
+    if (dueDateB) return 1;
+    return 0;
+  });
 
   const finalWithNew = globalSettings.newReviewOrder === 'mix' ? shuffle([...sortedReviews, ...sortedNew]) :
                        globalSettings.newReviewOrder === 'after' ? [...sortedReviews, ...sortedNew] :
