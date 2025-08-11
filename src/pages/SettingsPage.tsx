@@ -11,7 +11,7 @@ import Header from '@/components/Header';
 import { useSettings, SrsSettings, clearSettingsDB, srsSettingsSchema } from '@/contexts/SettingsContext';
 import { showSuccess, showError } from '@/utils/toast';
 import { Separator } from '@/components/ui/separator';
-import { useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useDecks } from '@/contexts/DecksContext';
 import { DeckData, decksSchema, FlashcardData } from '@/data/decks';
 import { clearDecksDB, getReviewLogsForCard, saveMediaToDB, clearMediaDB, clearQuestionBanksDB, clearMcqReviewLogsDB, getMediaFromDB, saveSingleMediaToDB, getReviewLogsForMcq } from '@/lib/idb';
@@ -42,6 +42,7 @@ import { mergeQuestionBanks, updateMcq, collectMediaFilenamesFromMcqs } from '@/
 import { getAllMcqsFromBank } from '@/lib/question-bank-utils';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import JSZip from 'jszip';
+import * as z from 'zod';
 
 const parseSteps = (steps: string): number[] => {
   return steps.trim().split(/\s+/).filter(s => s).map(stepStr => {
@@ -381,78 +382,115 @@ const SettingsPage = () => {
     setIsMcqImportAlertOpen(false);
 
     const toastId = toast.loading("Importing MCQs...");
+
+    const cleanup = () => {
+      setFileToImportMcq(null);
+      if (mcqFileInputRef.current) mcqFileInputRef.current.value = "";
+      setReplaceOnMcqImport(false);
+    };
+
     try {
-        let importedBanks: QuestionBankData[];
-        const fileName = fileToImportMcq.name.toLowerCase();
+      let importedBanks: QuestionBankData[];
+      const fileName = fileToImportMcq.name.toLowerCase();
 
-        if (fileName.endsWith('.zip')) {
-            toast.loading("Unzipping package...", { id: toastId });
-            const zip = await JSZip.loadAsync(fileToImportMcq);
-            const dataFile = zip.file("data.json");
-            if (!dataFile) throw new Error("data.json not found in zip archive.");
+      if (fileName.endsWith('.zip')) {
+        toast.loading("Unzipping package...", { id: toastId });
+        const zip = await JSZip.loadAsync(fileToImportMcq);
+        const dataFile = zip.file("data.json");
+        if (!dataFile) throw new Error("data.json not found in zip archive.");
 
-            const content = await dataFile.async("string");
-            const parsedData = JSON.parse(content);
+        const content = await dataFile.async("string");
+        const parsedData = JSON.parse(content);
+        
+        if (parsedData.metadata && parsedData.questionBanks) {
             importedBanks = parsedData.questionBanks;
-
-            const mediaFolder = zip.folder("media");
-            if (mediaFolder) {
-                const mediaFiles = Object.values(mediaFolder.files).filter(f => !f.dir);
-                let processed = 0;
-                for (const file of mediaFiles) {
-                    const blob = await file.async("blob");
-                    await saveSingleMediaToDB(file.name.replace('media/', ''), blob);
-                    processed++;
-                    toast.loading(`Importing media... (${processed}/${mediaFiles.length})`, { id: toastId });
-                }
-            }
-        } else { // Legacy JSON format
-            const content = await fileToImportMcq.text();
-            const parsedData = JSON.parse(content);
-            
-            if (parsedData.version === 2 && parsedData.questionBanks && parsedData.media) {
-              toast.loading("Importing media files...", { id: toastId });
-              const mediaMap = parsedData.media as { [key: string]: string };
-              for (const fileName in mediaMap) {
-                const base64Data = mediaMap[fileName];
-                const blob = base64ToBlob(base64Data);
-                await saveSingleMediaToDB(fileName, blob);
-              }
-              importedBanks = parsedData.questionBanks;
-            } else {
-              importedBanks = Array.isArray(parsedData) ? parsedData : parsedData.questionBanks;
-            }
-        }
-
-        if (!importedBanks) {
-            throw new Error("Could not find question bank data in the file.");
-        }
-
-        const validation = questionBanksSchema.safeParse(importedBanks);
-        if (!validation.success) {
-            const errorDetails = validation.error.flatten().formErrors.join(', ');
-            console.error("MCQ JSON validation failed:", validation.error.flatten());
-            throw new Error(`Backup file has incorrect data structure. Details: ${errorDetails}`);
-        }
-        
-        const validBanks = validation.data;
-
-        toast.loading("Saving question banks...", { id: toastId });
-        if (replaceOnMcqImport) {
-            setQuestionBanks(validBanks);
         } else {
-            setQuestionBanks(prevBanks => mergeQuestionBanks(prevBanks, validBanks));
+            importedBanks = parsedData;
         }
+
+        const mediaFolder = zip.folder("media");
+        if (mediaFolder) {
+          const mediaFiles = Object.values(mediaFolder.files).filter(f => !f.dir);
+          let processed = 0;
+          for (const file of mediaFiles) {
+            const blob = await file.async("blob");
+            await saveSingleMediaToDB(file.name.replace('media/', ''), blob);
+            processed++;
+            toast.loading(`Importing media... (${processed}/${mediaFiles.length})`, { id: toastId });
+          }
+        }
+      } else { // Legacy JSON format
+        const content = await fileToImportMcq.text();
+        const parsedData = JSON.parse(content);
         
-        toast.success("MCQ data imported successfully!", { id: toastId });
+        if (parsedData.version === 2 && parsedData.questionBanks && parsedData.media) {
+          toast.loading("Importing media files...", { id: toastId });
+          const mediaMap = parsedData.media as { [key: string]: string };
+          for (const fileName in mediaMap) {
+            const base64Data = mediaMap[fileName];
+            const blob = base64ToBlob(base64Data);
+            await saveSingleMediaToDB(fileName, blob);
+          }
+          importedBanks = parsedData.questionBanks;
+        } else {
+          importedBanks = Array.isArray(parsedData) ? parsedData : parsedData.questionBanks;
+        }
+      }
+
+      if (!importedBanks) {
+        throw new Error("Could not find question bank data in the file.");
+      }
+
+      const validation = questionBanksSchema.safeParse(importedBanks);
+      if (!validation.success) {
+        console.error("MCQ JSON validation failed:", validation.error.issues);
+        
+        const formatZodErrorForToast = (error: z.ZodError): React.ReactNode => {
+            const issues = error.issues;
+            if (issues.length === 0) return "Unknown validation error.";
+
+            const issueMessages = issues.slice(0, 5).map((issue, index) => {
+                const path = issue.path.map(p => (typeof p === 'number' ? `[${p}]` : p)).join('.');
+                return (
+                    <div key={index} className="text-xs font-mono">
+                        <span className="font-semibold text-destructive-foreground">{path || 'Root'}:</span> <span className="text-destructive-foreground/80">{issue.message}</span>
+                    </div>
+                );
+            });
+
+            return (
+                <div className="flex flex-col gap-2 text-left">
+                    <p className="font-bold">Import Failed: Invalid Data Structure</p>
+                    <p className="text-sm opacity-80">Please check the file structure and try again. See the guide for more details.</p>
+                    <div className="mt-2 p-2 bg-destructive/80 text-destructive-foreground rounded-md space-y-1 max-h-40 overflow-y-auto">
+                        {issueMessages}
+                        {issues.length > 5 && <p className="text-xs italic">...and {issues.length - 5} more issues.</p>}
+                    </div>
+                </div>
+            );
+        };
+
+        toast.error(formatZodErrorForToast(validation.error), { id: toastId, duration: 20000 });
+        cleanup();
+        return;
+      }
+      
+      const validBanks = validation.data;
+
+      toast.loading("Saving question banks...", { id: toastId });
+      if (replaceOnMcqImport) {
+        setQuestionBanks(validBanks);
+      } else {
+        setQuestionBanks(prevBanks => mergeQuestionBanks(prevBanks, validBanks));
+      }
+      
+      toast.success("MCQ data imported successfully!", { id: toastId });
     } catch (error) {
-        const err = error as Error;
-        console.error("MCQ Import Error:", err);
-        toast.error(`MCQ import failed: ${err.message}`, { id: toastId, duration: 15000 });
+      const err = error as Error;
+      console.error("MCQ Import Error:", err);
+      toast.error(`MCQ import failed: ${err.message}`, { id: toastId, duration: 15000 });
     } finally {
-        setFileToImportMcq(null);
-        if (mcqFileInputRef.current) mcqFileInputRef.current.value = "";
-        setReplaceOnMcqImport(false);
+      cleanup();
     }
   };
 
