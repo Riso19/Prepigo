@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, useCallback, KeyboardEvent, ChangeEvent } from 'react';
 import { Button } from '@/components/ui/button';
-import { Bold, Italic, Subscript, Superscript, Image as ImageIcon, Link as LinkIcon, Loader2, Underline, List, ListOrdered, Palette } from 'lucide-react';
+import { Bold, Italic, Subscript, Superscript, Image as ImageIcon, Link as LinkIcon, Loader2, Underline, List, ListOrdered, Palette, Table } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useResolvedHtml, unresolveMediaHtml } from '@/hooks/use-resolved-html';
 import { saveSingleMediaToDB } from '@/lib/idb';
@@ -49,6 +49,14 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
     }, 0);
   }, []);
 
+  const handleInput = () => {
+    if (editorRef.current) {
+      const rawHtml = editorRef.current.innerHTML;
+      const originalUrlHtml = unresolveMediaHtml(rawHtml);
+      onChange(originalUrlHtml);
+    }
+  };
+
   const handleFormat = (command: 'bold' | 'italic' | 'underline' | 'subscript' | 'superscript' | 'insertUnorderedList' | 'insertOrderedList') => {
     if (command === 'subscript' || command === 'superscript') {
       const otherCommand = command === 'subscript' ? 'superscript' : 'subscript';
@@ -60,9 +68,7 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
     document.execCommand(command, false);
 
     if (editorRef.current) {
-      const rawHtml = editorRef.current.innerHTML;
-      const originalUrlHtml = unresolveMediaHtml(rawHtml);
-      onChange(originalUrlHtml);
+      handleInput();
       editorRef.current.focus();
       updateToolbar();
     }
@@ -72,20 +78,36 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
     document.execCommand('styleWithCSS', false, 'true');
     document.execCommand('foreColor', false, color);
     if (editorRef.current) {
-      const rawHtml = editorRef.current.innerHTML;
-      const originalUrlHtml = unresolveMediaHtml(rawHtml);
-      onChange(originalUrlHtml);
+      handleInput();
       editorRef.current.focus();
       updateToolbar();
     }
   };
 
-  const handleInput = () => {
-    if (editorRef.current) {
-      const rawHtml = editorRef.current.innerHTML;
-      const originalUrlHtml = unresolveMediaHtml(rawHtml);
-      onChange(originalUrlHtml);
-    }
+  const handleInsertTable = () => {
+    const tableHtml = `
+      <table style="width:100%; border-collapse: collapse;">
+        <thead>
+          <tr>
+            <th style="border: 1px solid; padding: 8px;">Header 1</th>
+            <th style="border: 1px solid; padding: 8px;">Header 2</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="border: 1px solid; padding: 8px;">Cell 1</td>
+            <td style="border: 1px solid; padding: 8px;">Cell 2</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid; padding: 8px;">Cell 3</td>
+            <td style="border: 1px solid; padding: 8px;">Cell 4</td>
+          </tr>
+        </tbody>
+      </table>
+      <p><br></p>
+    `;
+    document.execCommand('insertHTML', false, tableHtml);
+    handleInput();
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -175,6 +197,7 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
         <Separator orientation="vertical" className="h-6 mx-1" />
         <Button variant="ghost" size="icon" className={cn(isUl && activeClass)} onMouseDown={(e) => { e.preventDefault(); handleFormat('insertUnorderedList'); }} aria-pressed={isUl} title="Bulleted List"><List className="h-4 w-4" /></Button>
         <Button variant="ghost" size="icon" className={cn(isOl && activeClass)} onMouseDown={(e) => { e.preventDefault(); handleFormat('insertOrderedList'); }} aria-pressed={isOl} title="Numbered List"><ListOrdered className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" onMouseDown={(e) => { e.preventDefault(); handleInsertTable(); }} title="Insert Table"><Table className="h-4 w-4" /></Button>
         <Separator orientation="vertical" className="h-6 mx-1" />
         <Popover>
           <PopoverTrigger asChild>
