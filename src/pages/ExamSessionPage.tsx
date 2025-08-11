@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { McqData } from '@/data/questionBanks';
 import { ExamLog, ExamLogEntry } from '@/data/examLogs';
-import { saveExamLogToDB } from '@/lib/idb';
+import { addMcqReviewLog, McqReviewLog, saveExamLogToDB } from '@/lib/idb';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -13,6 +13,22 @@ import { toast } from 'sonner';
 import { PauseOverlay } from '@/components/PauseOverlay';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ExamTracker } from '@/components/ExamTracker';
+import { useQuestionBanks } from '@/contexts/QuestionBankContext';
+import { useSettings } from '@/contexts/SettingsContext';
+import { getEffectiveMcqSrsSettings, updateMcq } from '@/lib/question-bank-utils';
+import { fsrs, createEmptyCard, Card as FsrsCard, Rating, State } from "ts-fsrs";
+import { fsrs6, Card as Fsrs6Card, generatorParameters as fsrs6GeneratorParameters } from "@/lib/fsrs6";
+
+const parseSteps = (steps: string): number[] => {
+  return steps.trim().split(/\s+/).filter(s => s).map(stepStr => {
+    const value = parseFloat(stepStr);
+    if (isNaN(value)) return 1;
+    if (stepStr.endsWith('d')) return value * 24 * 60;
+    if (stepStr.endsWith('h')) return value * 60;
+    if (stepStr.endsWith('s')) return Math.max(1, value / 60);
+    return value;
+  });
+};
 
 const ReviewGrid = ({
   queue,
@@ -27,7 +43,7 @@ const ReviewGrid = ({
   onNavigate: (index: number) => void;
   onSubmit: () => void;
 }) => {
-  const answeredCount = Object.keys(answers).length;
+  const answeredCount = Object.values(answers).filter(a => a !== null).length;
   const unansweredCount = queue.length - answeredCount;
   const markedCount = marked.size;
 
@@ -71,7 +87,9 @@ const ReviewGrid = ({
 const ExamSessionPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { queue, examSettings } = location.state || {};
+  const { queue, examSettings, srsEnabled } = location.state || {};
+  const { questionBanks, setQuestionBanks } = useQuestionBanks();
+  const { settings: globalSettings } = useSettings();
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string | null>>({});
@@ -81,6 +99,19 @@ const ExamSessionPage = () => {
   const [isPaused, setIsPaused] = useState(false);
   const [isReviewScreen, setIsReviewScreen] = useState(false);
 
+  const fsrsInstance = useMemo(() => {
+    if (!examSettings) return null;
+    const settings = getEffectiveMcqSrsSettings(questionBanks, 'all', globalSettings);
+    if (settings.scheduler === 'fsrs6') {
+      const steps = {
+        learning: parseSteps(settings.learningSteps),
+        relearning: parseSteps(settings.relearningSteps),
+      };
+      return fsrs6(fsrs6GeneratorParameters(settings.mcqFsrs6Parameters), steps);
+    }
+    return fsrs(settings.mcqFsrsParameters);
+  }, [questionBanks, globalSettings, examSettings]);
+
   useEffect(() => {
     if (!queue || !examSettings) {
       toast.error("Could not start exam. Invalid settings.");
@@ -89,7 +120,7 @@ const ExamSessionPage = () => {
   }, [queue, examSettings, navigate]);
 
   useEffect(() => {
-    if (isPaused) return;
+    if (isPaused || isReviewScreen) return;
     const timer = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
@@ -101,7 +132,7 @@ const ExamSessionPage = () => {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [isPaused]);
+  }, [isPaused, isReviewScreen]);
 
   const handleSelectOption = (optionId: string) => {
     setAnswers(prev => ({ ...prev, [currentQuestionIndex]: optionId }));
@@ -129,7 +160,7 @@ const ExamSessionPage = () => {
     setIsReviewScreen(false);
   };
 
-  const handleSubmit = useCallback((isTimeUp = false) => {
+  const handleSubmit = useCallback(async (isTimeUp = false) => {
     const timeTaken = (examSettings.timeLimit * 60) - timeLeft;
     let correctCount = 0;
     let incorrectCount = 0;
@@ -154,32 +185,65 @@ const ExamSessionPage = () => {
       return { mcq, selectedOptionId, isCorrect, status };
     });
 
+    if (srsEnabled && fsrsInstance) {
+      const settings = getEffectiveMcqSrsSettings(questionBanks, 'all', globalSettings);
+      let updatedBanks = questionBanks;
+
+      for (const entry of entries) {
+        if (entry.status === 'answered') {
+          const rating = entry.isCorrect ? Rating.Good : Rating.Again;
+          const mcq = entry.mcq;
+          
+          const srsData = settings.scheduler === 'fsrs6' ? mcq.srs?.fsrs6 : mcq.srs?.fsrs;
+          const card: FsrsCard | Fsrs6Card = srsData
+            ? {
+                due: new Date(srsData.due), stability: srsData.stability, difficulty: srsData.difficulty,
+                elapsed_days: srsData.elapsed_days, scheduled_days: srsData.scheduled_days, reps: srsData.reps,
+                lapses: srsData.lapses, state: srsData.state, last_review: srsData.last_review ? new Date(srsData.last_review) : undefined,
+                learning_steps: srsData.learning_steps ?? 0,
+              }
+            : createEmptyCard(new Date());
+
+          const schedulingResult = fsrsInstance.repeat(card, new Date());
+          const nextState = schedulingResult[rating];
+
+          const logToSave: McqReviewLog = {
+            mcqId: mcq.id, rating: nextState.log.rating, state: nextState.log.state, due: nextState.log.due.toISOString(),
+            stability: nextState.log.stability, difficulty: nextState.log.difficulty, elapsed_days: nextState.log.elapsed_days,
+            last_elapsed_days: nextState.log.last_elapsed_days, scheduled_days: nextState.log.scheduled_days,
+            review: nextState.log.review.toISOString(), duration: 0,
+          };
+          await addMcqReviewLog(logToSave);
+
+          const updatedSrsData = { ...nextState.card, due: nextState.card.due.toISOString(), last_review: nextState.card.last_review?.toISOString() };
+          const updatedMcq: McqData = { ...mcq, srs: { ...mcq.srs, ...(settings.scheduler === 'fsrs6' ? { fsrs6: updatedSrsData } : { fsrs: updatedSrsData }) } };
+          updatedBanks = updateMcq(updatedBanks, updatedMcq);
+        }
+      }
+      setQuestionBanks(updatedBanks);
+    }
+
     const score = (correctCount * examSettings.marksPerCorrect) - (incorrectCount * examSettings.negativeMarksPerWrong);
 
     const examLog: ExamLog = {
-      id: `examlog-${Date.now()}`,
-      name: examSettings.name,
-      date: new Date().toISOString(),
+      id: `examlog-${Date.now()}`, name: examSettings.name, date: new Date().toISOString(),
       settings: {
-        timeLimit: examSettings.timeLimit,
-        totalQuestions: queue.length,
-        marksPerCorrect: examSettings.marksPerCorrect,
-        negativeMarksPerWrong: examSettings.negativeMarksPerWrong,
+        timeLimit: examSettings.timeLimit, totalQuestions: queue.length,
+        marksPerCorrect: examSettings.marksPerCorrect, negativeMarksPerWrong: examSettings.negativeMarksPerWrong,
       },
       results: { score, correctCount, incorrectCount, skippedCount, timeTaken },
       entries,
     };
 
-    saveExamLogToDB(examLog).then(() => {
-      if (isTimeUp) toast.info("Time's up! Your exam has been submitted.");
-      navigate(`/exam/results/${examLog.id}`);
-    });
-  }, [answers, marked, queue, examSettings, timeLeft, navigate]);
+    await saveExamLogToDB(examLog);
+    if (isTimeUp) toast.info("Time's up! Your exam has been submitted.");
+    navigate(`/exam/results/${examLog.id}`);
+  }, [answers, marked, queue, examSettings, timeLeft, navigate, srsEnabled, questionBanks, globalSettings, fsrsInstance, setQuestionBanks]);
 
   if (!queue || !examSettings) return null;
 
   const currentQuestion = queue[currentQuestionIndex];
-  const answeredCount = Object.keys(answers).filter(k => answers[parseInt(k)] !== null).length;
+  const answeredCount = Object.values(answers).filter(a => a !== null).length;
 
   return (
     <div className="min-h-screen flex flex-col relative">

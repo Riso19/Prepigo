@@ -278,7 +278,8 @@ const CustomMcqPracticeSetupPage = () => {
         toast.success(`Starting exam with ${finalQueue.length} questions.`, { id: loadingToast });
         navigate('/exam/session', {
             state: { 
-                queue: finalQueue, 
+                queue: finalQueue,
+                srsEnabled: values.srsEnabled,
                 examSettings: {
                     name: values.examName,
                     timeLimit: values.timeLimit,
@@ -503,17 +504,19 @@ const CustomMcqPracticeSetupPage = () => {
                     )} />
                 </div>
 
-                {!isExamMode && (
-                  <FormField control={form.control} name="srsEnabled" render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                          <div className="space-y-0.5">
-                              <FormLabel>Enable Spaced Repetition</FormLabel>
-                              <FormDescription>If disabled, your answers won't be graded or affect scheduling.</FormDescription>
-                          </div>
-                          <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-                      </FormItem>
-                  )} />
-                )}
+                <FormField control={form.control} name="srsEnabled" render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                        <div className="space-y-0.5">
+                            <FormLabel>Enable Spaced Repetition</FormLabel>
+                            <FormDescription>
+                              {isExamMode 
+                                ? "If enabled, your exam answers will update your SRS data." 
+                                : "If disabled, your answers won't be graded or affect scheduling."}
+                            </FormDescription>
+                        </div>
+                        <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                    </FormItem>
+                )} />
 
                 <div className="flex justify-end">
                     <Button type="submit" size="lg">
