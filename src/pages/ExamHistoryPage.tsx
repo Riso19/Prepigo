@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
 import { History } from 'lucide-react';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 
 const ExamHistoryPage = () => {
   const [examLogs, setExamLogs] = useState<ExamLog[]>([]);
@@ -44,36 +45,39 @@ const ExamHistoryPage = () => {
           </CardHeader>
           <CardContent>
             {examLogs.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Exam Name</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Score</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {examLogs.map(log => {
-                    const totalMarks = log.settings.totalQuestions * log.settings.marksPerCorrect;
-                    const percentage = totalMarks > 0 ? (log.results.score / totalMarks) * 100 : 0;
-                    return (
-                      <TableRow key={log.id}>
-                        <TableCell className="font-medium">{log.name}</TableCell>
-                        <TableCell>{format(new Date(log.date), 'PPP p')}</TableCell>
-                        <TableCell>{log.results.score.toFixed(2)} / {totalMarks} ({percentage.toFixed(1)}%)</TableCell>
-                        <TableCell className="text-right">
-                          <Button asChild variant="ghost" size="sm">
-                            <Link to={`/exam/results/${log.id}`}>
-                              View Results
-                            </Link>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+              <ScrollArea className="w-full whitespace-nowrap rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Exam Name</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Score</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {examLogs.map(log => {
+                      const totalMarks = log.settings.totalQuestions * log.settings.marksPerCorrect;
+                      const percentage = totalMarks > 0 ? (log.results.score / totalMarks) * 100 : 0;
+                      return (
+                        <TableRow key={log.id} className="text-xs sm:text-sm">
+                          <TableCell className="font-medium">{log.name}</TableCell>
+                          <TableCell>{format(new Date(log.date), 'PPP p')}</TableCell>
+                          <TableCell>{log.results.score.toFixed(2)} / {totalMarks} ({percentage.toFixed(1)}%)</TableCell>
+                          <TableCell className="text-right">
+                            <Button asChild variant="ghost" size="sm">
+                              <Link to={`/exam/results/${log.id}`}>
+                                View Results
+                              </Link>
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+                <ScrollBar orientation="horizontal" />
+              </ScrollArea>
             ) : (
               <div className="text-center py-12 text-muted-foreground">
                 <p>You haven't completed any exams yet.</p>

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ArrowLeft } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 
 const CodeBlock = ({ code, className }: { code: string; className?: string }) => (
   <pre className={`bg-muted text-muted-foreground p-4 rounded-md overflow-x-auto text-sm ${className}`}>
@@ -148,27 +149,33 @@ my_question_bank.zip
               <p>The `data.json` file must be a JSON array of `QuestionBankData` objects.</p>
               
               <h4 className="font-medium">`QuestionBankData` Object</h4>
-              <Table>
-                <TableHeader><TableRow><TableHead>Field</TableHead><TableHead>Type</TableHead><TableHead>Description</TableHead></TableRow></TableHeader>
-                <TableBody>
-                  <TableRow><TableCell>`id`</TableCell><TableCell>String</TableCell><TableCell>A unique ID for the bank (e.g., `qb-12345`).</TableCell></TableRow>
-                  <TableRow><TableCell>`name`</TableCell><TableCell>String</TableCell><TableCell>The name of the question bank.</TableCell></TableRow>
-                  <TableRow><TableCell>`mcqs`</TableCell><TableCell>Array</TableCell><TableCell>An array of `McqData` objects.</TableCell></TableRow>
-                  <TableRow><TableCell>`subBanks`</TableCell><TableCell>Array</TableCell><TableCell>An array of nested `QuestionBankData` objects for hierarchy.</TableCell></TableRow>
-                </TableBody>
-              </Table>
+              <ScrollArea className="w-full whitespace-nowrap rounded-md border">
+                <Table>
+                  <TableHeader><TableRow><TableHead>Field</TableHead><TableHead>Type</TableHead><TableHead>Description</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    <TableRow className="text-xs sm:text-sm"><TableCell>`id`</TableCell><TableCell>String</TableCell><TableCell>A unique ID for the bank (e.g., `qb-12345`).</TableCell></TableRow>
+                    <TableRow className="text-xs sm:text-sm"><TableCell>`name`</TableCell><TableCell>String</TableCell><TableCell>The name of the question bank.</TableCell></TableRow>
+                    <TableRow className="text-xs sm:text-sm"><TableCell>`mcqs`</TableCell><TableCell>Array</TableCell><TableCell>An array of `McqData` objects.</TableCell></TableRow>
+                    <TableRow className="text-xs sm:text-sm"><TableCell>`subBanks`</TableCell><TableCell>Array</TableCell><TableCell>An array of nested `QuestionBankData` objects for hierarchy.</TableCell></TableRow>
+                  </TableBody>
+                </Table>
+                <ScrollBar orientation="horizontal" />
+              </ScrollArea>
 
               <h4 className="font-medium">`McqData` Object</h4>
-              <Table>
-                <TableHeader><TableRow><TableHead>Field</TableHead><TableHead>Type</TableHead><TableHead>Description</TableHead></TableRow></TableHeader>
-                <TableBody>
-                  <TableRow><TableCell>`id`</TableCell><TableCell>String</TableCell><TableCell>A unique ID for the MCQ (e.g., `mcq-67890`).</TableCell></TableRow>
-                  <TableRow><TableCell>`question`</TableCell><TableCell>String</TableCell><TableCell>The question text (HTML is supported).</TableCell></TableRow>
-                  <TableRow><TableCell>`options`</TableCell><TableCell>Array</TableCell><TableCell>An array of `McqOption` objects.</TableCell></TableRow>
-                  <TableRow><TableCell>`explanation`</TableCell><TableCell>String</TableCell><TableCell>The explanation for the answer (HTML is supported).</TableCell></TableRow>
-                  <TableRow><TableCell>`tags`</TableCell><TableCell>Array</TableCell><TableCell>An optional array of strings (e.g., `["Anatomy"]`).</TableCell></TableRow>
-                </TableBody>
-              </Table>
+              <ScrollArea className="w-full whitespace-nowrap rounded-md border">
+                <Table>
+                  <TableHeader><TableRow><TableHead>Field</TableHead><TableHead>Type</TableHead><TableHead>Description</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    <TableRow className="text-xs sm:text-sm"><TableCell>`id`</TableCell><TableCell>String</TableCell><TableCell>A unique ID for the MCQ (e.g., `mcq-67890`).</TableCell></TableRow>
+                    <TableRow className="text-xs sm:text-sm"><TableCell>`question`</TableCell><TableCell>String</TableCell><TableCell>The question text (HTML is supported).</TableCell></TableRow>
+                    <TableRow className="text-xs sm:text-sm"><TableCell>`options`</TableCell><TableCell>Array</TableCell><TableCell>An array of `McqOption` objects.</TableCell></TableRow>
+                    <TableRow className="text-xs sm:text-sm"><TableCell>`explanation`</TableCell><TableCell>String</TableCell><TableCell>The explanation for the answer (HTML is supported).</TableCell></TableRow>
+                    <TableRow className="text-xs sm:text-sm"><TableCell>`tags`</TableCell><TableCell>Array</TableCell><TableCell>An optional array of strings (e.g., `["Anatomy"]`).</TableCell></TableRow>
+                  </TableBody>
+                </Table>
+                <ScrollBar orientation="horizontal" />
+              </ScrollArea>
 
               <h3 className="font-semibold pt-2">Linking Media Files</h3>
               <p>To include an image, place it in the `media/` folder and reference it in your HTML content using the `media://` protocol.</p>

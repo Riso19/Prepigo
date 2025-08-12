@@ -30,6 +30,7 @@ import { useSettings } from '@/contexts/SettingsContext';
 import { FlashcardStatus } from '@/components/FlashcardStatus';
 import { State } from 'ts-fsrs';
 import { DynamicDueDate } from '@/components/DynamicDueDate';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 
 const DeckViewPage = () => {
   const { deckId } = useParams<{ deckId: string }>();
@@ -77,43 +78,43 @@ const DeckViewPage = () => {
 
   const renderDesktopView = (cards: FlashcardData[]) => {
     return (
-      <div className="rounded-md border">
+      <ScrollArea className="w-full whitespace-nowrap rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead className="w-[100px]">Type</TableHead>
               <TableHead>Front / Question</TableHead>
               <TableHead>Back / Answer</TableHead>
-              <TableHead>Tags</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead className="hidden xl:table-cell">Tags</TableHead>
+              <TableHead className="hidden lg:table-cell">Status</TableHead>
               <TableHead>Due Date</TableHead>
               <TableHead className="text-right w-[100px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {cards.map(card => (
-              <TableRow key={card.id}>
+              <TableRow key={card.id} className="text-xs sm:text-sm">
                 <TableCell className="capitalize font-medium">{card.type === 'imageOcclusion' ? 'Image' : card.type}</TableCell>
-                <TableCell>
+                <TableCell className="max-w-[250px]">
                   {card.type === 'imageOcclusion' ? (
                     <MediaAwareImage src={card.imageUrl} alt="Occlusion preview" className="h-16 w-auto rounded-md object-contain bg-muted" />
                   ) : (
                     <HtmlRenderer html={card.type === 'basic' ? card.question : card.text} className="prose dark:prose-invert max-w-none" />
                   )}
                 </TableCell>
-                <TableCell>
+                <TableCell className="max-w-[250px]">
                   {card.type === 'basic' ? (
                     <HtmlRenderer html={card.answer} className="prose dark:prose-invert max-w-none" />
                   ) : (
                     <HtmlRenderer html={card.description || ''} className="prose dark:prose-invert max-w-none" />
                   )}
                 </TableCell>
-                <TableCell>
+                <TableCell className="hidden xl:table-cell">
                   <div className="flex flex-wrap gap-1 max-w-[200px]">
                     {card.tags?.map(tag => <Badge key={tag} variant="outline" className="font-normal">{tag}</Badge>)}
                   </div>
                 </TableCell>
-                <TableCell>
+                <TableCell className="hidden lg:table-cell">
                   <FlashcardStatus card={card} scheduler={effectiveSettings.scheduler} />
                 </TableCell>
                 <TableCell>
@@ -168,7 +169,8 @@ const DeckViewPage = () => {
             ))}
           </TableBody>
         </Table>
-      </div>
+        <ScrollBar orientation="horizontal" />
+      </ScrollArea>
     );
   };
 
