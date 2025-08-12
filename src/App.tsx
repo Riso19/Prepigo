@@ -33,6 +33,7 @@ import ExamResultsPage from "./pages/ExamResultsPage";
 import ExamHistoryPage from "./pages/ExamHistoryPage";
 import MistakeReviewSetupPage from "./pages/MistakeReviewSetupPage";
 import ImportExportGuidePage from "./pages/ImportExportGuidePage";
+import AlgorithmGuidePage from "./pages/AlgorithmGuidePage";
 
 const queryClient = new QueryClient();
 
@@ -66,6 +67,7 @@ const App = () => (
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="/settings/mcq" element={<McqSettingsPage />} />
                     <Route path="/settings/import-export-guide" element={<ImportExportGuidePage />} />
+                    <Route path="/settings/algorithm-guide" element={<AlgorithmGuidePage />} />
                     <Route path="/exams" element={<ExamSchedulerPage />} />
                     <Route path="/exams/new" element={<CreateExamPage />} />
                     <Route path="/exams/:examId/edit" element={<EditExamPage />} />

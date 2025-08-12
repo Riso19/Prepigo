@@ -536,7 +536,14 @@ const SettingsPage = () => {
                 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Spaced Repetition Algorithm</CardTitle>
+                    <div className="flex items-center gap-2">
+                      <CardTitle>Spaced Repetition Algorithm</CardTitle>
+                      <Button variant="ghost" size="icon" asChild>
+                        <Link to="/settings/algorithm-guide">
+                          <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                        </Link>
+                      </Button>
+                    </div>
                   </CardHeader>
                   <CardContent>
                     <FormField
