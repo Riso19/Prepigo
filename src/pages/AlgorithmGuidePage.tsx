@@ -225,6 +225,9 @@ const AlgorithmGuidePage = () => {
               <p>
                 You might consider using <strong>SM-2</strong> if you are very familiar with it from other applications and prefer its simple, predictable nature.
               </p>
+              <p className="text-sm">
+                <strong>Note:</strong> When you switch between algorithms, all your cards will be automatically rescheduled based on your review history. This might cause a large number of cards to become due immediately.
+              </p>
             </CardContent>
           </Card>
         </div>
