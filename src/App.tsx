@@ -34,6 +34,7 @@ import ExamHistoryPage from "./pages/ExamHistoryPage";
 import MistakeReviewSetupPage from "./pages/MistakeReviewSetupPage";
 import ImportExportGuidePage from "./pages/ImportExportGuidePage";
 import AlgorithmGuidePage from "./pages/AlgorithmGuidePage";
+import StatisticsGuidePage from "./pages/StatisticsGuidePage";
 
 const queryClient = new QueryClient();
 
@@ -76,6 +77,7 @@ const App = () => (
                     <Route path="/exam/results/:logId" element={<ExamResultsPage />} />
                     <Route path="/exam/mistakes/:logId/setup" element={<MistakeReviewSetupPage />} />
                     <Route path="/statistics" element={<StatisticsPage />} />
+                    <Route path="/statistics/guide" element={<StatisticsGuidePage />} />
                     {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                     <Route path="*" element={<NotFound />} />
                   </Routes>

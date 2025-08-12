@@ -18,13 +18,15 @@ import { DeckData, FlashcardData, ReviewLog } from '@/data/decks';
 import { McqData, QuestionBankData } from '@/data/questionBanks';
 import { PerformanceAnalytics } from '@/components/PerformanceAnalytics';
 import { PerformanceGraph } from '@/components/PerformanceGraph';
-import { calculateAccuracy, calculateDueStats, calculateIntervalGrowth, calculateRetentionDistribution, calculateForecast, calculateAverageRetention, calculateAtRiskItems, calculateCumulativeStabilityGrowth, calculateSuspectedGuesses, calculateLearningCurve, calculateForgettingCurve, calculateStabilityOverTime, calculateMemoryDecayVelocity, calculateAverageKnowledgeHalfLife, calculateDifficultyDelta, calculateOverlearningRatio, calculateReviewTimeDistribution, calculateDailySummary, calculateTopicForgettingRate, calculateDifficultyWeightedMastery } from '@/lib/analytics-utils';
+import { calculateAccuracy, calculateDueStats, calculateIntervalGrowth, calculateRetentionDistribution, calculateForecast, calculateAverageRetention, calculateAtRiskItems, calculateCumulativeStabilityGrowth, calculateSuspectedGuesses, calculateLearningCurve, calculateForgettingCurve, calculateStabilityOverTime, calculateMemoryDecayVelocity, calculateAverageKnowledgeHalfLife, calculateDifficultyDelta, calculateOverlearningRatio, calculateReviewTimeDistribution, calculateDailySummary } from '@/lib/analytics-utils';
 import { ForgettingCurveChart } from '@/components/ForgettingCurveChart';
 import { StabilityTrendChart } from '@/components/StabilityTrendChart';
 import { AnimatedCard } from '@/components/AnimatedCard';
 import { ReviewTimeDistributionChart } from '@/components/ReviewTimeDistributionChart';
 import { DailyActivityChart } from '@/components/DailyActivityChart';
 import { DifficultyTrendChart } from '@/components/DifficultyTrendChart';
+import { Link } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
 
 const ForecastTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
@@ -387,9 +389,19 @@ const StatisticsPage = () => {
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-grow container mx-auto p-4 md:p-8">
-        <h1 className="text-2xl sm:text-3xl font-bold mb-2">Statistics</h1>
-        <p className="text-muted-foreground mb-6">An overview of your collection, progress, and memory performance.</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+        <div className="flex justify-between items-start mb-2">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold">Statistics</h1>
+            <p className="text-muted-foreground">An overview of your collection, progress, and memory performance.</p>
+          </div>
+          <Button asChild variant="outline">
+            <Link to="/statistics/guide">
+              <HelpCircle className="mr-2 h-4 w-4" />
+              Guide
+            </Link>
+          </Button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mt-6">
           <AnimatedCard delay={0}>
             <CardHeader><CardTitle>Total Decks</CardTitle></CardHeader>
             <CardContent><p className="text-3xl sm:text-4xl font-bold">{collectionStats.totalDecks}</p></CardContent>
