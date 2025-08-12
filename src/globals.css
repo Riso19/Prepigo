@@ -112,11 +112,11 @@
     @apply list-decimal list-inside;
   }
   .prose table, .html-content table {
-    @apply w-full my-4 border-collapse border border-border;
+    @apply block max-w-full overflow-x-auto my-4 border-collapse border border-border;
   }
   .prose th, .html-content th,
   .prose td, .html-content td {
-    @apply border border-border p-2 text-left;
+    @apply border border-border p-2 text-left text-xs sm:text-sm;
   }
   .prose thead, .html-content thead {
     @apply bg-muted;
