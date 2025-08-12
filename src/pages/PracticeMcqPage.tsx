@@ -329,7 +329,7 @@ const PracticeMcqPage = () => {
           </Button>
           <header className="w-full max-w-2xl mx-auto text-center mb-4 pt-8 sm:pt-0">
             <h1 className="text-2xl font-bold">{pageTitle}</h1>
-            <Progress value={((currentQuestionIndex + 1) / sessionQueue.length) * 100} className="mt-4 h-2" />
+            <Progress value={(currentQuestionIndex / sessionQueue.length) * 100} className="mt-4 h-2" />
           </header>
           <main className="w-full max-w-2xl mx-auto flex flex-col items-center justify-start py-6 gap-6">
             <McqPlayer
