@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, useCallback, KeyboardEvent, ChangeEvent } from 'react';
 import { Button } from '@/components/ui/button';
-import { Bold, Italic, Subscript, Superscript, Image as ImageIcon, Link as LinkIcon, Loader2, Underline, List, ListOrdered, Palette, Table } from 'lucide-react';
+import { Bold, Italic, Subscript, Superscript, Image as ImageIcon, Link as LinkIcon, Loader2, Underline, List, ListOrdered, Palette, Table, ArrowUpFromLine, ArrowDownFromLine, ArrowLeftFromLine, ArrowRightFromLine, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useResolvedHtml, unresolveMediaHtml } from '@/hooks/use-resolved-html';
 import { saveSingleMediaToDB } from '@/lib/idb';
@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
+import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 
 interface HtmlEditorProps {
   value: string;
@@ -25,6 +26,7 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
   const [isSuperscript, setIsSuperscript] = useState(false);
   const [isUl, setIsUl] = useState(false);
   const [isOl, setIsOl] = useState(false);
+  const [isInsideTable, setIsInsideTable] = useState(false);
   const resolvedValue = useResolvedHtml(value);
 
   const [imageUrlInput, setImageUrlInput] = useState('');
@@ -37,6 +39,14 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
     }
   }, [resolvedValue]);
 
+  const handleInput = () => {
+    if (editorRef.current) {
+      const rawHtml = editorRef.current.innerHTML;
+      const originalUrlHtml = unresolveMediaHtml(rawHtml);
+      onChange(originalUrlHtml);
+    }
+  };
+
   const updateToolbar = useCallback(() => {
     setTimeout(() => {
       setIsBold(document.queryCommandState('bold'));
@@ -46,16 +56,25 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
       setIsSuperscript(document.queryCommandState('superscript'));
       setIsUl(document.queryCommandState('insertUnorderedList'));
       setIsOl(document.queryCommandState('insertOrderedList'));
+
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        let node = selection.getRangeAt(0).startContainer;
+        let parent = node.nodeType === 3 ? node.parentNode : node;
+        let inTable = false;
+        while (parent) {
+          if (parent.nodeName === 'TABLE') {
+            inTable = true;
+            break;
+          }
+          parent = parent.parentNode;
+        }
+        setIsInsideTable(inTable);
+      } else {
+        setIsInsideTable(false);
+      }
     }, 0);
   }, []);
-
-  const handleInput = () => {
-    if (editorRef.current) {
-      const rawHtml = editorRef.current.innerHTML;
-      const originalUrlHtml = unresolveMediaHtml(rawHtml);
-      onChange(originalUrlHtml);
-    }
-  };
 
   const handleFormat = (command: 'bold' | 'italic' | 'underline' | 'subscript' | 'superscript' | 'insertUnorderedList' | 'insertOrderedList') => {
     if (command === 'subscript' || command === 'superscript') {
@@ -108,6 +127,114 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
     `;
     document.execCommand('insertHTML', false, tableHtml);
     handleInput();
+  };
+
+  const getCurrentTableElements = () => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return null;
+
+    let node = selection.getRangeAt(0).startContainer;
+    let cell: HTMLElement | null = null, row: HTMLElement | null = null, table: HTMLElement | null = null;
+
+    let parent = node.nodeType === 3 ? node.parentNode as HTMLElement : node as HTMLElement;
+    while (parent) {
+        const nodeName = parent.nodeName;
+        if (nodeName === 'TD' || nodeName === 'TH') cell = parent;
+        if (nodeName === 'TR') row = parent;
+        if (nodeName === 'TABLE') {
+            table = parent;
+            break;
+        }
+        parent = parent.parentNode as HTMLElement;
+    }
+
+    if (!table || !row || !cell) return null;
+
+    const cellIndex = Array.from(row.children).indexOf(cell);
+    return { table, row, cell, cellIndex };
+  };
+
+  const handleAddRow = (where: 'before' | 'after') => {
+    const elements = getCurrentTableElements();
+    if (!elements) return;
+    const { row } = elements;
+
+    const newRow = document.createElement('tr');
+    const colCount = (row as HTMLTableRowElement).cells.length;
+    for (let i = 0; i < colCount; i++) {
+        const newCell = document.createElement('td');
+        newCell.style.border = '1px solid';
+        newCell.style.padding = '8px';
+        newCell.innerHTML = '<br>';
+        newRow.appendChild(newCell);
+    }
+
+    if (where === 'before') {
+        row.parentNode?.insertBefore(newRow, row);
+    } else {
+        row.parentNode?.insertBefore(newRow, row.nextSibling);
+    }
+    handleInput();
+  };
+
+  const handleAddColumn = (where: 'before' | 'after') => {
+    const elements = getCurrentTableElements();
+    if (!elements) return;
+    const { table, cellIndex } = elements;
+
+    const insertIndex = where === 'before' ? cellIndex : cellIndex + 1;
+
+    const rows = table.querySelectorAll('tr');
+    rows.forEach(row => {
+        const newCell = document.createElement(row.parentElement?.tagName === 'THEAD' ? 'th' : 'td');
+        newCell.style.border = '1px solid';
+        newCell.style.padding = '8px';
+        newCell.innerHTML = '<br>';
+        
+        const refCell = row.cells[insertIndex];
+        row.insertBefore(newCell, refCell || null);
+    });
+    handleInput();
+  };
+
+  const handleDeleteRow = () => {
+    const elements = getCurrentTableElements();
+    if (!elements) return;
+    const { row } = elements;
+    if (row.parentNode?.childNodes.length === 1) {
+        elements.table.remove();
+    } else {
+        row.remove();
+    }
+    handleInput();
+    updateToolbar();
+  };
+
+  const handleDeleteColumn = () => {
+    const elements = getCurrentTableElements();
+    if (!elements) return;
+    const { table, cellIndex } = elements;
+
+    if ((elements.row as HTMLTableRowElement).cells.length === 1) {
+        table.remove();
+    } else {
+        const rows = table.querySelectorAll('tr');
+        rows.forEach(row => {
+            if (row.cells[cellIndex]) {
+                row.cells[cellIndex].remove();
+            }
+        });
+    }
+    handleInput();
+    updateToolbar();
+  };
+
+  const handleDeleteTable = () => {
+    const elements = getCurrentTableElements();
+    if (!elements) return;
+    elements.table.remove();
+    handleInput();
+    updateToolbar();
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -230,6 +357,19 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
             </div>
           </PopoverContent>
         </Popover>
+        {isInsideTable && (
+          <>
+            <Separator orientation="vertical" className="h-6 mx-1" />
+            <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onMouseDown={(e) => { e.preventDefault(); handleAddRow('before'); }}><ArrowUpFromLine className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>Add Row Above</TooltipContent></Tooltip>
+            <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onMouseDown={(e) => { e.preventDefault(); handleAddRow('after'); }}><ArrowDownFromLine className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>Add Row Below</TooltipContent></Tooltip>
+            <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onMouseDown={(e) => { e.preventDefault(); handleAddColumn('before'); }}><ArrowLeftFromLine className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>Add Column Left</TooltipContent></Tooltip>
+            <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onMouseDown={(e) => { e.preventDefault(); handleAddColumn('after'); }}><ArrowRightFromLine className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>Add Column Right</TooltipContent></Tooltip>
+            <Separator orientation="vertical" className="h-6 mx-1" />
+            <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onMouseDown={(e) => { e.preventDefault(); handleDeleteRow(); }}><Trash2 className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>Delete Row</TooltipContent></Tooltip>
+            <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onMouseDown={(e) => { e.preventDefault(); handleDeleteColumn(); }}><Trash2 className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>Delete Column</TooltipContent></Tooltip>
+            <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onMouseDown={(e) => { e.preventDefault(); handleDeleteTable(); }}><Table className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>Delete Table</TooltipContent></Tooltip>
+          </>
+        )}
       </div>
       <div
         ref={editorRef}
