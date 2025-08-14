@@ -158,7 +158,10 @@ const StatisticsPage = () => {
   }, [collectionStats, settings]);
 
   const calculateDifficulty = (items: (FlashcardData | McqData)[], scheduler: 'fsrs' | 'fsrs6') => {
-    const reviewedItems = items.filter(item => (scheduler === 'fsrs6' ? item.srs?.fsrs6 : item.srs?.fsrs)?.state !== State.New);
+    const reviewedItems = items.filter(item => {
+      const srsData = scheduler === 'fsrs6' ? item.srs?.fsrs6 : item.srs?.fsrs;
+      return srsData && srsData.state !== State.New;
+    });
     if (reviewedItems.length === 0) return { chartData: [], averageDifficulty: 0 };
     const bins = Array.from({ length: 10 }, () => 0);
     let totalDifficulty = 0;
