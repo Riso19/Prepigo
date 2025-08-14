@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuestionBanks } from '@/contexts/QuestionBankContext';
-import { findQuestionBankById, getAllMcqsFromBank, deleteMcq, findQuestionBankPathById } from '@/lib/question-bank-utils';
+import { findQuestionBankById, getAllMcqsFromBank, deleteMcq, findQuestionBankPathById, findParentBankOfMcq } from '@/lib/question-bank-utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
@@ -16,11 +16,12 @@ import {
 } from '@/components/ui/alert-dialog';
 import { ArrowLeft, Home, PlusCircle, Settings } from 'lucide-react';
 import { McqData } from '@/data/questionBanks';
-import { showSuccess } from '@/utils/toast';
+import { showSuccess, showError } from '@/utils/toast';
 import { McqListItem } from '@/components/McqListItem';
 import { useSettings } from '@/contexts/SettingsContext';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { QuestionBankSettingsForm } from '@/components/QuestionBankSettingsForm';
+import { MoveMcqDialog } from '@/components/MoveMcqDialog';
 
 const QuestionBankViewPage = () => {
   const { bankId } = useParams<{ bankId: string }>();
@@ -28,6 +29,9 @@ const QuestionBankViewPage = () => {
   const navigate = useNavigate();
   const [mcqToDelete, setMcqToDelete] = useState<McqData | null>(null);
   const { settings } = useSettings();
+  const [mcqToMove, setMcqToMove] = useState<McqData | null>(null);
+  const [sourceBankId, setSourceBankId] = useState<string | null>(null);
+  const [isMoveDialogOpen, setIsMoveDialogOpen] = useState(false);
 
   const bank = useMemo(() => (bankId ? findQuestionBankById(questionBanks, bankId) : null), [questionBanks, bankId]);
   const bankPath = useMemo(() => (bankId ? findQuestionBankPathById(questionBanks, bankId)?.join(' / ') : null), [questionBanks, bankId]);
@@ -38,6 +42,17 @@ const QuestionBankViewPage = () => {
       setQuestionBanks(prevBanks => deleteMcq(prevBanks, mcqToDelete.id));
       showSuccess("MCQ deleted successfully.");
       setMcqToDelete(null);
+    }
+  };
+
+  const handleOpenMoveDialog = (mcq: McqData) => {
+    const parentBank = findParentBankOfMcq(questionBanks, mcq.id);
+    if (parentBank) {
+      setSourceBankId(parentBank.id);
+      setMcqToMove(mcq);
+      setIsMoveDialogOpen(true);
+    } else {
+      showError("Could not find the source bank for this MCQ.");
     }
   };
 
@@ -100,6 +115,7 @@ const QuestionBankViewPage = () => {
                     mcq={mcq} 
                     bankId={bank.id} 
                     onDelete={setMcqToDelete} 
+                    onMove={handleOpenMoveDialog}
                     scheduler={settings.scheduler === 'sm2' ? 'fsrs' : settings.scheduler}
                   />
                 ))}
@@ -128,6 +144,13 @@ const QuestionBankViewPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <MoveMcqDialog
+        isOpen={isMoveDialogOpen}
+        onOpenChange={setIsMoveDialogOpen}
+        mcqToMove={mcqToMove}
+        sourceBankId={sourceBankId}
+      />
     </div>
   );
 };

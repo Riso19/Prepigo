@@ -528,3 +528,34 @@ export const collectMediaFilenamesFromMcqs = (banks: QuestionBankData[]): Set<st
   traverse(banks);
   return filenames;
 };
+
+// Find the direct parent bank of an MCQ
+export const findParentBankOfMcq = (banks: QuestionBankData[], mcqId: string): QuestionBankData | null => {
+  for (const bank of banks) {
+    if (bank.mcqs.some(m => m.id === mcqId)) {
+      return bank;
+    }
+    if (bank.subBanks) {
+      const foundInSub = findParentBankOfMcq(bank.subBanks, mcqId);
+      if (foundInSub) return foundInSub;
+    }
+  }
+  return null;
+};
+
+// Immutably move an MCQ from one bank to another
+export const moveMcq = (banks: QuestionBankData[], mcqId: string, destinationBankId: string): QuestionBankData[] => {
+  const mcqResult = findMcqById(banks, mcqId);
+  if (!mcqResult) {
+    return banks; // MCQ not found
+  }
+  const { mcq } = mcqResult;
+
+  // Remove from old location
+  const banksWithoutMcq = deleteMcq(banks, mcqId);
+
+  // Add to new location
+  const finalBanks = addMcqToBank(banksWithoutMcq, destinationBankId, mcq);
+
+  return finalBanks;
+};

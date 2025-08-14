@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { HtmlRenderer } from './HtmlRenderer';
-import { CheckCircle2, Pencil, Trash2 } from 'lucide-react';
+import { CheckCircle2, Pencil, Trash2, Move } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { McqStatus } from './McqStatus';
 import { State } from 'ts-fsrs';
@@ -15,10 +15,11 @@ interface McqListItemProps {
   mcq: McqData;
   bankId: string;
   onDelete: (mcq: McqData) => void;
+  onMove: (mcq: McqData) => void;
   scheduler: 'fsrs' | 'fsrs6';
 }
 
-export const McqListItem = ({ mcq, bankId, onDelete, scheduler }: McqListItemProps) => {
+export const McqListItem = ({ mcq, bankId, onDelete, onMove, scheduler }: McqListItemProps) => {
   return (
     <Card className="w-full overflow-hidden">
       <CardContent className="p-4 md:p-6">
@@ -78,6 +79,15 @@ export const McqListItem = ({ mcq, bankId, onDelete, scheduler }: McqListItemPro
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" onClick={() => onMove(mcq)}>
+                    <Move className="h-4 w-4" />
+                    <span className="sr-only">Move</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Move</TooltipContent>
+              </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="ghost" size="icon" asChild>
