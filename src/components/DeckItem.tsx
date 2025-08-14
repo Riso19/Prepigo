@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { DeckData, ReviewLog } from "@/data/decks";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "./ui/button";
-import { ChevronRight, Folder, MoreVertical, Plus, BookOpen, Settings, GripVertical, Trash2 } from "lucide-react";
+import { ChevronRight, Folder, MoreVertical, Plus, BookOpen, Settings, GripVertical, Trash2, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AddSubDeckDialog } from "./AddSubDeckDialog";
@@ -24,11 +24,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { calculateAccuracy } from "@/lib/analytics-utils";
 import { getAllFlashcardsFromDeck } from "@/lib/card-utils";
+import { EditDeckDialog } from "./EditDeckDialog";
 
 const DeckItem = ({ deck, allLogs }: { deck: DeckData; allLogs: ReviewLog[] }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isAddSubDeckOpen, setIsAddSubDeckOpen] = useState(false);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
+  const [isEditDeckOpen, setIsEditDeckOpen] = useState(false);
   const { decks, setDecks } = useDecks();
   const { settings } = useSettings();
 
@@ -110,6 +112,10 @@ const DeckItem = ({ deck, allLogs }: { deck: DeckData; allLogs: ReviewLog[] }) =
                     </Link>
                   </DropdownMenuItem>
                 )}
+                <DropdownMenuItem onClick={() => setIsEditDeckOpen(true)}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Rename
+                </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link to={`/deck/${deck.id}/view`}>
                     <Settings className="mr-2 h-4 w-4" />
@@ -149,6 +155,7 @@ const DeckItem = ({ deck, allLogs }: { deck: DeckData; allLogs: ReviewLog[] }) =
         </CollapsibleContent>
       </Collapsible>
       <AddSubDeckDialog isOpen={isAddSubDeckOpen} onOpenChange={setIsAddSubDeckOpen} parentDeckId={deck.id} />
+      <EditDeckDialog isOpen={isEditDeckOpen} onOpenChange={setIsEditDeckOpen} deck={deck} />
       <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
