@@ -557,7 +557,9 @@ export const calculateDifficultyWeightedMastery = (
       const elapsed_days = differenceInDays(now, new Date(srsData.last_review));
       const r = retrievability(elapsed_days, srsData.stability);
       const d = srsData.difficulty;
-      totalMasteryScore += r * (1 - (d - 1) / 9); // Normalize difficulty from 1-10 to 0-1
+      // Normalize difficulty from 1-10 to a penalty from 0-1
+      const difficultyPenalty = (d - 1) / 9;
+      totalMasteryScore += r * (1 - difficultyPenalty);
     }
   });
 
