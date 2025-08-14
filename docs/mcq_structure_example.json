@@ -1,55 +1,65 @@
-[
-  {
-    "id": "qb-example-1",
-    "name": "Sample Question Bank",
-    "mcqs": [
-      {
-        "id": "mcq-example-1",
-        "question": "What is the capital of France?",
-        "options": [
-          {
-            "id": "opt-example-1",
-            "text": "Berlin",
-            "isCorrect": false
-          },
-          {
-            "id": "opt-example-2",
-            "text": "Madrid",
-            "isCorrect": false
-          },
-          {
-            "id": "opt-example-3",
-            "text": "Paris",
-            "isCorrect": true
-          },
-          {
-            "id": "opt-example-4",
-            "text": "Rome",
-            "isCorrect": false
-          }
-        ],
-        "explanation": "Paris is the capital and most populous city of France.",
-        "tags": ["Geography", "Europe"]
-      },
-      {
-        "id": "mcq-example-2",
-        "question": "This is an example with an image: <img src=\"media://sample_image.png\">",
-        "options": [
-          {
-            "id": "opt-example-5",
-            "text": "Option A",
-            "isCorrect": true
-          },
-          {
-            "id": "opt-example-6",
-            "text": "Option B",
-            "isCorrect": false
-          }
-        ],
-        "explanation": "The image is referenced using the 'media://' protocol. The actual image file should be in the 'media' folder of the .zip archive.",
-        "tags": ["Example", "Media"]
-      }
-    ],
-    "subBanks": []
-  }
-]
+{
+  "metadata": {
+    "exportDate": "2024-01-01T12:00:00.000Z",
+    "appName": "Prepigo",
+    "format": "zip-v1"
+  },
+  "questionBanks": [
+    {
+      "id": "qb-1700000000000",
+      "name": "Cardiology",
+      "mcqs": [
+        {
+          "id": "mcq-1700000000001",
+          "question": "What is the primary function of the <b>sinoatrial (SA) node</b>?",
+          "options": [
+            {
+              "id": "opt-1700000000002",
+              "text": "To pump blood to the lungs.",
+              "isCorrect": false
+            },
+            {
+              "id": "opt-1700000000003",
+              "text": "To act as the heart's natural pacemaker.",
+              "isCorrect": true
+            },
+            {
+              "id": "opt-1700000000004",
+              "text": "To prevent backflow of blood.",
+              "isCorrect": false
+            }
+          ],
+          "explanation": "The SA node, located in the right atrium, generates electrical impulses that set the rhythm of the heartbeat.",
+          "tags": ["Anatomy", "Physiology"]
+        }
+      ],
+      "subBanks": [
+        {
+          "id": "qb-1700000000005",
+          "name": "Pharmacology",
+          "mcqs": [
+            {
+              "id": "mcq-1700000000006",
+              "question": "Which drug class is associated with the mechanism shown in the diagram? <br><img src=\"media://beta_blocker.jpg\">",
+              "options": [
+                {
+                  "id": "opt-1700000000007",
+                  "text": "ACE Inhibitors",
+                  "isCorrect": false
+                },
+                {
+                  "id": "opt-1700000000008",
+                  "text": "Beta Blockers",
+                  "isCorrect": true
+                }
+              ],
+              "explanation": "The image shows the blocking of beta-adrenergic receptors, which is the mechanism of action for Beta Blockers.",
+              "tags": ["Pharmacology"]
+            }
+          ],
+          "subBanks": []
+        }
+      ]
+    }
+  ]
+}
