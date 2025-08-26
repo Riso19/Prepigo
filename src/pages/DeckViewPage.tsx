@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useDecks } from '@/contexts/DecksContext';
 import { findDeckById, deleteFlashcard, findDeckPathById, getEffectiveSrsSettings } from '@/lib/deck-utils';
-import { getAllFlashcardsFromDeck } from '@/lib/card-utils';
+import { getAllFlashcardsWithDeckPath, FlashcardWithContext } from '@/lib/card-utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -43,8 +43,9 @@ const DeckViewPage = () => {
 
   const deck = useMemo(() => (deckId ? findDeckById(decks, deckId) : null), [decks, deckId]);
   const deckPath = useMemo(() => (deckId ? findDeckPathById(decks, deckId)?.join(' / ') : null), [decks, deckId]);
-  const flashcards = useMemo(() => (deck ? getAllFlashcardsFromDeck(deck) : []), [deck]);
-  const visibleFlashcards = useMemo(() => flashcards.slice(0, visibleCount), [flashcards, visibleCount]);
+  
+  const flashcardsWithContext = useMemo(() => (deck ? getAllFlashcardsWithDeckPath(deck) : []), [deck]);
+  const visibleFlashcardsWithContext = useMemo(() => flashcardsWithContext.slice(0, visibleCount), [flashcardsWithContext, visibleCount]);
 
   const effectiveSettings = useMemo(() => {
     if (deck) {
@@ -76,7 +77,7 @@ const DeckViewPage = () => {
     );
   }
 
-  const renderDesktopView = (cards: FlashcardData[]) => {
+  const renderDesktopView = (cards: FlashcardWithContext[]) => {
     return (
       <ScrollArea className="w-full whitespace-nowrap rounded-md border">
         <Table>
@@ -85,6 +86,7 @@ const DeckViewPage = () => {
               <TableHead className="w-[100px]">Type</TableHead>
               <TableHead>Front / Question</TableHead>
               <TableHead>Back / Answer</TableHead>
+              <TableHead>Path</TableHead>
               <TableHead className="hidden xl:table-cell">Tags</TableHead>
               <TableHead className="hidden lg:table-cell">Status</TableHead>
               <TableHead>Due Date</TableHead>
@@ -92,7 +94,7 @@ const DeckViewPage = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {cards.map(card => (
+            {cards.map(({ flashcard: card, deckPath }) => (
               <TableRow key={card.id} className="text-xs sm:text-sm">
                 <TableCell className="capitalize font-medium">{card.type === 'imageOcclusion' ? 'Image' : card.type}</TableCell>
                 <TableCell className="max-w-[250px]">
@@ -108,6 +110,9 @@ const DeckViewPage = () => {
                   ) : (
                     <HtmlRenderer html={card.description || ''} className="prose dark:prose-invert max-w-none" />
                   )}
+                </TableCell>
+                <TableCell className="text-muted-foreground text-xs truncate max-w-[150px]">
+                  {deckPath.join(' / ')}
                 </TableCell>
                 <TableCell className="hidden xl:table-cell">
                   <div className="flex flex-wrap gap-1 max-w-[200px]">
@@ -174,10 +179,10 @@ const DeckViewPage = () => {
     );
   };
 
-  const renderMobileView = (cards: FlashcardData[]) => {
+  const renderMobileView = (cards: FlashcardWithContext[]) => {
     return (
       <div className="space-y-4">
-        {cards.map(card => (
+        {cards.map(({ flashcard: card, deckPath }) => (
           <Card key={card.id}>
             <CardContent className="p-4 space-y-4">
               <div className="flex justify-between items-start gap-4">
@@ -223,6 +228,10 @@ const DeckViewPage = () => {
                 ) : (
                   <HtmlRenderer html={card.description || ''} className="prose dark:prose-invert max-w-none" />
                 )}
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">Path</p>
+                <p className="text-sm text-muted-foreground">{deckPath.join(' / ')}</p>
               </div>
               <div className="space-y-1">
                 <p className="text-sm font-medium text-muted-foreground">Tags</p>
@@ -297,7 +306,7 @@ const DeckViewPage = () => {
                     <CardDescription>
                         Path: {deckPath || deck.name}
                         <br />
-                        {flashcards.length} card(s) in this deck and its sub-decks.
+                        {flashcardsWithContext.length} card(s) in this deck and its sub-decks.
                     </CardDescription>
                 </div>
                 <Button asChild>
@@ -308,12 +317,12 @@ const DeckViewPage = () => {
             </div>
           </CardHeader>
           <CardContent>
-            {flashcards.length > 0 ? (
+            {flashcardsWithContext.length > 0 ? (
               <>
-                {isMobile ? renderMobileView(visibleFlashcards) : renderDesktopView(visibleFlashcards)}
-                {visibleCount < flashcards.length && (
+                {isMobile ? renderMobileView(visibleFlashcardsWithContext) : renderDesktopView(visibleFlashcardsWithContext)}
+                {visibleCount < flashcardsWithContext.length && (
                   <div className="mt-6 flex justify-center">
-                    <Button onClick={handleLoadMore}>Load More ({flashcards.length - visibleCount} remaining)</Button>
+                    <Button onClick={handleLoadMore}>Load More ({flashcardsWithContext.length - visibleCount} remaining)</Button>
                   </div>
                 )}
               </>

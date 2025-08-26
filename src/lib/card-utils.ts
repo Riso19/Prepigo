@@ -10,3 +10,28 @@ export const getAllFlashcardsFromDeck = (deck: DeckData): FlashcardData[] => {
   }
   return flashcards;
 };
+
+export interface FlashcardWithContext {
+  flashcard: FlashcardData;
+  deckPath: string[];
+  deckId: string;
+}
+
+export const getAllFlashcardsWithDeckPath = (deck: DeckData, currentPath: string[] = []): FlashcardWithContext[] => {
+  const newPath = [...currentPath, deck.name];
+  let flashcardsWithContext: FlashcardWithContext[] = deck.flashcards.map(flashcard => ({
+    flashcard,
+    deckPath: newPath,
+    deckId: deck.id,
+  }));
+
+  if (deck.subDecks) {
+    for (const subDeck of deck.subDecks) {
+      flashcardsWithContext = [
+        ...flashcardsWithContext,
+        ...getAllFlashcardsWithDeckPath(subDeck, newPath),
+      ];
+    }
+  }
+  return flashcardsWithContext;
+};
