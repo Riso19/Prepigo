@@ -469,30 +469,32 @@ export const buildMcqSessionQueue = (
 export const mergeQuestionBanks = (existingBanks: QuestionBankData[], newBanks: QuestionBankData[]): QuestionBankData[] => {
   const bankMap = new Map<string, QuestionBankData>();
 
-  // Add all existing banks to the map
+  // Add all existing banks to the map by their ID
   for (const bank of existingBanks) {
-    bankMap.set(bank.name, { ...bank });
+    bankMap.set(bank.id, { ...bank });
   }
 
   // Merge new banks
   for (const newBank of newBanks) {
-    const existingBank = bankMap.get(newBank.name);
+    const existingBank = bankMap.get(newBank.id);
     if (existingBank) {
-      // Merge MCQs
+      // If a bank with the same ID exists, merge its contents.
+      
+      // Merge MCQs: only add MCQs from the new bank if their ID doesn't already exist.
       const existingMcqIds = new Set(existingBank.mcqs.map(mcq => mcq.id));
       const mcqsToMerge = newBank.mcqs.filter(mcq => !existingMcqIds.has(mcq.id));
       
-      // Merge sub-banks recursively
+      // Recursively merge sub-banks.
       const mergedSubBanks = mergeQuestionBanks(existingBank.subBanks || [], newBank.subBanks || []);
 
-      bankMap.set(newBank.name, {
+      bankMap.set(newBank.id, {
         ...existingBank,
         mcqs: [...existingBank.mcqs, ...mcqsToMerge],
         subBanks: mergedSubBanks,
       });
     } else {
-      // Add new bank
-      bankMap.set(newBank.name, newBank);
+      // If the bank ID is new, add the entire new bank.
+      bankMap.set(newBank.id, newBank);
     }
   }
 
