@@ -43,6 +43,7 @@ import { getAllMcqsFromBank } from '@/lib/question-bank-utils';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import JSZip from 'jszip';
 import * as z from 'zod';
+import { clearResolvedUrlCache } from '@/hooks/use-resolved-html';
 
 const parseSteps = (steps: string): number[] => {
   return steps.trim().split(/\s+/).filter(s => s).map(stepStr => {
@@ -467,18 +468,14 @@ const SettingsPage = () => {
         setQuestionBanks(validBanks);
       } else {
         toast.loading("Merging data...", { id: toastId });
-        let processed = 0;
-        for (const [filename, blob] of mediaToImport.entries()) {
-          const existingMedia = await getMediaFromDB(filename);
-          if (!existingMedia) {
-            await saveSingleMediaToDB(filename, blob);
-          }
-          processed++;
-          if (processed % 10 === 0) {
-            toast.loading(`Checking media... (${processed}/${mediaToImport.size})`, { id: toastId });
-          }
+        if (mediaToImport.size > 0) {
+          await saveMediaToDB(mediaToImport);
         }
         setQuestionBanks(prevBanks => mergeQuestionBanks(prevBanks, validBanks));
+      }
+      
+      if (mediaToImport.size > 0) {
+        clearResolvedUrlCache();
       }
       
       toast.success("MCQ data imported successfully!", { id: toastId });

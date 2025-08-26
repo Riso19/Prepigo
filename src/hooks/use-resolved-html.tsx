@@ -4,6 +4,17 @@ import { getMediaFromDB } from '@/lib/idb';
 const resolvedUrlCache = new Map<string, string>();
 const proxyUrl = 'https://images.weserv.nl/?url=';
 
+export const clearResolvedUrlCache = () => {
+  // Revoke all existing blob URLs to prevent memory leaks
+  for (const url of resolvedUrlCache.values()) {
+    if (url.startsWith('blob:')) {
+      URL.revokeObjectURL(url);
+    }
+  }
+  // Clear the cache
+  resolvedUrlCache.clear();
+};
+
 export const unresolveMediaHtml = (html: string): string => {
     let unprocessedHtml = html;
 
