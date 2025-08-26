@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { QuestionBankData } from "@/data/questionBanks";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "./ui/button";
-import { ChevronRight, Folder, MoreVertical, Plus, Settings, GripVertical, Trash2, HelpCircle } from "lucide-react";
+import { ChevronRight, Folder, MoreVertical, Plus, Settings, GripVertical, Trash2, HelpCircle, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AddSubQuestionBankDialog } from "./AddSubQuestionBankDialog";
@@ -24,11 +24,13 @@ import {
 import { useSettings } from "@/contexts/SettingsContext";
 import { McqReviewLog } from "@/lib/idb";
 import { calculateAccuracy } from "@/lib/analytics-utils";
+import { EditQuestionBankDialog } from "./EditQuestionBankDialog";
 
 const QuestionBankItem = ({ bank, allLogs }: { bank: QuestionBankData; allLogs: McqReviewLog[] }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isAddSubBankOpen, setIsAddSubBankOpen] = useState(false);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
+  const [isEditBankOpen, setIsEditBankOpen] = useState(false);
   const { questionBanks, setQuestionBanks } = useQuestionBanks();
   const { settings } = useSettings();
 
@@ -116,6 +118,10 @@ const QuestionBankItem = ({ bank, allLogs }: { bank: QuestionBankData; allLogs: 
                     Practice MCQs
                   </Link>
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setIsEditBankOpen(true)}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Rename
+                </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link to={`/question-bank/${bank.id}/view`}>
                     <Settings className="mr-2 h-4 w-4" />
@@ -155,6 +161,7 @@ const QuestionBankItem = ({ bank, allLogs }: { bank: QuestionBankData; allLogs: 
         </CollapsibleContent>
       </Collapsible>
       <AddSubQuestionBankDialog isOpen={isAddSubBankOpen} onOpenChange={setIsAddSubBankOpen} parentBankId={bank.id} />
+      <EditQuestionBankDialog isOpen={isEditBankOpen} onOpenChange={setIsEditBankOpen} bank={bank} />
       <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
