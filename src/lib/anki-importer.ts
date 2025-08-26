@@ -89,6 +89,8 @@ export const importAnkiFile = async (
   const SQL = await initSqlJs({ locateFile: file => `https://sql.js.org/dist/${file}` });
   let dbBytes: Uint8Array;
   const mediaToStore = new Map<string, Blob>();
+  const importPrefix = `anki-${Date.now()}`;
+  const fileNameMap = new Map<string, string>();
 
   onProgress({ message: 'Unzipping package...', value: 5 });
   if (file.name.endsWith('.apkg')) {
@@ -124,11 +126,14 @@ export const importAnkiFile = async (
             onProgress({ message: 'Extracting media...', value: 15 });
             for (let i = 0; i < mediaFiles.length; i++) {
                 const key = mediaFiles[i];
-                const fileName = mediaJSON[key];
+                const originalFileName = mediaJSON[key];
+                const newFileName = `${importPrefix}-${originalFileName}`;
+                fileNameMap.set(originalFileName, newFileName);
+
                 const fileEntry = zip.file(key);
                 if (fileEntry) {
                     const blob = await fileEntry.async('blob');
-                    mediaToStore.set(fileName, blob);
+                    mediaToStore.set(newFileName, blob);
                 }
                 if (i % 20 === 0 || i === mediaFiles.length - 1) {
                     onProgress({ message: `Extracting media... (${i + 1}/${mediaFiles.length})`, value: 15 + (i / mediaFiles.length) * 15 });
@@ -153,7 +158,10 @@ export const importAnkiFile = async (
 
   const replaceMediaSrc = (html: string): string => {
     if (!html) return '';
-    return html.replace(/src="([^"]+)"/g, (_match, fileName) => `src="media://${fileName}"`);
+    return html.replace(/src="([^"]+)"/g, (_match, originalFileName) => {
+        const newFileName = fileNameMap.get(originalFileName);
+        return `src="media://${newFileName || originalFileName}"`;
+    });
   };
 
   const deckDataMap: Map<string, DeckData> = new Map();
@@ -243,7 +251,7 @@ export const importAnkiFile = async (
                 if (questionOcclusion) {
                     flashcard = {
                         id: `anki-c-${_id}`, noteId: `anki-n-${noteId}`, type: 'imageOcclusion',
-                        imageUrl: `media://${rawImageUrl}`, occlusions: occlusions,
+                        imageUrl: `media://${fileNameMap.get(rawImageUrl) || rawImageUrl}`, occlusions: occlusions,
                         questionOcclusionId: questionOcclusion.id, description: replaceMediaSrc(combinedDescription),
                     } as ImageOcclusionFlashcard;
                     parsedAsIOE = true;
@@ -302,7 +310,7 @@ export const importAnkiFile = async (
                     if (questionOcclusion) {
                         flashcard = {
                             id: `anki-c-${_id}`, noteId: `anki-n-${noteId}`, type: 'imageOcclusion',
-                            imageUrl: `media://${rawImageUrl}`, occlusions: parsedOcclusions,
+                            imageUrl: `media://${fileNameMap.get(rawImageUrl) || rawImageUrl}`, occlusions: parsedOcclusions,
                             questionOcclusionId: questionOcclusion.id, description: replaceMediaSrc(combinedDescription),
                         } as ImageOcclusionFlashcard;
                         parsedAsIOE = true;

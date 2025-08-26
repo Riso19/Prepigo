@@ -382,6 +382,8 @@ const SettingsPage = () => {
     setIsMcqImportAlertOpen(false);
 
     const toastId = toast.loading("Importing MCQs...");
+    const importPrefix = `mcq-${Date.now()}`;
+    const fileNameMap = new Map<string, string>();
 
     const cleanup = () => {
       setFileToImportMcq(null);
@@ -402,19 +404,19 @@ const SettingsPage = () => {
         const content = await dataFile.async("string");
         const parsedData = JSON.parse(content);
         
-        if (parsedData.metadata && parsedData.questionBanks) {
-            importedBanks = parsedData.questionBanks;
-        } else {
-            importedBanks = parsedData;
-        }
+        importedBanks = parsedData.metadata && parsedData.questionBanks ? parsedData.questionBanks : parsedData;
 
         const mediaFolder = zip.folder("media");
         if (mediaFolder) {
           const mediaFiles = Object.values(mediaFolder.files).filter(f => !f.dir);
           let processed = 0;
           for (const file of mediaFiles) {
+            const originalFileName = file.name.replace('media/', '');
+            const newFileName = `${importPrefix}-${originalFileName}`;
+            fileNameMap.set(originalFileName, newFileName);
+            
             const blob = await file.async("blob");
-            await saveSingleMediaToDB(file.name.replace('media/', ''), blob);
+            await saveSingleMediaToDB(newFileName, blob);
             processed++;
             toast.loading(`Importing media... (${processed}/${mediaFiles.length})`, { id: toastId });
           }
@@ -426,10 +428,12 @@ const SettingsPage = () => {
         if (parsedData.version === 2 && parsedData.questionBanks && parsedData.media) {
           toast.loading("Importing media files...", { id: toastId });
           const mediaMap = parsedData.media as { [key: string]: string };
-          for (const fileName in mediaMap) {
-            const base64Data = mediaMap[fileName];
+          for (const originalFileName in mediaMap) {
+            const newFileName = `${importPrefix}-${originalFileName}`;
+            fileNameMap.set(originalFileName, newFileName);
+            const base64Data = mediaMap[originalFileName];
             const blob = base64ToBlob(base64Data);
-            await saveSingleMediaToDB(fileName, blob);
+            await saveSingleMediaToDB(newFileName, blob);
           }
           importedBanks = parsedData.questionBanks;
         } else {
@@ -441,10 +445,33 @@ const SettingsPage = () => {
         throw new Error("Could not find question bank data in the file.");
       }
       
-      // Deep copy to prevent any potential reference issues from the source file.
-      const deepCopiedBanks = JSON.parse(JSON.stringify(importedBanks));
+      const updateHtmlContent = (html: string): string => {
+        if (!html || fileNameMap.size === 0) return html;
+        return html.replace(/src="media:\/\/([^"]+)"/g, (match, originalFileName) => {
+          const newFileName = fileNameMap.get(originalFileName);
+          return newFileName ? `src="media://${newFileName}"` : match;
+        });
+      };
 
-      const validation = questionBanksSchema.safeParse(deepCopiedBanks);
+      const traverseAndUpdateBanks = (banks: QuestionBankData[]): QuestionBankData[] => {
+        return banks.map(bank => {
+          const updatedMcqs = bank.mcqs.map(mcq => ({
+            ...mcq,
+            question: updateHtmlContent(mcq.question),
+            explanation: updateHtmlContent(mcq.explanation),
+            options: mcq.options.map(opt => ({
+              ...opt,
+              text: updateHtmlContent(opt.text),
+            })),
+          }));
+          const updatedSubBanks = bank.subBanks ? traverseAndUpdateBanks(bank.subBanks) : [];
+          return { ...bank, mcqs: updatedMcqs, subBanks: updatedSubBanks };
+        });
+      };
+
+      const banksWithUpdatedMedia = traverseAndUpdateBanks(importedBanks);
+
+      const validation = questionBanksSchema.safeParse(banksWithUpdatedMedia);
       if (!validation.success) {
         console.error("MCQ JSON validation failed:", validation.error.issues);
         
