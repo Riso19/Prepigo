@@ -32,10 +32,16 @@ const QuestionBankViewPage = () => {
   const [mcqToMove, setMcqToMove] = useState<McqData | null>(null);
   const [sourceBankId, setSourceBankId] = useState<string | null>(null);
   const [isMoveDialogOpen, setIsMoveDialogOpen] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(100);
 
   const bank = useMemo(() => (bankId ? findQuestionBankById(questionBanks, bankId) : null), [questionBanks, bankId]);
   const bankPath = useMemo(() => (bankId ? findQuestionBankPathById(questionBanks, bankId)?.join(' / ') : null), [questionBanks, bankId]);
   const mcqs = useMemo(() => (bank ? getAllMcqsFromBank(bank) : []), [bank]);
+  const visibleMcqs = useMemo(() => mcqs.slice(0, visibleCount), [mcqs, visibleCount]);
+
+  const handleLoadMore = () => {
+    setVisibleCount(prev => prev + 100);
+  };
 
   const handleDeleteConfirm = () => {
     if (mcqToDelete) {
@@ -108,18 +114,25 @@ const QuestionBankViewPage = () => {
           </CardHeader>
           <CardContent>
             {mcqs.length > 0 ? (
-              <div className="space-y-4">
-                {mcqs.map(mcq => (
-                  <McqListItem 
-                    key={mcq.id} 
-                    mcq={mcq} 
-                    bankId={bank.id} 
-                    onDelete={setMcqToDelete} 
-                    onMove={handleOpenMoveDialog}
-                    scheduler={settings.scheduler === 'sm2' ? 'fsrs' : settings.scheduler}
-                  />
-                ))}
-              </div>
+              <>
+                <div className="space-y-4">
+                  {visibleMcqs.map(mcq => (
+                    <McqListItem 
+                      key={mcq.id} 
+                      mcq={mcq} 
+                      bankId={bank.id} 
+                      onDelete={setMcqToDelete} 
+                      onMove={handleOpenMoveDialog}
+                      scheduler={settings.scheduler === 'sm2' ? 'fsrs' : settings.scheduler}
+                    />
+                  ))}
+                </div>
+                {visibleCount < mcqs.length && (
+                  <div className="mt-6 flex justify-center">
+                    <Button onClick={handleLoadMore}>Load More ({mcqs.length - visibleCount} remaining)</Button>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="text-center text-muted-foreground py-12">
                 <p className="mb-2">This question bank is empty.</p>
