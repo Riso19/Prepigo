@@ -15,6 +15,7 @@ import { TagEditor } from '@/components/TagEditor';
 import { getAllTagsFromQuestionBanks, getAllMcqsFromBank, findQuestionBankById } from '@/lib/question-bank-utils';
 import { getAllMcqReviewLogsFromDB } from '@/lib/idb';
 import { McqData, QuestionBankData } from '@/data/questionBanks';
+import { FsrsState } from '@/data/decks';
 import { Rating, State } from 'ts-fsrs';
 import Header from '@/components/Header';
 import { toast } from 'sonner';

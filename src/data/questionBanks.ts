@@ -1,6 +1,17 @@
 import * as z from 'zod';
 import { srsDataSchema } from './decks';
-import { srsSettingsSchema } from '@/contexts/SettingsContext';
+import { srsSettingsSchema as baseSrsSettingsSchema } from '@/contexts/SettingsContext';
+
+// Define a custom type for srsSettings that ensures maturityThresholdDays is always a number
+type SrsSettings = z.infer<typeof baseSrsSettingsSchema> & {
+  maturityThresholdDays: number;
+};
+
+// Create a custom srsSettings schema
+const srsSettingsSchema = baseSrsSettingsSchema.transform(settings => ({
+  ...settings,
+  maturityThresholdDays: settings.maturityThresholdDays ?? 21 // Ensure it's always a number
+})) as z.ZodType<SrsSettings>;
 
 // --- MCQ Schemas ---
 export const mcqOptionSchema = z.object({
@@ -24,13 +35,19 @@ const baseQuestionBankSchema = z.object({
   name: z.string(),
   mcqs: z.array(mcqDataSchema),
   hasCustomSettings: z.boolean().optional(),
-  srsSettings: srsSettingsSchema.optional(),
+  srsSettings: srsSettingsSchema.optional().transform(settings => {
+    if (!settings) return undefined;
+    return {
+      ...settings,
+      maturityThresholdDays: settings.maturityThresholdDays ?? 21 // Ensure this is always a number
+    };
+  }),
 });
 
-// Define the recursive schema first
-interface QuestionBankDataInternal extends z.infer<typeof baseQuestionBankSchema> {
+// Define the recursive schema
+type QuestionBankDataInternal = z.infer<typeof baseQuestionBankSchema> & {
   subBanks?: QuestionBankDataInternal[];
-}
+};
 
 const questionBankDataSchemaInternal: z.ZodType<QuestionBankDataInternal> = baseQuestionBankSchema.extend({
   subBanks: z.lazy(() => z.array(questionBankDataSchemaInternal)).optional(),
@@ -44,7 +61,7 @@ export interface QuestionBankData {
   name: string;
   mcqs: McqData[];
   hasCustomSettings?: boolean;
-  srsSettings?: z.infer<typeof srsSettingsSchema>;
+  srsSettings?: SrsSettings;
   subBanks?: QuestionBankData[];
 }
 

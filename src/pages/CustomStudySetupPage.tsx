@@ -14,7 +14,7 @@ import { DeckTreeSelector } from '@/components/DeckTreeSelector';
 import { TagEditor } from '@/components/TagEditor';
 import { getAllTags } from '@/lib/deck-utils';
 import { getAllReviewLogsFromDB } from '@/lib/idb';
-import { FlashcardData, DeckData } from '@/data/decks';
+import { FlashcardData, DeckData, FsrsState, Sm2State } from '@/data/decks';
 import { Rating, State } from 'ts-fsrs';
 import Header from '@/components/Header';
 import { toast } from 'sonner';
@@ -92,15 +92,21 @@ const CustomStudySetupPage = () => {
   useEffect(() => {
     const calculateCount = async () => {
       setIsCalculating(true);
-      let cardsToFilter = allCards;
+      const now = new Date();
+      const allCards: FlashcardData[] = []; // Initialize with all cards from decks
+      decks.forEach((deck: DeckData) => {
+        allCards.push(...deck.flashcards);
+      });
+      
+      let cardsToFilter: FlashcardData[] = allCards;
 
       if (watchedValues.tags.length > 0) {
-        cardsToFilter = cardsToFilter.filter(card => {
+        cardsToFilter = cardsToFilter.filter((card: FlashcardData) => {
           if (!card.tags || card.tags.length === 0) return false;
           if (watchedValues.tagFilterType === 'any') {
-            return watchedValues.tags.some(tag => card.tags!.includes(tag));
+            return watchedValues.tags.some((tag: string) => card.tags!.includes(tag));
           } else {
-            return watchedValues.tags.every(tag => card.tags!.includes(tag));
+            return watchedValues.tags.every((tag: string) => card.tags!.includes(tag));
           }
         });
       }
@@ -112,25 +118,24 @@ const CustomStudySetupPage = () => {
       let recentFailedCardIds: Set<string>;
       let min: number;
       let max: number;
-      let srsData: FsrsState | Sm2State | undefined;
-      let difficulty: number;
+      // srsData and difficulty are now scoped within their usage blocks
 
       switch (watchedValues.filterType) {
         case 'new':
-          cardsToFilter = cardsToFilter.filter(c => {
+          cardsToFilter = cardsToFilter.filter((c: FlashcardData) => {
             if (settings.scheduler === 'sm2') {
               return !c.srs?.sm2 || c.srs.sm2.state === 'new' || !c.srs.sm2.state;
             }
-            srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
+            const srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
             return !srsData || srsData.state === State.New;
           });
           break;
         case 'due':
-          cardsToFilter = cardsToFilter.filter(c => {
+          cardsToFilter = cardsToFilter.filter((c: FlashcardData) => {
             if (settings.scheduler === 'sm2') {
               return !!c.srs?.sm2 && new Date(c.srs.sm2.due) <= now;
             }
-            srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
+            const srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
             return !!srsData && new Date(srsData.due) <= now;
           });
           break;
@@ -145,15 +150,15 @@ const CustomStudySetupPage = () => {
               recentFailedCardIds.add(log.cardId);
             }
           });
-          cardsToFilter = cardsToFilter.filter(c => recentFailedCardIds.has(c.id));
+          cardsToFilter = cardsToFilter.filter((c: FlashcardData) => recentFailedCardIds.has(c.id));
           break;
         case 'difficulty':
             min = watchedValues.filterDifficultyMin || 1;
             max = watchedValues.filterDifficultyMax || 10;
-            cardsToFilter = cardsToFilter.filter(c => {
-                srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
+            cardsToFilter = cardsToFilter.filter((c: FlashcardData) => {
+                const srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
                 if (!srsData || srsData.state === State.New) return false;
-                difficulty = srsData.difficulty;
+                const difficulty = 'difficulty' in srsData ? srsData.difficulty : 0;
                 return difficulty >= min && difficulty <= max;
             });
             break;

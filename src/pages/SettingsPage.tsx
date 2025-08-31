@@ -147,12 +147,12 @@ const SettingsPage = () => {
 
           for (const card of allFlashcards) {
             processedCount++;
-            const reviewLogs = await getReviewLogsForCard(card.id);
+            const reviewLogs = await getReviewLogsForCard(card.id) as Array<{ review: string; rating: Rating }>;
             if (reviewLogs.length > 0) {
-              reviewLogs.sort((a: { review: string }, b: { review: string }) => new Date(a.review).getTime() - new Date(b.review).getTime());
+              reviewLogs.sort((a, b) => new Date(a.review).getTime() - new Date(b.review).getTime());
               let fsrsCard: FsrsCard | Fsrs6Card = createEmptyCard(new Date(reviewLogs[0].review));
               for (const log of reviewLogs) {
-                const rating = log.rating as Rating;
+                const rating = log.rating;
                 const schedulingResult = fsrsInstance.repeat(fsrsCard, new Date(log.review));
                 fsrsCard = outcomeByRating(schedulingResult, rating).card;
               }
@@ -183,12 +183,12 @@ const SettingsPage = () => {
 
         for (const mcq of allMcqs) {
             processedMcqs++;
-            const reviewLogs = await getReviewLogsForMcq(mcq.id);
+            const reviewLogs = await getReviewLogsForMcq(mcq.id) as Array<{ review: string; rating: Rating }>;
             if (reviewLogs.length > 0) {
-                reviewLogs.sort((a: { review: string }, b: { review: string }) => new Date(a.review).getTime() - new Date(b.review).getTime());
+                reviewLogs.sort((a, b) => new Date(a.review).getTime() - new Date(b.review).getTime());
                 let fsrsCard: FsrsCard | Fsrs6Card = createEmptyCard(new Date(reviewLogs[0].review));
                 for (const log of reviewLogs) {
-                    const rating = log.rating as Rating;
+                    const rating = log.rating;
                     const schedulingResult = mcqFsrsInstance.repeat(fsrsCard, new Date(log.review));
                     fsrsCard = outcomeByRating(schedulingResult, rating).card;
                 }

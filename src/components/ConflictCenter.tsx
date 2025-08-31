@@ -107,7 +107,8 @@ function ConflictItem({ conflict, onResolved }: { conflict: ConflictRecord; onRe
 
   const handleKeep = async (which: 'local' | 'server') => {
     const resolved = which === 'local' ? conflict.local : conflict.server;
-    await applyResolution(conflict.resource, conflict.id, resolved);
+    // Type assertion to ensure the resolved object matches the expected type
+    await applyResolution(conflict.resource, conflict.id, resolved as any);
     await deleteConflict(conflict.resource, conflict.id);
     onResolved();
   };

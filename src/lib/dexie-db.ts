@@ -5,6 +5,20 @@ import type { DeckData, ReviewLog } from '@/data/decks';
 import type { QuestionBankData } from '@/data/questionBanks';
 import type { ExamData } from '@/data/exams';
 
+// Store names (must match src/lib/idb.ts)
+const DECKS_STORE = 'decks';
+const REVIEW_LOGS_STORE = 'review_logs';
+const MEDIA_STORE = 'media';
+const SESSION_STATE_STORE = 'session_state';
+const QUESTION_BANKS_STORE = 'question_banks';
+const MCQ_REVIEW_LOGS_STORE = 'mcq_review_logs';
+const EXAMS_STORE = 'exams';
+const EXAM_LOGS_STORE = 'exam_logs';
+const SYNC_QUEUE_STORE = 'syncQueue';
+const META_STORE = 'meta';
+const RESOURCES_STORE = 'resources';
+const RESOURCE_HIGHLIGHTS_STORE = 'resource_highlights';
+
 interface DbInstance {
   table: (name: string) => {
     get: (key: string) => Promise<unknown>;
@@ -38,21 +52,116 @@ interface DbInstance {
 let _db: DbInstance | null = null;
 
 const DB_NAME = 'PrepigoDB';
-const DB_VERSION = 12; // v12 introduces resource_highlights store (non-destructive)
+// Schema version history:
+// - v12: Introduced resource_highlights store (non-destructive)
+const DB_VERSION = 12;
 
-// Store names (must match src/lib/idb.ts)
-const DECKS_STORE = 'decks';
-const REVIEW_LOGS_STORE = 'review_logs';
-const MEDIA_STORE = 'media';
-const SESSION_STATE_STORE = 'session_state';
-const QUESTION_BANKS_STORE = 'question_banks';
-const MCQ_REVIEW_LOGS_STORE = 'mcq_review_logs';
-const EXAMS_STORE = 'exams';
-const EXAM_LOGS_STORE = 'exam_logs';
-const SYNC_QUEUE_STORE = 'syncQueue';
-const META_STORE = 'meta';
-const RESOURCES_STORE = 'resources';
-const RESOURCE_HIGHLIGHTS_STORE = 'resource_highlights';
+// Schema definitions for each version
+const SCHEMA_VERSIONS = {
+  1: {
+    decks: 'id',
+  },
+  2: {
+    review_logs: '++id, cardId',
+    decks: 'id',
+  },
+  3: {
+    media: 'id',
+    review_logs: '++id, cardId',
+    decks: 'id',
+  },
+  4: {
+    session_state: '', // key-value
+    media: 'id',
+    review_logs: '++id, cardId',
+    decks: 'id',
+  },
+  5: {
+    question_banks: 'id',
+    session_state: '',
+    media: 'id',
+    review_logs: '++id, cardId',
+    decks: 'id',
+  },
+  6: {
+    mcq_review_logs: '++id, mcqId',
+    question_banks: 'id',
+    session_state: '',
+    media: 'id',
+    review_logs: '++id, cardId',
+    decks: 'id',
+  },
+  7: {
+    exams: 'id',
+    mcq_review_logs: '++id, mcqId',
+    question_banks: 'id',
+    session_state: '',
+    media: 'id',
+    review_logs: '++id, cardId',
+    decks: 'id',
+  },
+  8: {
+    exam_logs: '++id, examId',
+    exams: 'id',
+    mcq_review_logs: '++id, mcqId',
+    question_banks: 'id',
+    session_state: '',
+    media: 'id',
+    review_logs: '++id, cardId',
+    decks: 'id',
+  },
+  9: {
+    syncQueue: '++id, resource, opType, createdAt',
+    exam_logs: '++id, examId',
+    exams: 'id',
+    mcq_review_logs: '++id, mcqId',
+    question_banks: 'id',
+    session_state: '',
+    media: 'id',
+    review_logs: '++id, cardId',
+    decks: 'id',
+  },
+  10: {
+    meta: 'key',
+    syncQueue: '++id, resource, opType, createdAt',
+    exam_logs: '++id, examId',
+    exams: 'id',
+    mcq_review_logs: '++id, mcqId',
+    question_banks: 'id',
+    session_state: '',
+    media: 'id',
+    review_logs: '++id, cardId',
+    decks: 'id',
+  },
+  11: {
+    resources: 'id',
+    meta: 'key',
+    syncQueue: '++id, resource, opType, createdAt',
+    exam_logs: '++id, examId',
+    exams: 'id',
+    mcq_review_logs: '++id, mcqId',
+    question_banks: 'id',
+    session_state: '',
+    media: 'id',
+    review_logs: '++id, cardId',
+    decks: 'id',
+  },
+  12: {
+    resource_highlights: '++id, resourceId',
+    resources: 'id',
+    meta: 'key',
+    syncQueue: '++id, resource, opType, createdAt',
+    exam_logs: '++id, examId',
+    exams: 'id',
+    mcq_review_logs: '++id, mcqId',
+    question_banks: 'id',
+    session_state: '',
+    media: 'id',
+    review_logs: '++id, cardId',
+    decks: 'id',
+  },
+} as const;
+
 
 // Public types
 export type McqReviewLog = {
@@ -72,109 +181,40 @@ export type McqReviewLog = {
 async function getDb() {
   if (_db) return _db;
   const { Dexie } = await import('dexie');
-  const db = new Dexie(DB_NAME);
+  const buildDb = () => {
+    const db = new Dexie(DB_NAME);
+    // Apply schema versions
+    for (let i = 1; i <= DB_VERSION; i++) {
+      const schema = SCHEMA_VERSIONS[i as keyof typeof SCHEMA_VERSIONS];
+      if (schema) {
+        db.version(i).stores(schema);
+      }
+    }
+    return db;
+  };
 
-  // Define schema versions equivalent to idb upgrade steps
-  db.version(1).stores({
-    [DECKS_STORE]: 'id',
-  });
-  db.version(2).stores({
-    [REVIEW_LOGS_STORE]: '++id, cardId',
-    [DECKS_STORE]: 'id',
-  });
-  db.version(3).stores({
-    [MEDIA_STORE]: 'id',
-    [REVIEW_LOGS_STORE]: '++id, cardId',
-    [DECKS_STORE]: 'id',
-  });
-  db.version(4).stores({
-    [SESSION_STATE_STORE]: '', // key-value
-    [MEDIA_STORE]: 'id',
-    [REVIEW_LOGS_STORE]: '++id, cardId',
-    [DECKS_STORE]: 'id',
-  });
-  db.version(5).stores({
-    [QUESTION_BANKS_STORE]: 'id',
-    [SESSION_STATE_STORE]: '',
-    [MEDIA_STORE]: 'id',
-    [REVIEW_LOGS_STORE]: '++id, cardId',
-    [DECKS_STORE]: 'id',
-  });
-  db.version(6).stores({
-    [MCQ_REVIEW_LOGS_STORE]: '++id, mcqId',
-    [QUESTION_BANKS_STORE]: 'id',
-    [SESSION_STATE_STORE]: '',
-    [MEDIA_STORE]: 'id',
-    [REVIEW_LOGS_STORE]: '++id, cardId',
-    [DECKS_STORE]: 'id',
-  });
-  db.version(8).stores({
-    [EXAMS_STORE]: 'id',
-    [MCQ_REVIEW_LOGS_STORE]: '++id, mcqId',
-    [QUESTION_BANKS_STORE]: 'id',
-    [SESSION_STATE_STORE]: '',
-    [MEDIA_STORE]: 'id',
-    [REVIEW_LOGS_STORE]: '++id, cardId',
-    [DECKS_STORE]: 'id',
-  });
-  db.version(9).stores({
-    [EXAM_LOGS_STORE]: 'id',
-    [EXAMS_STORE]: 'id',
-    [MCQ_REVIEW_LOGS_STORE]: '++id, mcqId',
-    [QUESTION_BANKS_STORE]: 'id',
-    [SESSION_STATE_STORE]: '',
-    [MEDIA_STORE]: 'id',
-    [REVIEW_LOGS_STORE]: '++id, cardId',
-    [DECKS_STORE]: 'id',
-  });
+  let db = buildDb();
+  try {
+    await db.open();
+  } catch (e) {
+    const msg = (e as Error)?.message || String(e);
+    // Handle legacy IndexedDBs where primary key changed historically
+    if (msg.includes('Not yet support for changing primary key')) {
+      console.warn('[Dexie] Detected primary key mismatch from an older schema. Performing one-time rebuild of local database to recover.');
+      try {
+        await Dexie.delete(DB_NAME);
+        db = buildDb();
+        await db.open();
+      } catch (re) {
+        console.error('[Dexie] Rebuild failed:', re);
+        throw re;
+      }
+    } else {
+      throw e;
+    }
+  }
 
-  // v10: Add syncQueue and meta stores (non-destructive)
-  db.version(10).stores({
-    [SYNC_QUEUE_STORE]: '++id, resource, createdAt',
-    [META_STORE]: 'key',
-    [EXAM_LOGS_STORE]: 'id',
-    [EXAMS_STORE]: 'id',
-    [MCQ_REVIEW_LOGS_STORE]: '++id, mcqId',
-    [QUESTION_BANKS_STORE]: 'id',
-    [SESSION_STATE_STORE]: '',
-    [MEDIA_STORE]: 'id',
-    [REVIEW_LOGS_STORE]: '++id, cardId',
-    [DECKS_STORE]: 'id',
-  });
-
-  // v11: Add resources store for organizing PDFs (metadata only; blobs go to MEDIA_STORE)
-  db.version(11).stores({
-    [RESOURCES_STORE]: 'id, createdAt, updatedAt, title, tags',
-    [SYNC_QUEUE_STORE]: '++id, resource, createdAt',
-    [META_STORE]: 'key',
-    [EXAM_LOGS_STORE]: 'id',
-    [EXAMS_STORE]: 'id',
-    [MCQ_REVIEW_LOGS_STORE]: '++id, mcqId',
-    [QUESTION_BANKS_STORE]: 'id',
-    [SESSION_STATE_STORE]: '',
-    [MEDIA_STORE]: 'id',
-    [REVIEW_LOGS_STORE]: '++id, cardId',
-    [DECKS_STORE]: 'id',
-  });
-
-  // v12: Add resource_highlights store to persist PDF annotations/highlights
-  db.version(12).stores({
-    [RESOURCE_HIGHLIGHTS_STORE]: 'id, resourceId, page, createdAt, linkedCardId',
-    [RESOURCES_STORE]: 'id, createdAt, updatedAt, title, tags',
-    [SYNC_QUEUE_STORE]: '++id, resource, createdAt',
-    [META_STORE]: 'key',
-    [EXAM_LOGS_STORE]: 'id',
-    [EXAMS_STORE]: 'id',
-    [MCQ_REVIEW_LOGS_STORE]: '++id, mcqId',
-    [QUESTION_BANKS_STORE]: 'id',
-    [SESSION_STATE_STORE]: '',
-    [MEDIA_STORE]: 'id',
-    [REVIEW_LOGS_STORE]: '++id, cardId',
-    [DECKS_STORE]: 'id',
-  });
-
-  await db.open();
-  _db = db;
+  _db = db as unknown as DbInstance;
   return _db;
 }
 
@@ -189,8 +229,8 @@ export type ResourceProgress = {
 export async function getResourceProgress(resourceId: string): Promise<ResourceProgress | undefined> {
   const t = await table(META_STORE);
   const key = `resourceProgress:${resourceId}`;
-  const rec = await t.get(key);
-  return rec?.value as ResourceProgress | undefined;
+  const rec = await t.get(key) as { value: ResourceProgress } | undefined;
+  return rec?.value;
 }
 
 export async function setResourceProgress(resourceId: string, page: number, pageCount: number) {
@@ -278,8 +318,8 @@ export async function saveMediaToDB(media: Map<string, Blob>) {
 
 export async function getMediaFromDB(id: string) {
   const t = await table(MEDIA_STORE);
-  const res = await t.get(id);
-  return res?.blob as Blob | undefined;
+  const res = await t.get(id) as { blob: Blob } | undefined;
+  return res?.blob;
 }
 
 export async function clearMediaDB() {
@@ -376,15 +416,20 @@ interface SyncOperation {
 }
 
 // Operation format: { id, resource, opType, payload, createdAt, retryCount }
+interface SyncOperationInternal extends Omit<SyncOperation, 'id'> {
+  id?: number;
+}
+
 export async function enqueueSyncOp(op: Omit<SyncOperation, 'id' | 'createdAt' | 'retryCount'>) {
   const t = await table(SYNC_QUEUE_STORE);
   const now = Date.now();
-  const rec: SyncOperation = {
+  const opWithOptional = op as Partial<SyncOperation>;
+  const rec: SyncOperationInternal = {
     resource: op.resource,
     opType: op.opType,
     payload: op.payload ?? null,
-    createdAt: op.createdAt ?? now,
-    retryCount: op.retryCount ?? 0,
+    createdAt: opWithOptional.createdAt ?? now,
+    retryCount: opWithOptional.retryCount ?? 0,
   };
   return t.add(rec);
 }
@@ -403,14 +448,14 @@ export async function markOpsAsSynced(ids: number[]) {
 export async function incrementRetry(ids: number[]) {
   if (!ids?.length) return;
   const t = await table(SYNC_QUEUE_STORE);
-  await t.where('id').anyOf(ids).modify((rec: SyncOperation) => {
+  await (t.where('id').anyOf(ids) as unknown as { modify: (fn: (rec: { retryCount?: number }) => void) => Promise<void> }).modify((rec) => {
     rec.retryCount = (rec.retryCount || 0) + 1;
   });
 }
 
 export async function getMeta(key: string) {
   const t = await table(META_STORE);
-  return t.get(key)?.then((v: { value: unknown } | undefined) => v?.value);
+  return t.get(key)?.then((v: unknown) => (v as { value: unknown })?.value);
 }
 
 export async function setMeta(key: string, value: unknown) {
@@ -450,7 +495,7 @@ export async function saveResource(resource: ResourceItem) {
 
 export async function getAllResourcesFromDB(): Promise<ResourceItem[]> {
   const t = await table(RESOURCES_STORE);
-  return t.orderBy('createdAt').reverse().toArray();
+  return t.orderBy('createdAt').reverse().toArray() as Promise<ResourceItem[]>;
 }
 
 export async function deleteResource(id: string) {
@@ -460,7 +505,7 @@ export async function deleteResource(id: string) {
 
 export async function getResourceById(id: string): Promise<ResourceItem | undefined> {
   const t = await table(RESOURCES_STORE);
-  return t.get(id);
+  return t.get(id) as Promise<ResourceItem | undefined>;
 }
 
 export async function getResourceBlob(resource: ResourceItem) {
@@ -488,7 +533,7 @@ export async function saveResourceHighlight(highlight: ResourceHighlight) {
 
 export async function getHighlightsForResource(resourceId: string): Promise<ResourceHighlight[]> {
   const t = await table(RESOURCE_HIGHLIGHTS_STORE);
-  return t.where('resourceId').equals(resourceId).toArray();
+  return t.where('resourceId').equals(resourceId).toArray() as Promise<ResourceHighlight[]>;
 }
 
 export async function deleteResourceHighlight(id: string) {
@@ -498,14 +543,14 @@ export async function deleteResourceHighlight(id: string) {
 
 export async function linkHighlightToCard(id: string, cardId: string) {
   const t = await table(RESOURCE_HIGHLIGHTS_STORE);
-  await t.where('id').equals(id).modify((rec: ResourceHighlight) => {
+  await (t.where('id').equals(id) as unknown as { modify: (fn: (rec: ResourceHighlight) => void) => Promise<void> }).modify((rec) => {
     rec.linkedCardId = cardId;
   });
 }
 
 export async function updateResourceHighlight(id: string, patch: Partial<ResourceHighlight>) {
   const t = await table(RESOURCE_HIGHLIGHTS_STORE);
-  await t.where('id').equals(id).modify((rec: ResourceHighlight) => {
+  await (t.where('id').equals(id) as unknown as { modify: (fn: (rec: ResourceHighlight) => void) => Promise<void> }).modify((rec) => {
     Object.assign(rec, patch);
   });
 }

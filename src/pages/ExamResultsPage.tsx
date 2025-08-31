@@ -26,8 +26,8 @@ const ExamResultsPage = () => {
 
   useEffect(() => {
     if (logId) {
-      getExamLogFromDB(logId).then(log => {
-        if (log) setExamLog(log);
+      getExamLogFromDB(logId).then((log: unknown) => {
+        if (log) setExamLog(log as ExamLog);
       });
     }
   }, [logId]);

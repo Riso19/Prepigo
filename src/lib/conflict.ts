@@ -59,12 +59,19 @@ export function resolveKeepServer<T>(server: T): T {
 }
 
 // Apply chosen resolution to storage for known resources
-export async function applyResolution<T>(resource: string, id: string, resolved: T) {
+export async function applyResolution<T extends { id: string; name: string; date: string; deckIds: string[]; questionBankIds: string[]; tags: string[]; tagFilterType: 'all' | 'any'; filterMode: 'all' | 'due' | 'difficulty'; filterDifficultyMin?: number; filterDifficultyMax?: number }>(
+  resource: string, 
+  id: string, 
+  resolved: T
+) {
   if (resource === 'exams') {
     const all = await getAllExamsFromDB();
     const idx = all.findIndex((e) => e.id === id);
-    if (idx >= 0) all[idx] = resolved;
-    else all.push(resolved);
+    if (idx >= 0) {
+      all[idx] = resolved;
+    } else {
+      all.push(resolved);
+    }
     await saveExamsToDB(all);
     return;
   }

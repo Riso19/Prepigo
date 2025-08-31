@@ -109,20 +109,32 @@ export const flashcardDataSchema = z.union([
 ]);
 
 // --- Deck Schema (Recursive) ---
+// Create a type for the transformed srsSettings
+type DeckSrsSettings = z.infer<typeof srsSettingsSchema> & {
+  maturityThresholdDays: number;
+};
+
+// Create a custom srsSettings schema that ensures maturityThresholdDays is always a number
+const deckSrsSettingsSchema = srsSettingsSchema.transform(settings => ({
+  ...settings,
+  maturityThresholdDays: settings.maturityThresholdDays ?? 21 // Default to 21 if undefined
+})) as z.ZodType<DeckSrsSettings>;
+
 const baseDeckSchema = z.object({
   id: z.string(),
   name: z.string(),
   flashcards: z.array(flashcardDataSchema),
   hasCustomSettings: z.boolean().optional(),
-  srsSettings: srsSettingsSchema.optional(),
+  srsSettings: deckSrsSettingsSchema.optional(),
 });
 
 // Define internal recursive schema first
-interface DeckDataInternal extends z.infer<typeof baseDeckSchema> {
+type DeckDataInternal = z.infer<typeof baseDeckSchema> & {
   subDecks?: DeckDataInternal[];
-}
+};
 
 const deckDataSchemaInternal: z.ZodType<DeckDataInternal> = baseDeckSchema.extend({
+  srsSettings: deckSrsSettingsSchema.optional(),
   subDecks: z.lazy(() => z.array(deckDataSchemaInternal)).optional(),
 });
 

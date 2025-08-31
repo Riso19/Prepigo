@@ -16,7 +16,7 @@ import { McqData, QuestionBankData } from '@/data/questionBanks';
 import Header from '@/components/Header';
 import { toast } from 'sonner';
 import { Loader2, ArrowLeft } from 'lucide-react';
-import { ExamLog, ExamLogEntry } from '@/data/examLogs';
+import { ExamLog } from '@/data/examLogs';
 
 const mistakeReviewSchema = z.object({
   mcqLimit: z.coerce.number().int().min(1, "Must be at least 1 MCQ."),
@@ -54,12 +54,12 @@ const MistakeReviewSetupPage = () => {
       setIsLoading(true);
       let mistakes: McqData[] = [];
       if (logId === 'all') {
-        const logs = await getAllExamLogsFromDB();
+        const logs = await getAllExamLogsFromDB() as unknown as ExamLog[];
         const mistakeMap = new Map<string, McqData>();
-        logs.forEach((log: ExamLog) => {
+        logs.forEach((log) => {
           log.entries
-            .filter((entry: ExamLogEntry) => !entry.isCorrect && entry.selectedOptionId !== null)
-            .forEach((entry: ExamLogEntry) => {
+            .filter((entry) => !entry.isCorrect && entry.selectedOptionId !== null)
+            .forEach((entry) => {
               if (!mistakeMap.has(entry.mcq.id)) {
                 mistakeMap.set(entry.mcq.id, entry.mcq);
               }
@@ -69,12 +69,12 @@ const MistakeReviewSetupPage = () => {
         setPageTitle("Review All Mistakes");
         setPageDescription(`Create a practice session from the ${mistakes.length} unique questions you've answered incorrectly across all exams.`);
       } else if (logId) {
-        const log = await getExamLogFromDB(logId);
+        const log = await getExamLogFromDB(logId) as unknown as ExamLog | undefined;
         if (log) {
           setExamLog(log);
           mistakes = log.entries
-            .filter((entry: ExamLogEntry) => !entry.isCorrect && entry.selectedOptionId !== null)
-            .map((entry: ExamLogEntry) => entry.mcq);
+            .filter((entry) => !entry.isCorrect && entry.selectedOptionId !== null)
+            .map((entry) => entry.mcq);
           setPageTitle("Review Mistakes");
           setPageDescription(`Create a focused practice session from the ${mistakes.length} questions you answered incorrectly in "${log.name}".`);
         }

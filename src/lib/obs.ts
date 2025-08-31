@@ -14,8 +14,7 @@ interface SentryInstance {
 }
 
 export function addBreadcrumb(b: SentryBreadcrumb) {
-  // @ts-expect-error - Sentry may not be available
-  const Sentry: SentryInstance | undefined = (globalThis as any).Sentry;
+  const Sentry: SentryInstance | undefined = (globalThis as typeof globalThis & { Sentry?: SentryInstance }).Sentry;
   if (Sentry?.addBreadcrumb) {
     Sentry.addBreadcrumb({ ...b });
   } else {
@@ -25,8 +24,7 @@ export function addBreadcrumb(b: SentryBreadcrumb) {
 }
 
 export function captureMessage(msg: string, level: 'info' | 'warning' | 'error' = 'info', data?: Record<string, unknown>) {
-  // @ts-expect-error - Sentry may not be available
-  const Sentry: SentryInstance | undefined = (globalThis as any).Sentry;
+  const Sentry: SentryInstance | undefined = (globalThis as typeof globalThis & { Sentry?: SentryInstance }).Sentry;
   if (Sentry?.captureMessage) {
     Sentry.captureMessage(msg, { level, extra: data });
   } else {
@@ -36,8 +34,7 @@ export function captureMessage(msg: string, level: 'info' | 'warning' | 'error' 
 }
 
 export function captureException(err: unknown, context?: Record<string, unknown>) {
-  // @ts-expect-error - Sentry may not be available
-  const Sentry: SentryInstance | undefined = (globalThis as any).Sentry;
+  const Sentry: SentryInstance | undefined = (globalThis as typeof globalThis & { Sentry?: SentryInstance }).Sentry;
   if (Sentry?.captureException) {
     Sentry.captureException(err, { extra: context });
   } else {

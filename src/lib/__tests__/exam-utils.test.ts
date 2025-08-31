@@ -13,6 +13,7 @@ function makeSettings(scheduler: 'fsrs' | 'fsrs6' | 'sm2' = 'fsrs'): SrsSettings
     mcqFsrsParameters: { request_retention: 0.9, maximum_interval: 36500, w: Array(17).fill(1) as number[] },
     fsrs6Parameters: { request_retention: 0.9, maximum_interval: 36500, w: Array(21).fill(1) as number[] },
     mcqFsrs6Parameters: { request_retention: 0.9, maximum_interval: 36500, w: Array(21).fill(1) as number[] },
+    maturityThresholdDays: 21,
     sm2StartingEase: 2.5,
     sm2MinEasinessFactor: 1.3,
     sm2EasyBonus: 1.3,
@@ -69,8 +70,25 @@ describe('exam-utils filters', () => {
   const cardDue: FlashcardData = { id: 'c-due', type: 'basic', question: 'f', answer: 'b', tags: ['t2'], srs: { fsrs: { state: 1, due: past, difficulty: 7 } as const } } as FlashcardData;
   const cardHard: FlashcardData = { id: 'c-hard', type: 'basic', question: 'f', answer: 'b', tags: ['t1','t2'], srs: { fsrs: { state: 1, due: past, difficulty: 9 } as const } } as FlashcardData;
 
-  const mcqNew: McqData = { id: 'm-new', stem: 's', options: [], answer: 0, tags: ['t1'], srs: { fsrs: { state: 0, due: future, difficulty: 4 } as const } } as McqData;
-  const mcqDue: McqData = { id: 'm-due', stem: 's', options: [], answer: 0, tags: ['t2'], srs: { fsrs: { state: 1, due: past, difficulty: 6 } as const } } as McqData;
+  const mcqNew: McqData = { 
+    id: 'm-new', 
+    question: 's', 
+    explanation: '',
+    options: [], 
+    answer: 0, 
+    tags: ['t1'], 
+    srs: { fsrs: { state: 0, due: future, difficulty: 4, stability: 1, review: future, scheduled_days: 1 } } 
+  } as unknown as McqData;
+  
+  const mcqDue: McqData = { 
+    id: 'm-due', 
+    question: 's',
+    explanation: '',
+    options: [], 
+    answer: 0, 
+    tags: ['t2'], 
+    srs: { fsrs: { state: 1, due: past, difficulty: 6, stability: 1, review: past, scheduled_days: 1 } } 
+  } as unknown as McqData;
 
   const decks: DeckData[] = [ makeDeck('D1', [cardNew, cardDue, cardHard]) ];
   const banks: QuestionBankData[] = [ makeBank('B1', [mcqNew, mcqDue]) ];

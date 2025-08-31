@@ -13,7 +13,7 @@ Operation shape (queued in Dexie via enqueueSyncOp):
 }
 */
 
-interface SyncOperation {
+export interface SyncOperation {
   id?: number;
   resource: string;
   opType: string;
@@ -30,7 +30,7 @@ import {
 } from './storage';
 import { postMessage } from './broadcast';
 
-export type PushHandler = <T>(ops: SyncOperation<T>[]) => Promise<{ syncedIds: number[] } | void>;
+export type PushHandler = (ops: SyncOperation[]) => Promise<{ syncedIds: number[] } | void>;
 
 let running = false;
 let stopped = true;

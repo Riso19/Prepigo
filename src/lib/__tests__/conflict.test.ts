@@ -16,7 +16,7 @@ vi.mock('@/lib/storage', () => {
   const meta = new Map<string, unknown>();
   const exams: unknown[] = [];
   return {
-    getMeta: async (key: string) => meta.get(key)?.value ?? meta.get(key),
+    getMeta: async (key: string) => meta.get(key),
     setMeta: async (key: string, value: unknown) => meta.set(key, { key, value }),
     listMetaKeys: async (prefix: string) => Array.from(meta.keys()).filter((k) => k.startsWith(prefix)),
     deleteMeta: async (key: string) => meta.delete(key),
@@ -75,7 +75,18 @@ describe('conflict persistence', () => {
 describe('applyResolution', () => {
   it('applies resolution to exams store with upsert semantics', async () => {
     // create conflict; then resolve
-    const resolved = { id: 'e3', name: 'Final', date: '2025-01-01', deckIds: [], questionBankIds: [], tags: [], tagFilterType: 'any', filterMode: 'all' };
+    const resolved = {
+      id: 'e3',
+      name: 'Test Exam',
+      date: '2023-01-01',
+      deckIds: [],
+      questionBankIds: [],
+      tags: [],
+      tagFilterType: 'all' as const,
+      filterMode: 'all' as const,
+      filterDifficultyMin: undefined,
+      filterDifficultyMax: undefined
+    };
     await applyResolution('exams', 'e3', resolved);
 
     // storage mock keeps an array; re-import mock to fetch

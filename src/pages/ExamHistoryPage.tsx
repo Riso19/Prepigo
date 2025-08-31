@@ -15,10 +15,11 @@ const ExamHistoryPage = () => {
   const [hasMistakes, setHasMistakes] = useState(false);
 
   useEffect(() => {
-    getAllExamLogsFromDB().then((logs: ExamLog[]) => {
-      const sortedLogs = logs.sort((a: ExamLog, b: ExamLog) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    getAllExamLogsFromDB().then((logs: unknown) => {
+      const examLogs = logs as ExamLog[];
+      const sortedLogs = examLogs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       setExamLogs(sortedLogs);
-      setHasMistakes(sortedLogs.some((log: ExamLog) => log.results.incorrectCount > 0));
+      setHasMistakes(sortedLogs.some(log => log.results.incorrectCount > 0));
     });
   }, []);
 
