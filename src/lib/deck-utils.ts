@@ -1,7 +1,6 @@
 import { DeckData, FlashcardData } from "@/data/decks";
 import { SrsSettings } from "@/contexts/SettingsContext";
 import { State } from "ts-fsrs";
-import { getAllFlashcardsFromDeck } from "./card-utils";
 import { ExamData } from "@/data/exams";
 import { getCardsForExam } from "./exam-utils";
 import { differenceInDays } from "date-fns";
@@ -334,7 +333,7 @@ export const getDeckDueCounts = (
   globalSettings: SrsSettings
 ): { newCount: number; learnCount: number; dueCount: number } => {
   const now = new Date();
-  let counts = { newCount: 0, learnCount: 0, dueCount: 0 };
+  const counts = { newCount: 0, learnCount: 0, dueCount: 0 };
 
   const settings = getEffectiveSrsSettings(allDecks, deck.id, globalSettings);
 
@@ -349,12 +348,12 @@ export const getDeckDueCounts = (
       const sm2State = card.srs?.sm2;
       isCardNew = !sm2State || sm2State.state === 'new' || !sm2State.state;
       isCardDue = !!sm2State && new Date(sm2State.due) <= now;
-      isCardLearning = isCardDue && (sm2State.state === 'learning' || sm2State.state === 'relearning');
+      isCardLearning = !!sm2State && isCardDue && (sm2State.state === 'learning' || sm2State.state === 'relearning');
     } else { // fsrs or fsrs6
       const srsData = settings.scheduler === 'fsrs6' ? card.srs?.fsrs6 : card.srs?.fsrs;
       isCardNew = !srsData || srsData.state === State.New;
       isCardDue = !!srsData && new Date(srsData.due) <= now;
-      isCardLearning = isCardDue && (srsData.state === State.Learning || srsData.state === State.Relearning);
+      isCardLearning = !!srsData && isCardDue && (srsData.state === State.Learning || srsData.state === State.Relearning);
     }
     
     if (isCardNew) {
@@ -580,7 +579,7 @@ export const buildSessionQueue = (
     remainingReviewBudget -= reviewsTaken;
   }
 
-  let gatheredNew = [...new Set(sessionNew)];
+  const gatheredNew = [...new Set(sessionNew)];
   if (globalSettings.newCardGatherOrder === 'ascending') gatheredNew.sort((a, b) => (a.srs?.newCardOrder || 0) - (b.srs?.newCardOrder || 0));
   if (globalSettings.newCardGatherOrder === 'descending') gatheredNew.sort((a, b) => (b.srs?.newCardOrder || 0) - (a.srs?.newCardOrder || 0));
   

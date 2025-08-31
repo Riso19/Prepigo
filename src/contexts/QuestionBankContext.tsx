@@ -1,7 +1,9 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { QuestionBankData, questionBanks as initialQuestionBanks } from "@/data/questionBanks";
-import { getAllQuestionBanksFromDB, saveQuestionBanksToDB, getMcqIntroductionsFromDB, saveMcqIntroductionsToDB } from "@/lib/idb";
+import { getAllQuestionBanksFromDB, saveQuestionBanksToDB, getMcqIntroductionsFromDB, saveMcqIntroductionsToDB, enqueueSyncOp } from "@/lib/idb";
 import { Loader2 } from "lucide-react";
+import { scheduleSyncNow } from "@/lib/sync";
+import { postMessage } from "@/lib/broadcast";
 
 interface QuestionBankContextType {
   questionBanks: QuestionBankData[];
@@ -57,6 +59,12 @@ export const QuestionBankProvider = ({ children }: { children: ReactNode }) => {
         console.error("Failed to save question banks to IndexedDB", error);
       });
 
+      // Enqueue sync operation (non-blocking)
+      void enqueueSyncOp({ resource: 'questionBanks', opType: 'bulk-upsert', payload: updatedBanks })
+        .then(() => scheduleSyncNow())
+        .then(() => postMessage({ type: 'storage-write', resource: 'questionBanks' }))
+        .catch(() => { /* noop */ });
+
       return updatedBanks;
     });
   };
@@ -67,6 +75,12 @@ export const QuestionBankProvider = ({ children }: { children: ReactNode }) => {
       const newSet = new Set(prev);
       newSet.add(mcqId);
       saveMcqIntroductionsToDB({ date: todayStr, ids: Array.from(newSet) });
+
+      // Enqueue sync for MCQ introductions metadata (non-blocking)
+      void enqueueSyncOp({ resource: 'meta:mcqIntroductions', opType: 'upsert', payload: { date: todayStr, ids: Array.from(newSet) } })
+        .then(() => scheduleSyncNow())
+        .then(() => postMessage({ type: 'storage-write', resource: 'meta:mcqIntroductions' }))
+        .catch(() => { /* noop */ });
       return newSet;
     });
   };

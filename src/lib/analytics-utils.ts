@@ -1,10 +1,19 @@
 import { ReviewLog } from "@/data/decks";
 import { McqReviewLog } from "@/lib/idb";
 import { Rating, State } from "ts-fsrs";
-import { DeckData, FlashcardData } from "@/data/decks";
+import { FlashcardData } from "@/data/decks";
 import { McqData } from "@/data/questionBanks";
 import { SrsSettings } from "@/contexts/SettingsContext";
 import { format, subDays, startOfDay, isSameDay, differenceInDays, addDays } from 'date-fns';
+
+// Map SM-2 easiness (lower is harder) to FSRS-like difficulty (higher is harder, 1-10 scale)
+// Heuristic: map EF 2.5 (default) -> ~1, EF 1.3 (hardest) -> ~10, clamp to [1,10]
+export const sm2EasinessToDifficulty = (easinessFactor: number): number => {
+  const minEF = 1.3;
+  const maxRefEF = 2.5; // reference EF treated as ~easy
+  const raw = 1 + 9 * Math.max(0, (maxRefEF - easinessFactor) / (maxRefEF - minEF));
+  return Math.min(10, Math.max(1, raw));
+};
 
 export const calculateAccuracy = (
   itemIds: Set<string>,
@@ -55,10 +64,7 @@ export const calculateDueStats = (items: (FlashcardData | McqData)[], settings: 
           if (scheduler !== 'sm2' && 'difficulty' in srsData) {
             weightedOverdueLoad += srsData.difficulty;
           } else if (scheduler === 'sm2' && 'easinessFactor' in srsData) {
-            // Convert SM-2 easiness (lower is harder) to FSRS difficulty (higher is harder)
-            // Easiness ranges from 1.3 up. FSRS difficulty is 1-10.
-            // Map 2.5 (default) to ~1, and 1.3 (hardest) to ~10.
-            const sm2Difficulty = 1 + 9 * Math.max(0, (2.5 - srsData.easinessFactor) / (2.5 - 1.3));
+            const sm2Difficulty = sm2EasinessToDifficulty(srsData.easinessFactor);
             weightedOverdueLoad += sm2Difficulty;
           }
         }

@@ -101,7 +101,18 @@ export const fsrs6 = (params: FSRS6Parameters, steps: FSRS6Steps) => {
 
       for (const rating of Object.values(Rating).filter(v => typeof v === 'number') as Rating[]) {
         const next_card = { ...card };
-        let reviewLog: ReviewLog;
+        const reviewLog: ReviewLog = {
+            rating: rating,
+            state: card.state,
+            due: card.due,
+            stability: card.stability,
+            difficulty: card.difficulty,
+            elapsed_days: elapsed_days,
+            last_elapsed_days: last_elapsed_days,
+            scheduled_days: next_card.scheduled_days,
+            review: now,
+            learning_steps: card.learning_steps,
+        };
 
         if (next_card.state === State.New) {
             next_card.state = State.Learning;
@@ -181,20 +192,9 @@ export const fsrs6 = (params: FSRS6Parameters, steps: FSRS6Steps) => {
             }
         }
 
-        reviewLog = {
-            rating: rating,
-            state: card.state,
-            due: card.due,
-            stability: card.stability,
-            difficulty: card.difficulty,
-            elapsed_days: elapsed_days,
-            last_elapsed_days: last_elapsed_days,
-            scheduled_days: next_card.scheduled_days,
-            review: now,
-            learning_steps: card.learning_steps,
-        };
-
-        recordLog[rating] = {
+        // RecordLog keys in ts-fsrs are not indexable by Rating at type level.
+        // Use a narrow cast to index by numeric enum, matching runtime behavior.
+        (recordLog as unknown as Record<number, { card: Card; log: ReviewLog }>)[rating] = {
             card: next_card,
             log: reviewLog,
         };

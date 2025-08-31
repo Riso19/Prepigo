@@ -5,9 +5,10 @@ import { State } from "ts-fsrs";
 import { SrsSettings } from "@/contexts/SettingsContext";
 import { McqData, QuestionBankData } from "@/data/questionBanks";
 import { getAllMcqsFromBank } from "./question-bank-utils";
-import { getItemStatus, ItemStatus } from "./srs-utils";
+import { getItemStatus } from "./srs-utils";
 import { differenceInDays } from "date-fns";
 import { calculateAverageRetention } from "./analytics-utils";
+import { parseExamDateAsLocal } from "./date-utils";
 
 export const getCardsForExam = (exam: ExamData, allDecks: DeckData[], settings: SrsSettings): FlashcardData[] => {
   const allDecksFlat = (d: DeckData[]): DeckData[] => d.flatMap(deck => [deck, ...(deck.subDecks ? allDecksFlat(deck.subDecks) : [])]);
@@ -130,7 +131,7 @@ export const calculateExamProgress = (
     return { mastered: 0, inProgress: 0, newItems: 0, total: 0, percentage: 100 };
   }
 
-  const examDate = new Date(exam.date);
+  const examDate = parseExamDateAsLocal(exam.date);
   let weightedScore = 0;
   let masteredCount = 0;
   let inProgressCount = 0;
@@ -188,7 +189,7 @@ export const calculateProjectedRetention = (
 ): number | null => {
   if (itemsInScope.length === 0) return 100;
 
-  const examDate = new Date(exam.date);
+  const examDate = parseExamDateAsLocal(exam.date);
   const now = new Date();
   const daysUntilExam = differenceInDays(examDate, now);
 

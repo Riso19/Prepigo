@@ -14,7 +14,7 @@ import { Separator } from '@/components/ui/separator';
 import React, { useRef, useState } from 'react';
 import { useDecks } from '@/contexts/DecksContext';
 import { DeckData, decksSchema, FlashcardData } from '@/data/decks';
-import { clearDecksDB, getReviewLogsForCard, saveMediaToDB, clearMediaDB, clearQuestionBanksDB, clearMcqReviewLogsDB, getMediaFromDB, saveSingleMediaToDB, getReviewLogsForMcq } from '@/lib/idb';
+import { clearDecksDB, getReviewLogsForCard, saveMediaToDB, clearMediaDB, clearQuestionBanksDB, clearMcqReviewLogsDB, getMediaFromDB, saveSingleMediaToDB, getReviewLogsForMcq, enqueueSyncOp } from '@/lib/idb';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,6 +43,9 @@ import { getAllMcqsFromBank } from '@/lib/question-bank-utils';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import JSZip from 'jszip';
 import * as z from 'zod';
+import { scheduleSyncNow } from '@/lib/sync';
+import { postMessage } from '@/lib/broadcast';
+import { outcomeByRating } from '@/lib/fsrs-helpers';
 
 const parseSteps = (steps: string): number[] => {
   return steps.trim().split(/\s+/).filter(s => s).map(stepStr => {
@@ -146,12 +149,12 @@ const SettingsPage = () => {
             processedCount++;
             const reviewLogs = await getReviewLogsForCard(card.id);
             if (reviewLogs.length > 0) {
-              reviewLogs.sort((a, b) => new Date(a.review).getTime() - new Date(b.review).getTime());
+              reviewLogs.sort((a: { review: string }, b: { review: string }) => new Date(a.review).getTime() - new Date(b.review).getTime());
               let fsrsCard: FsrsCard | Fsrs6Card = createEmptyCard(new Date(reviewLogs[0].review));
               for (const log of reviewLogs) {
                 const rating = log.rating as Rating;
                 const schedulingResult = fsrsInstance.repeat(fsrsCard, new Date(log.review));
-                fsrsCard = schedulingResult[rating].card;
+                fsrsCard = outcomeByRating(schedulingResult, rating).card;
               }
               const updatedSrsData = { ...fsrsCard, due: fsrsCard.due.toISOString(), last_review: fsrsCard.last_review?.toISOString() };
               const updatedCard: FlashcardData = {
@@ -182,12 +185,12 @@ const SettingsPage = () => {
             processedMcqs++;
             const reviewLogs = await getReviewLogsForMcq(mcq.id);
             if (reviewLogs.length > 0) {
-                reviewLogs.sort((a, b) => new Date(a.review).getTime() - new Date(b.review).getTime());
+                reviewLogs.sort((a: { review: string }, b: { review: string }) => new Date(a.review).getTime() - new Date(b.review).getTime());
                 let fsrsCard: FsrsCard | Fsrs6Card = createEmptyCard(new Date(reviewLogs[0].review));
                 for (const log of reviewLogs) {
                     const rating = log.rating as Rating;
                     const schedulingResult = mcqFsrsInstance.repeat(fsrsCard, new Date(log.review));
-                    fsrsCard = schedulingResult[rating].card;
+                    fsrsCard = outcomeByRating(schedulingResult, rating).card;
                 }
                 const updatedSrsData = { ...fsrsCard, due: fsrsCard.due.toISOString(), last_review: fsrsCard.last_review?.toISOString() };
                 const updatedMcq = {
@@ -298,6 +301,12 @@ const SettingsPage = () => {
         }
         if (importedMedia && importedMedia.size > 0) {
             await saveMediaToDB(importedMedia);
+            // Enqueue sync ops for imported media and schedule background sync
+            const ids = Array.from(importedMedia.keys());
+            void Promise.all(ids.map((id) => enqueueSyncOp({ resource: 'media', opType: 'upsert', payload: { id } })))
+              .then(() => scheduleSyncNow())
+              .then(() => postMessage({ type: 'storage-write', resource: 'media' }))
+              .catch(() => { /* noop */ });
         }
         toast.success("Data imported successfully!", { id: toastId });
       } else {
@@ -417,6 +426,10 @@ const SettingsPage = () => {
             
             const blob = await file.async("blob");
             await saveSingleMediaToDB(newFileName, blob);
+            void enqueueSyncOp({ resource: 'media', opType: 'upsert', payload: { id: newFileName } })
+              .then(() => scheduleSyncNow())
+              .then(() => postMessage({ type: 'storage-write', resource: 'media', id: newFileName }))
+              .catch(() => { /* noop */ });
             processed++;
             toast.loading(`Importing media... (${processed}/${mediaFiles.length})`, { id: toastId });
           }
@@ -434,6 +447,10 @@ const SettingsPage = () => {
             const base64Data = mediaMap[originalFileName];
             const blob = base64ToBlob(base64Data);
             await saveSingleMediaToDB(newFileName, blob);
+            void enqueueSyncOp({ resource: 'media', opType: 'upsert', payload: { id: newFileName } })
+              .then(() => scheduleSyncNow())
+              .then(() => postMessage({ type: 'storage-write', resource: 'media', id: newFileName }))
+              .catch(() => { /* noop */ });
           }
           importedBanks = parsedData.questionBanks;
         } else {
@@ -600,6 +617,8 @@ const SettingsPage = () => {
                     />
                   </CardContent>
                 </Card>
+
+                
 
                 {scheduler === 'fsrs' && (
                   <Card>

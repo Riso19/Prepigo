@@ -264,7 +264,7 @@ export const getMcqDueCounts = (
   globalSettings: SrsSettings
 ): { newCount: number; learnCount: number; dueCount: number } => {
   const now = new Date();
-  let counts = { newCount: 0, learnCount: 0, dueCount: 0 };
+  const counts = { newCount: 0, learnCount: 0, dueCount: 0 };
 
   const settings = getEffectiveMcqSrsSettings(allBanks, bank.id, globalSettings);
   const scheduler = settings.scheduler === 'sm2' ? 'fsrs' : settings.scheduler;
@@ -451,17 +451,82 @@ export const buildMcqSessionQueue = (
     remainingReviewBudget -= reviewsTaken;
   }
 
-  const sortedNew = shuffle([...new Set(sessionNew)]);
-  const sortedReviews = shuffle([...new Set(sessionReviews)]);
-  const learningCombined = [...new Set(sessionLearning)].sort((a, b) => {
+  const uniqueNew = [...new Set(sessionNew)];
+  const uniqueReviews = [...new Set(sessionReviews)];
+
+  // Compose final queue
+  const reviewSortOrder = globalSettings.mcqReviewSortOrder ?? 'dueDate';
+  const newVsReviewOrder = globalSettings.mcqNewVsReviewOrder ?? 'mix';
+  const interleaveBanks = globalSettings.mcqInterleaveBanks ?? true;
+  const burySiblings = globalSettings.mcqBurySiblings ?? false;
+
+  let sortedReviews: McqData[] = [];
+  if (reviewSortOrder === 'random') {
+    sortedReviews = shuffle([...uniqueReviews]);
+  } else {
+    // dueDate and overdueFirst behave the same here because all are due
+    sortedReviews = [...uniqueReviews].sort((a, b) => {
       const srsA = a.srs?.fsrs || a.srs?.fsrs6;
       const srsB = b.srs?.fsrs || b.srs?.fsrs6;
-      return new Date(srsA!.due).getTime() - new Date(srsB!.due).getTime();
-  });
+      const da = srsA ? new Date(srsA.due).getTime() : Number.MAX_SAFE_INTEGER;
+      const db = srsB ? new Date(srsB.due).getTime() : Number.MAX_SAFE_INTEGER;
+      return da - db;
+    });
+  }
+
+  const sortedNew = shuffle([...uniqueNew]);
+
+  let mixed: McqData[] = [];
+  if (newVsReviewOrder === 'newFirst') {
+    mixed = [...sortedNew, ...sortedReviews];
+  } else if (newVsReviewOrder === 'reviewFirst') {
+    mixed = [...sortedReviews, ...sortedNew];
+  } else {
+    mixed = shuffle([...sortedReviews, ...sortedNew]);
+  }
+
+  if (interleaveBanks) {
+    const bankMap = new Map<string, McqData[]>();
+    for (const mcq of mixed) {
+      const bankId = findParentBankOfMcq(banksToStudy, mcq.id)?.id;
+      if (bankId) {
+        if (!bankMap.has(bankId)) {
+          bankMap.set(bankId, []);
+        }
+        bankMap.get(bankId)?.push(mcq);
+      }
+    }
+
+    const interleaved = [];
+    while (bankMap.size > 0) {
+      for (const [bankId, mcqs] of bankMap) {
+        if (mcqs.length > 0) {
+          interleaved.push(mcqs.shift()!);
+        }
+        if (mcqs.length === 0) {
+          bankMap.delete(bankId);
+        }
+      }
+    }
+    mixed = interleaved;
+  }
+
+  if (burySiblings) {
+    const finalQueue: McqData[] = [];
+    for (const mcq of mixed) {
+      if (finalQueue.length > 0 && findParentBankOfMcq(banksToStudy, mcq.id)?.id === findParentBankOfMcq(banksToStudy, finalQueue[finalQueue.length - 1].id)?.id) {
+        finalQueue.unshift(mcq);
+      } else {
+        finalQueue.push(mcq);
+      }
+    }
+    mixed = finalQueue;
+  }
 
   examPriorityNew.sort(examSort);
-  const finalQueue = [...examPriorityNew, ...learningCombined, ...shuffle([...sortedReviews, ...sortedNew])];
 
+  const finalQueue = [...sessionLearning.sort(examSort), ...examPriorityNew, ...mixed];
+  
   return { queue: finalQueue, mcqExamMap };
 };
 

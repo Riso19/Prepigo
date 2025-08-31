@@ -1,6 +1,6 @@
 import * as z from 'zod';
 import { State } from 'ts-fsrs';
-import { srsSettingsSchema } from '@/contexts/SettingsContext';
+import { srsSettingsSchema, type SrsSettings } from '@/contexts/SettingsContext';
 import { examDataSchema } from './exams';
 
 export type FlashcardType = "basic" | "cloze" | "imageOcclusion";
@@ -52,6 +52,23 @@ const baseFlashcardSchema = z.object({
   noteId: z.string().optional(),
   tags: z.array(z.string()).optional(),
   srs: srsDataSchema.optional(),
+  // Optional source metadata (non-breaking) to link a card to a PDF resource/selection
+  sourceType: z.literal('pdf').optional(),
+  sourceResourceId: z.string().optional(),
+  sourcePage: z.number().optional(),
+  sourceText: z.string().optional(),
+  sourceRects: z
+    .array(
+      z.object({
+        x: z.number(),
+        y: z.number(),
+        w: z.number(),
+        h: z.number(),
+        page: z.number(),
+      })
+    )
+    .optional(),
+  sourceCreatedAt: z.number().optional(),
 });
 
 export const basicFlashcardSchema = baseFlashcardSchema.extend({
@@ -100,13 +117,26 @@ const baseDeckSchema = z.object({
   srsSettings: srsSettingsSchema.optional(),
 });
 
-export type DeckData = z.infer<typeof baseDeckSchema> & {
-  subDecks?: DeckData[];
-};
+// Define internal recursive schema first
+interface DeckDataInternal extends z.infer<typeof baseDeckSchema> {
+  subDecks?: DeckDataInternal[];
+}
 
-export const deckDataSchema: z.ZodType<DeckData> = baseDeckSchema.extend({
-  subDecks: z.lazy(() => z.array(deckDataSchema)).optional(),
+const deckDataSchemaInternal: z.ZodType<DeckDataInternal> = baseDeckSchema.extend({
+  subDecks: z.lazy(() => z.array(deckDataSchemaInternal)).optional(),
 });
+
+export const deckDataSchema = deckDataSchemaInternal;
+
+// Explicit TS interface to ensure recursive types are preserved across the app
+export interface DeckData {
+  id: string;
+  name: string;
+  flashcards: FlashcardData[];
+  hasCustomSettings?: boolean;
+  srsSettings?: SrsSettings;
+  subDecks?: DeckData[];
+}
 
 // --- Review Log Schema for FSRS, aligned with ts-fsrs ReviewLog type ---
 export const reviewLogSchema = z.object({

@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import initSqlJs, { Database } from 'sql.js';
+import initSqlJs from 'sql.js';
 import { DeckData, FlashcardData, BasicFlashcard, ClozeFlashcard, SrsData, Sm2State, ImageOcclusionFlashcard, Occlusion } from '@/data/decks';
 
 const ANKI_FIELD_SEPARATOR = '\x1f';
@@ -18,18 +18,19 @@ interface AnkiDeck {
   name: string;
 }
 
-const convertAnkiSchedulingData = (cardRow: any[], collectionCreationTimestamp: number): SrsData => {
+const convertAnkiSchedulingData = (cardRow: unknown[], collectionCreationTimestamp: number): SrsData => {
   const [ _id, _nid, _did, _ord, _mod, _usn, type, queue, due, ivl, factor, reps, lapses ] = cardRow as number[];
   const isSuspended = queue === -1;
   let state: Sm2State['state'];
   let dueDate: Date;
   const now = new Date();
+  let creationDate: Date;
 
   switch (type) {
     case 0: state = 'new'; dueDate = now; break;
     case 1: state = 'learning'; dueDate = new Date(due * 1000); break;
     case 2: state = 'review';
-      const creationDate = new Date(collectionCreationTimestamp * 1000);
+      creationDate = new Date(collectionCreationTimestamp * 1000);
       creationDate.setDate(creationDate.getDate() + due);
       dueDate = creationDate;
       break;
@@ -86,7 +87,7 @@ export const importAnkiFile = async (
   includeScheduling: boolean,
   onProgress: (progress: { message: string; value: number }) => void
 ): Promise<{ decks: DeckData[]; media: Map<string, Blob> }> => {
-  const SQL = await initSqlJs({ locateFile: file => `https://sql.js.org/dist/${file}` });
+  const SQL = await initSqlJs({ locateFile: (file: string) => `https://sql.js.org/dist/${file}` });
   let dbBytes: Uint8Array;
   const mediaToStore = new Map<string, Blob>();
   const importPrefix = `anki-${Date.now()}`;
@@ -107,6 +108,7 @@ export const importAnkiFile = async (
         let mediaString = decoder.decode(mediaBytes);
 
         mediaString = mediaString.trim().replace(/^\uFEFF/, '');
+        // Replace control characters (0x00-0x08, 0x0B, 0x0C, 0x0E-0x1F) with empty string
         mediaString = mediaString.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
 
         let mediaJSON: { [key: string]: string } = {};
@@ -173,7 +175,7 @@ export const importAnkiFile = async (
   for (let i = 0; i < cardsData.length; i++) {
     const cardRow = cardsData[i];
     const [_id, noteId, deckId, ord] = cardRow as number[];
-    const noteRow = notesData.find(n => n[0] === noteId);
+    const noteRow = notesData.find((n: unknown[]) => n[0] === noteId);
     if (!noteRow) continue;
 
     const [_noteId, modelId, fieldsStr, tagsStr] = noteRow as [number, number, string, string];
@@ -289,7 +291,7 @@ export const importAnkiFile = async (
 
                     if (content.startsWith('image-occlusion:rect')) {
                         const params = content.split(':');
-                        const coords: any = {};
+                        const coords: Record<string, number> = {};
                         params.forEach(p => {
                             const [key, value] = p.split('=');
                             if (['left', 'top', 'width', 'height'].includes(key)) coords[key] = parseFloat(value);

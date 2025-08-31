@@ -5,7 +5,7 @@ import { SrsSettings, srsSettingsSchema, useSettings } from '@/contexts/Settings
 import { useDecks } from '@/contexts/DecksContext';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';

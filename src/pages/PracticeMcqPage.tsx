@@ -2,17 +2,20 @@ import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import { useQuestionBanks } from "@/contexts/QuestionBankContext";
 import { findQuestionBankById, getAllMcqsFromBank, updateMcq, getEffectiveMcqSrsSettings } from "@/lib/question-bank-utils";
-import { McqData, QuestionBankData } from "@/data/questionBanks";
+import { McqData } from "@/data/questionBanks";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Home, X, HelpCircle, Clock, Check, Sparkles } from "lucide-react";
 import McqPlayer from "@/components/McqPlayer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { fsrs, createEmptyCard, Card as FsrsCard, Rating, State } from "ts-fsrs";
+import { fsrs, createEmptyCard, Card as FsrsCard, Rating } from "ts-fsrs";
 import { fsrs6, Card as Fsrs6Card, generatorParameters as fsrs6GeneratorParameters } from "@/lib/fsrs6";
-import { addMcqReviewLog, McqReviewLog } from "@/lib/idb";
+import { addMcqReviewLog, McqReviewLog, enqueueSyncOp } from "@/lib/idb";
 import { useSettings } from "@/contexts/SettingsContext";
+import { scheduleSyncNow } from "@/lib/sync";
+import { postMessage } from "@/lib/broadcast";
+import { outcomeByRating } from "@/lib/fsrs-helpers";
 
 const shuffle = <T,>(array: T[]): T[] => {
   const newArray = [...array];
@@ -60,7 +63,7 @@ const PracticeMcqPage = () => {
   const [isAnswerCorrect, setIsAnswerCorrect] = useState<boolean | null>(null);
   const [sessionStats, setSessionStats] = useState({ correct: 0, incorrect: 0 });
   const [isFinished, setIsFinished] = useState(false);
-  const [dueTimeStrings, setDueTimeStrings] = useState<Record<string, string> | null>(null);
+  const [dueTimeStrings, setDueTimeStrings] = useState<Record<Rating, string> | null>(null);
   const reviewStartTimeRef = useRef<number | null>(null);
   
   const [isSrsEnabled, setIsSrsEnabled] = useState(true);
@@ -98,10 +101,25 @@ const PracticeMcqPage = () => {
       const banksToPractice = bankId === 'all' ? questionBanks : (bank ? [bank] : []);
       if (banksToPractice.length > 0) {
         const allMcqs = banksToPractice.flatMap(b => getAllMcqsFromBank(b));
-        setSessionQueue(shuffle(allMcqs));
+        const effective = getEffectiveMcqSrsSettings(questionBanks, bankId || 'all', globalSettings);
+        let ordered = [...allMcqs];
+        // Respect mcqDisplayOrder
+        if (effective.mcqDisplayOrder === 'random') {
+          ordered = shuffle(ordered);
+        } else if (effective.mcqDisplayOrder === 'byTag') {
+          ordered.sort((a, b) => (a.tags?.join(',') || '').localeCompare(b.tags?.join(',') || ''));
+        } else if (effective.mcqDisplayOrder === 'byDifficulty') {
+          // sort ascending by known difficulty (unknown/new last)
+          const diff = (m: McqData) => {
+            const srs = effective.scheduler === 'fsrs6' ? m.srs?.fsrs6 : m.srs?.fsrs;
+            return srs?.difficulty ?? Number.POSITIVE_INFINITY;
+          };
+          ordered.sort((a, b) => diff(a) - diff(b));
+        }
+        setSessionQueue(ordered);
       }
     }
-  }, [bankId, bank, questionBanks, location.state]);
+  }, [bankId, bank, questionBanks, location.state, questionBanks, globalSettings]);
 
   const handleNext = useCallback(() => {
     if (currentQuestionIndex < sessionQueue.length - 1) {
@@ -141,7 +159,7 @@ const PracticeMcqPage = () => {
       : createEmptyCard(new Date());
 
     const schedulingResult = fsrsInstance.repeat(card, new Date());
-    const nextState = schedulingResult[rating];
+    const nextState = outcomeByRating(schedulingResult, rating);
 
     const logToSave: McqReviewLog = {
       mcqId: currentQuestion.id,
@@ -156,7 +174,12 @@ const PracticeMcqPage = () => {
       review: nextState.log.review.toISOString(),
       duration,
     };
+    // Persist locally for offline-first, then enqueue sync and schedule background push
     await addMcqReviewLog(logToSave);
+    void enqueueSyncOp({ resource: 'mcqReviewLogs', opType: 'create', payload: logToSave })
+      .then(() => scheduleSyncNow())
+      .then(() => postMessage({ type: 'storage-write', resource: 'mcqReviewLogs' }))
+      .catch(() => { /* noop */ });
 
     const updatedSrsData = {
         ...nextState.card,
@@ -214,11 +237,11 @@ const PracticeMcqPage = () => {
 
         const outcomes = fsrsInstance.repeat(card, new Date());
         const now = new Date();
-        const newDueStrings: Record<string, string> = {};
+        const newDueStrings: Record<Rating, string> = {} as Record<Rating, string>;
 
         const ratings = [Rating.Again, Rating.Hard, Rating.Good, Rating.Easy];
         ratings.forEach(rating => {
-            const nextDueDate = outcomes[rating].card.due;
+            const nextDueDate = outcomeByRating(outcomes, rating).card.due;
             const diffDays = (nextDueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
             newDueStrings[rating] = formatInterval(diffDays);
         });
@@ -276,6 +299,17 @@ const PracticeMcqPage = () => {
 
   const pageTitle = bankId === 'custom' ? customSessionTitle : (bankId === 'all' ? "Practicing All MCQs" : `Practicing: ${bank?.name}`);
 
+  // Determine option order per current question (must be before any early returns)
+  const displayedOptions = useMemo(() => {
+    if (!currentQuestion) return [] as McqData["options"];
+    const effective = getEffectiveMcqSrsSettings(questionBanks, bankId || 'all', globalSettings);
+    const base = [...currentQuestion.options];
+    if (effective.mcqShuffleOptions) {
+      return shuffle(base);
+    }
+    return base;
+  }, [currentQuestion, questionBanks, bankId, globalSettings]);
+
   if (sessionQueue.length === 0) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center text-center p-4">
@@ -320,6 +354,7 @@ const PracticeMcqPage = () => {
     { label: "Easy", tooltip: "Trivial, effortless recall", grade: 5, rating: Rating.Easy, icon: Sparkles, color: "bg-sky-400 hover:bg-sky-500" },
   ];
 
+
   return (
     <div className="min-h-screen w-full bg-secondary/50 flex flex-col">
       <div className="flex-grow w-full pb-32">
@@ -329,7 +364,7 @@ const PracticeMcqPage = () => {
           </Button>
           <header className="w-full max-w-2xl mx-auto text-center mb-4 pt-8 sm:pt-0">
             <h1 className="text-2xl font-bold">{pageTitle}</h1>
-            <Progress value={(currentQuestionIndex / sessionQueue.length) * 100} className="mt-4 h-2" />
+            <Progress value={(sessionQueue.length > 0 ? (currentQuestionIndex / sessionQueue.length) * 100 : 0)} className="mt-4 h-2" />
           </header>
           <main className="w-full max-w-2xl mx-auto flex flex-col items-center justify-start py-6 gap-6">
             <McqPlayer
@@ -337,6 +372,7 @@ const PracticeMcqPage = () => {
               selectedOptionId={selectedOptionId}
               isSubmitted={isSubmitted}
               onOptionSelect={handleSelectAndSubmit}
+              options={displayedOptions}
             />
           </main>
         </div>

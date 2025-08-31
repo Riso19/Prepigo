@@ -1,7 +1,9 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { DeckData, decks as initialDecks } from "@/data/decks";
-import { getAllDecksFromDB, saveDecksToDB, getIntroductionsFromDB, saveIntroductionsToDB } from "@/lib/idb";
+import { getAllDecksFromDB, saveDecksToDB, getIntroductionsFromDB, saveIntroductionsToDB, enqueueSyncOp } from "@/lib/idb";
 import { Loader2 } from "lucide-react";
+import { scheduleSyncNow } from "@/lib/sync";
+import { postMessage } from "@/lib/broadcast";
 
 interface DecksContextType {
   decks: DeckData[];
@@ -58,6 +60,12 @@ export const DecksProvider = ({ children }: { children: ReactNode }) => {
         console.error("Failed to save decks to IndexedDB", error);
       });
 
+      // Enqueue sync operation (non-blocking)
+      void enqueueSyncOp({ resource: 'decks', opType: 'bulk-upsert', payload: updatedDecks })
+        .then(() => scheduleSyncNow())
+        .then(() => postMessage({ type: 'storage-write', resource: 'decks' }))
+        .catch(() => { /* noop */ });
+
       return updatedDecks;
     });
   };
@@ -68,6 +76,12 @@ export const DecksProvider = ({ children }: { children: ReactNode }) => {
       const newSet = new Set(prev);
       newSet.add(cardId);
       saveIntroductionsToDB({ date: todayStr, ids: Array.from(newSet) });
+
+      // Enqueue sync for introductions metadata (non-blocking)
+      void enqueueSyncOp({ resource: 'meta:introductions', opType: 'upsert', payload: { date: todayStr, ids: Array.from(newSet) } })
+        .then(() => scheduleSyncNow())
+        .then(() => postMessage({ type: 'storage-write', resource: 'meta:introductions' }))
+        .catch(() => { /* noop */ });
       return newSet;
     });
   };

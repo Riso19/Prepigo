@@ -4,7 +4,7 @@ import { useQuestionBanks } from '@/contexts/QuestionBankContext';
 import { useQuery } from '@tanstack/react-query';
 import { getAllReviewLogsFromDB, getAllMcqReviewLogsFromDB, McqReviewLog } from '@/lib/idb';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Loader2, Target, Repeat, Clock, AlertTriangle, Tag } from 'lucide-react';
+import { Loader2, Target, Repeat, Clock, AlertTriangle } from 'lucide-react';
 import { getAllFlashcardsFromDeck } from '@/lib/card-utils';
 import { getAllMcqsFromBank } from '@/lib/question-bank-utils';
 import { FlashcardData, ReviewLog } from '@/data/decks';

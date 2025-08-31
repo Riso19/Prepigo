@@ -2,9 +2,8 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { McqData } from '@/data/questionBanks';
 import { ExamLog, ExamLogEntry } from '@/data/examLogs';
-import { addMcqReviewLog, McqReviewLog, saveExamLogToDB } from '@/lib/idb';
+import { addMcqReviewLog, McqReviewLog, saveExamLogToDB, enqueueSyncOp } from '@/lib/idb';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Clock, Flag, ArrowLeft, ArrowRight, CheckSquare, Pause, Eraser, Eye } from 'lucide-react';
 import McqPlayer from '@/components/McqPlayer';
@@ -16,8 +15,10 @@ import { ExamTracker } from '@/components/ExamTracker';
 import { useQuestionBanks } from '@/contexts/QuestionBankContext';
 import { useSettings } from '@/contexts/SettingsContext';
 import { getEffectiveMcqSrsSettings, updateMcq } from '@/lib/question-bank-utils';
-import { fsrs, createEmptyCard, Card as FsrsCard, Rating, State } from "ts-fsrs";
+import { fsrs, createEmptyCard, Card as FsrsCard, Rating } from "ts-fsrs";
 import { fsrs6, Card as Fsrs6Card, generatorParameters as fsrs6GeneratorParameters } from "@/lib/fsrs6";
+import { scheduleSyncNow } from '@/lib/sync';
+import { postMessage } from '@/lib/broadcast';
 
 const parseSteps = (steps: string): number[] => {
   return steps.trim().split(/\s+/).filter(s => s).map(stepStr => {
@@ -236,6 +237,11 @@ const ExamSessionPage = () => {
     };
 
     await saveExamLogToDB(examLog);
+    // Enqueue sync for exam logs (non-blocking) and schedule background sync
+    void enqueueSyncOp({ resource: 'examLogs', opType: 'create', payload: examLog })
+      .then(() => scheduleSyncNow())
+      .then(() => postMessage({ type: 'storage-write', resource: 'examLogs' }))
+      .catch(() => { /* noop */ });
     if (isTimeUp) toast.info("Time's up! Your exam has been submitted.");
     navigate(`/exam/results/${examLog.id}`);
   }, [answers, marked, queue, examSettings, timeLeft, navigate, srsEnabled, questionBanks, globalSettings, fsrsInstance, setQuestionBanks]);

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { FSRSParameters, generatorParameters } from "ts-fsrs";
+import { generatorParameters } from "ts-fsrs";
 import * as z from 'zod';
 
 const DB_NAME = 'PrepigoSettingsDB';
@@ -25,6 +25,8 @@ export const srsSettingsSchema = z.object({
   mcqFsrsParameters: fsrsParametersSchema,
   fsrs6Parameters: fsrs6ParametersSchema,
   mcqFsrs6Parameters: fsrs6ParametersSchema,
+  // Configurable maturity threshold (days) used for Young/Mature classification across schedulers
+  maturityThresholdDays: z.coerce.number().int().min(1, "Must be at least 1 day").default(21),
   sm2StartingEase: z.coerce.number().min(1.3, "Must be at least 1.3"),
   sm2MinEasinessFactor: z.coerce.number().min(1.3, "Must be at least 1.3"),
   sm2EasyBonus: z.coerce.number().min(1, "Must be at least 1.0"),
@@ -43,6 +45,13 @@ export const srsSettingsSchema = z.object({
   maxReviewsPerDay: z.coerce.number().int().min(0, "Must be 0 or greater"),
   mcqNewCardsPerDay: z.coerce.number().int().min(0, "Must be 0 or greater"),
   mcqMaxReviewsPerDay: z.coerce.number().int().min(0, "Must be 0 or greater"),
+  // MCQ-specific display/review behavior (new)
+  mcqDisplayOrder: z.enum(['sequential', 'random', 'byTag', 'byDifficulty']).default('sequential'),
+  mcqNewVsReviewOrder: z.enum(['mix', 'newFirst', 'reviewFirst']).default('mix'),
+  mcqReviewSortOrder: z.enum(['dueDate', 'overdueFirst', 'random']).default('dueDate'),
+  mcqBurySiblings: z.boolean().default(false),
+  mcqInterleaveBanks: z.boolean().default(true),
+  mcqShuffleOptions: z.boolean().default(true),
   newCardInsertionOrder: z.enum(['sequential', 'random']),
   newCardGatherOrder: z.enum(['deck', 'ascending', 'descending', 'randomNotes', 'randomCards']),
   newCardSortOrder: z.enum(['gathered', 'typeThenGathered', 'typeThenRandom', 'randomNote', 'random']),
@@ -94,6 +103,7 @@ const defaultSettings: SrsSettings = {
     maximum_interval: 365,
     w: defaultFsrs6Weights,
   },
+  maturityThresholdDays: 21,
   sm2StartingEase: 2.5,
   sm2MinEasinessFactor: 1.3,
   sm2EasyBonus: 1.3,
@@ -112,6 +122,12 @@ const defaultSettings: SrsSettings = {
   maxReviewsPerDay: 200,
   mcqNewCardsPerDay: 20,
   mcqMaxReviewsPerDay: 200,
+  mcqDisplayOrder: 'sequential',
+  mcqNewVsReviewOrder: 'mix',
+  mcqReviewSortOrder: 'dueDate',
+  mcqBurySiblings: false,
+  mcqInterleaveBanks: true,
+  mcqShuffleOptions: true,
   newCardInsertionOrder: 'sequential',
   newCardGatherOrder: 'deck',
   newCardSortOrder: 'typeThenGathered',

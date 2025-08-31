@@ -6,12 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Home, CheckCircle, XCircle, AlertCircle, Tag, Clock } from 'lucide-react';
+import { Home, CheckCircle, XCircle, AlertCircle, Clock } from 'lucide-react';
 import McqPlayer from '@/components/McqPlayer';
 import { format } from 'date-fns';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { PerformanceGraph } from '@/components/PerformanceGraph';
-import { cn } from '@/lib/utils';
+// removed unused cn import
 
 const formatTime = (seconds: number) => {
   const minutes = Math.floor(seconds / 60);

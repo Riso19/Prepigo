@@ -1,9 +1,11 @@
+import { scheduleSyncNow } from '@/lib/sync';
+import { postMessage } from '@/lib/broadcast';
 import { useRef, useState, useEffect, useCallback, KeyboardEvent, ChangeEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Bold, Italic, Subscript, Superscript, Image as ImageIcon, Link as LinkIcon, Loader2, Underline, List, ListOrdered, Palette, Table, ArrowUpFromLine, ArrowDownFromLine, ArrowLeftFromLine, ArrowRightFromLine, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useResolvedHtml, unresolveMediaHtml } from '@/hooks/use-resolved-html';
-import { saveSingleMediaToDB } from '@/lib/idb';
+import { saveSingleMediaToDB, enqueueSyncOp } from '@/lib/idb';
 import { toast } from 'sonner';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
@@ -59,8 +61,8 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
 
       const selection = window.getSelection();
       if (selection && selection.rangeCount > 0) {
-        let node = selection.getRangeAt(0).startContainer;
-        let parent = node.nodeType === 3 ? node.parentNode : node;
+        const node = selection.getRangeAt(0).startContainer;
+        const parent = node.nodeType === 3 ? node.parentNode : node;
         let inTable = false;
         while (parent) {
           if (parent.nodeName === 'TABLE') {
@@ -133,10 +135,10 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return null;
 
-    let node = selection.getRangeAt(0).startContainer;
+    const node = selection.getRangeAt(0).startContainer;
     let cell: HTMLElement | null = null, row: HTMLElement | null = null, table: HTMLElement | null = null;
 
-    let parent = node.nodeType === 3 ? node.parentNode as HTMLElement : node as HTMLElement;
+    const parent = node.nodeType === 3 ? node.parentNode as HTMLElement : node as HTMLElement;
     while (parent) {
         const nodeName = parent.nodeName;
         if (nodeName === 'TD' || nodeName === 'TH') cell = parent;
@@ -260,6 +262,10 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
     try {
       const fileName = `media-${Date.now()}-${file.name}`;
       await saveSingleMediaToDB(fileName, file);
+      void enqueueSyncOp({ resource: 'media', opType: 'upsert', payload: { id: fileName } })
+        .then(() => scheduleSyncNow())
+        .then(() => postMessage({ type: 'storage-write', resource: 'media', id: fileName }))
+        .catch(() => { /* noop */ });
 
       const imgTag = `<img src="media://${fileName}" alt="${file.name}">`;
       
@@ -290,6 +296,10 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
       const blob = await response.blob();
       const fileName = `media-${Date.now()}-${imageUrlInput.split('/').pop()?.split('?')[0] || 'image'}`;
       await saveSingleMediaToDB(fileName, blob);
+      void enqueueSyncOp({ resource: 'media', opType: 'upsert', payload: { id: fileName } })
+        .then(() => scheduleSyncNow())
+        .then(() => postMessage({ type: 'storage-write', resource: 'media', id: fileName }))
+        .catch(() => { /* noop */ });
 
       const imgTag = `<img src="media://${fileName}" alt="Image from URL">`;
       

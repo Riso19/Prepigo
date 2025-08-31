@@ -21,11 +21,14 @@ import Header from '@/components/Header';
 import { cn } from '@/lib/utils';
 import { CalendarIcon, ArrowLeft } from 'lucide-react';
 import { format, startOfToday } from 'date-fns';
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useDeferredValue, useRef } from 'react';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useQuestionBanks } from '@/contexts/QuestionBankContext';
 import { QuestionBankTreeSelector } from '@/components/QuestionBankTreeSelector';
+import { useOnline } from '@/hooks/use-online';
+import { asLocalDayISO, parseExamDateAsLocal } from '@/lib/date-utils';
+import { addBreadcrumb, captureMessage, captureException } from '@/lib/obs';
 
 const EditExamPage = () => {
   const { examId } = useParams<{ examId: string }>();
@@ -34,6 +37,7 @@ const EditExamPage = () => {
   const { decks } = useDecks();
   const { questionBanks } = useQuestionBanks();
   const { settings } = useSettings();
+  const online = useOnline();
   const allTags = useMemo(() => getAllTags(decks), [decks]);
   
   const exam = useMemo(() => exams.find(e => e.id === examId), [exams, examId]);
@@ -44,6 +48,7 @@ const EditExamPage = () => {
     resolver: zodResolver(examDataSchema),
     defaultValues: exam,
   });
+  const errorSummaryRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (exam) {
@@ -57,20 +62,23 @@ const EditExamPage = () => {
   }, [exam, form]);
 
   const watchedValues = form.watch();
+  const deferredValues = useDeferredValue(watchedValues);
   const itemsInScope = useMemo(() => {
     const examData = { 
-        ...watchedValues, 
-        deckIds: Array.from(watchedValues.deckIds || []),
-        questionBankIds: Array.from(watchedValues.questionBankIds || [])
+        ...deferredValues, 
+        deckIds: Array.from(deferredValues.deckIds || []),
+        questionBankIds: Array.from(deferredValues.questionBankIds || [])
     };
     const cards = getCardsForExam(examData as ExamData, decks, settings);
     const mcqs = getMcqsForExam(examData as ExamData, questionBanks, settings);
     return [...cards, ...mcqs];
-  }, [watchedValues, decks, questionBanks, settings]);
+  }, [deferredValues, decks, questionBanks, settings]);
 
   const onSubmit = (data: ExamData) => {
+    addBreadcrumb({ category: 'exam', message: 'EditExam submit start', level: 'info', data: { examId, name: data.name } });
     if (itemsInScope.length === 0) {
       toast.error("No items match the selected filters. Please adjust the scope.");
+      addBreadcrumb({ category: 'exam', message: 'No items in scope on submit', level: 'warning', data: { examId } });
       return;
     }
     const finalData = { 
@@ -78,9 +86,28 @@ const EditExamPage = () => {
         deckIds: Array.from(data.deckIds),
         questionBankIds: Array.from(data.questionBankIds)
     };
-    updateExam(finalData);
-    toast.success(`Exam "${data.name}" updated!`);
+    try {
+      updateExam(finalData);
+    } catch (err) {
+      captureException(err, { examId, name: data.name });
+      toast.error('Failed to update exam');
+      return;
+    }
+    if (!online) {
+      toast.info(`Changes to "${data.name}" saved locally and queued for sync.`);
+      captureMessage('Exam changes queued offline', 'info', { examId, name: data.name });
+    } else {
+      toast.success(`Exam "${data.name}" updated!`);
+    }
+    addBreadcrumb({ category: 'exam', message: 'EditExam submit end', level: 'info', data: { examId } });
     navigate('/exams');
+  };
+
+  const onInvalid = () => {
+    // Focus the error summary for screen readers
+    if (errorSummaryRef.current) {
+      errorSummaryRef.current.focus();
+    }
   };
 
   if (!exam) {
@@ -110,7 +137,17 @@ const EditExamPage = () => {
             </CardHeader>
             <CardContent>
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+                <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-8">
+                  {/* Error summary for a11y */}
+                  <div
+                    ref={errorSummaryRef}
+                    tabIndex={-1}
+                    role="alert"
+                    aria-live="assertive"
+                    className="sr-only"
+                  >
+                    {Object.keys(form.formState.errors).length > 0 ? 'There are form errors. Please review the fields below.' : ''}
+                  </div>
                   <FormField control={form.control} name="name" render={({ field }) => (
                     <FormItem><FormLabel>Exam Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                   )} />
@@ -119,13 +156,13 @@ const EditExamPage = () => {
                       <Popover><PopoverTrigger asChild>
                           <FormControl>
                             <Button variant="outline" className={cn("w-[240px] pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                              {field.value ? format(new Date(field.value), "PPP") : <span>Pick a date</span>}
+                              {field.value ? format(parseExamDateAsLocal(field.value), "PPP") : <span>Pick a date</span>}
                               <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                             </Button>
                           </FormControl>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar mode="single" selected={field.value ? new Date(field.value) : undefined} onSelect={(date) => field.onChange(date?.toISOString())} disabled={(date) => date < startOfToday()} fixedWeeks />
+                          <Calendar mode="single" selected={field.value ? parseExamDateAsLocal(field.value) : undefined} onSelect={(date) => field.onChange(asLocalDayISO(date || undefined))} disabled={(date) => date < startOfToday()} fixedWeeks />
                         </PopoverContent>
                       </Popover>
                       <FormMessage />
@@ -172,7 +209,7 @@ const EditExamPage = () => {
                     </div>
                   )}
                   <div className="flex justify-between items-center pt-4 border-t">
-                    <div className="text-lg font-bold">
+                    <div className="text-lg font-bold" role="status" aria-live="polite">
                       Total Items in Plan: {itemsInScope.length}
                     </div>
                     <Button type="submit" size="lg">Update Exam</Button>

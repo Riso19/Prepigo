@@ -133,6 +133,96 @@ export const QuestionBankSettingsForm = ({ bank }: QuestionBankSettingsFormProps
                 </CardContent>
               </Card>
 
+              <Card>
+                <CardHeader><CardTitle>MCQ Display & Mixing</CardTitle></CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <FormField control={form.control} name="mcqDisplayOrder" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Display Order</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select order" /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="sequential">Sequential</SelectItem>
+                          <SelectItem value="random">Random</SelectItem>
+                          <SelectItem value="byTag">By Tag</SelectItem>
+                          <SelectItem value="byDifficulty">By Difficulty</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>Controls order when practicing a bank directly.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+
+                  <FormField control={form.control} name="mcqNewVsReviewOrder" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>New vs Review Mix</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select mix" /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="mix">Mix</SelectItem>
+                          <SelectItem value="newFirst">New First</SelectItem>
+                          <SelectItem value="reviewFirst">Review First</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>Controls mixing of new and review cards in sessions.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+
+                  <FormField control={form.control} name="mcqReviewSortOrder" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Review Sort Order</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select review order" /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="dueDate">By Due Date</SelectItem>
+                          <SelectItem value="overdueFirst">Overdue First</SelectItem>
+                          <SelectItem value="random">Random</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>How to sort due reviews before mixing with new.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+
+                  <FormField control={form.control} name="mcqShuffleOptions" render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                      <div className="space-y-0.5">
+                        <FormLabel className="text-base">Shuffle Answer Options</FormLabel>
+                        <FormDescription className="text-muted-foreground">Randomize answer option order per question.</FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )} />
+
+                  <FormField control={form.control} name="mcqInterleaveBanks" render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                      <div className="space-y-0.5">
+                        <FormLabel className="text-base">Interleave Banks</FormLabel>
+                        <FormDescription className="text-muted-foreground">Round-robin interleave when studying multiple banks.</FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )} />
+
+                  <FormField control={form.control} name="mcqBurySiblings" render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                      <div className="space-y-0.5">
+                        <FormLabel className="text-base">Bury Siblings</FormLabel>
+                        <FormDescription className="text-muted-foreground">Avoid adjacent questions from the same bank.</FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )} />
+                </CardContent>
+              </Card>
+
               <div className="flex justify-end">
                 <Button type="submit">Save Bank Settings</Button>
               </div>

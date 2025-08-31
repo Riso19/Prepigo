@@ -8,8 +8,6 @@ import { X, Upload, Link as LinkIcon, Loader2 } from 'lucide-react';
 import HtmlEditor from './HtmlEditor';
 import { useResolvedMediaUrl } from '@/hooks/use-resolved-media-url';
 
-interface OcclusionInPixels extends Occlusion {}
-
 interface ImageOcclusionEditorProps {
   onSave: (imageUrl: string, occlusions: Occlusion[], description: string) => void;
   initialImageUrl?: string;
@@ -21,7 +19,7 @@ const ImageOcclusionEditor = ({ onSave, initialImageUrl, initialOcclusions, init
   const resolvedInitialUrl = useResolvedMediaUrl(initialImageUrl);
   const [image, setImage] = useState<string | null>(null);
   const [imgDimensions, setImgDimensions] = useState<{ width: number; height: number } | null>(null);
-  const [pixelOcclusions, setPixelOcclusions] = useState<OcclusionInPixels[]>([]);
+  const [pixelOcclusions, setPixelOcclusions] = useState<Occlusion[]>([]);
   const [description, setDescription] = useState('');
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(null);

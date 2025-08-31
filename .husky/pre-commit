@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+# Run linters/formatters on staged files
+pnpm -s lint-staged
+
+# Typecheck whole project to avoid broken commits
+pnpm -s typecheck

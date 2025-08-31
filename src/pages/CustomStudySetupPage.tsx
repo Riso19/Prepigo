@@ -13,7 +13,6 @@ import { Switch } from '@/components/ui/switch';
 import { DeckTreeSelector } from '@/components/DeckTreeSelector';
 import { TagEditor } from '@/components/TagEditor';
 import { getAllTags } from '@/lib/deck-utils';
-import { getAllFlashcardsFromDeck } from '@/lib/card-utils';
 import { getAllReviewLogsFromDB } from '@/lib/idb';
 import { FlashcardData, DeckData } from '@/data/decks';
 import { Rating, State } from 'ts-fsrs';
@@ -93,47 +92,36 @@ const CustomStudySetupPage = () => {
   useEffect(() => {
     const calculateCount = async () => {
       setIsCalculating(true);
-      const { selectedDeckIds, filterType, failedDays, tags, tagFilterType } = watchedValues;
+      let cardsToFilter = allCards;
 
-      if (!selectedDeckIds || selectedDeckIds.size === 0) {
-        setAvailableCardCount(0);
-        setIsCalculating(false);
-        return;
-      }
-
-      const getAllDecksFlat = (d: DeckData[]): DeckData[] => {
-        return d.flatMap(deck => [deck, ...(deck.subDecks ? getAllDecksFlat(deck.subDecks) : [])]);
-      };
-      const allDecks = getAllDecksFlat(decks);
-
-      const cardSet = new Set<FlashcardData>();
-      selectedDeckIds.forEach(id => {
-        const deck = allDecks.find(d => d.id === id);
-        if (deck) {
-          deck.flashcards.forEach(card => cardSet.add(card));
-        }
-      });
-      let cardsToFilter = Array.from(cardSet);
-
-      if (tags.length > 0) {
+      if (watchedValues.tags.length > 0) {
         cardsToFilter = cardsToFilter.filter(card => {
           if (!card.tags || card.tags.length === 0) return false;
-          if (tagFilterType === 'any') {
-            return tags.some(tag => card.tags!.includes(tag));
+          if (watchedValues.tagFilterType === 'any') {
+            return watchedValues.tags.some(tag => card.tags!.includes(tag));
           } else {
-            return tags.every(tag => card.tags!.includes(tag));
+            return watchedValues.tags.every(tag => card.tags!.includes(tag));
           }
         });
       }
 
-      const now = new Date();
-      switch (filterType) {
+      // Variable declarations for switch cases
+      let failedDays: number;
+      let cutoffDate: Date;
+      let allLogs: Array<{ review: string; rating: Rating; cardId: string }>;
+      let recentFailedCardIds: Set<string>;
+      let min: number;
+      let max: number;
+      let srsData: FsrsState | Sm2State | undefined;
+      let difficulty: number;
+
+      switch (watchedValues.filterType) {
         case 'new':
           cardsToFilter = cardsToFilter.filter(c => {
             if (settings.scheduler === 'sm2') {
               return !c.srs?.sm2 || c.srs.sm2.state === 'new' || !c.srs.sm2.state;
             }
-            const srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
+            srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
             return !srsData || srsData.state === State.New;
           });
           break;
@@ -142,16 +130,16 @@ const CustomStudySetupPage = () => {
             if (settings.scheduler === 'sm2') {
               return !!c.srs?.sm2 && new Date(c.srs.sm2.due) <= now;
             }
-            const srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
+            srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
             return !!srsData && new Date(srsData.due) <= now;
           });
           break;
         case 'failed':
-          const days = failedDays || 7;
-          const cutoffDate = new Date();
-          cutoffDate.setDate(now.getDate() - days);
-          const allLogs = await getAllReviewLogsFromDB();
-          const recentFailedCardIds = new Set<string>();
+          failedDays = watchedValues.failedDays || 7;
+          cutoffDate = new Date();
+          cutoffDate.setDate(now.getDate() - failedDays);
+          allLogs = await getAllReviewLogsFromDB() as Array<{ review: string; rating: Rating; cardId: string }>; // typed for TS
+          recentFailedCardIds = new Set<string>();
           allLogs.forEach(log => {
             if (new Date(log.review) >= cutoffDate && (log.rating === Rating.Again || log.rating === Rating.Hard)) {
               recentFailedCardIds.add(log.cardId);
@@ -160,12 +148,12 @@ const CustomStudySetupPage = () => {
           cardsToFilter = cardsToFilter.filter(c => recentFailedCardIds.has(c.id));
           break;
         case 'difficulty':
-            const min = watchedValues.filterDifficultyMin || 1;
-            const max = watchedValues.filterDifficultyMax || 10;
+            min = watchedValues.filterDifficultyMin || 1;
+            max = watchedValues.filterDifficultyMax || 10;
             cardsToFilter = cardsToFilter.filter(c => {
-                const srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
+                srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
                 if (!srsData || srsData.state === State.New) return false;
-                const difficulty = srsData.difficulty;
+                difficulty = srsData.difficulty;
                 return difficulty >= min && difficulty <= max;
             });
             break;
@@ -208,13 +196,23 @@ const CustomStudySetupPage = () => {
     }
 
     const now = new Date();
+    // Variable declarations for switch cases
+    let failedDays: number;
+    let cutoffDate: Date;
+    let allLogs: Array<{ review: string; rating: Rating; cardId: string }>;
+    let recentFailedCardIds: Set<string>;
+    let min: number;
+    let max: number;
+    let srsData: FsrsState | Sm2State | undefined;
+    let difficulty: number;
+
     switch (values.filterType) {
         case 'new':
             filteredCards = filteredCards.filter(c => {
                 if (settings.scheduler === 'sm2') {
                     return !c.srs?.sm2 || c.srs.sm2.state === 'new' || !c.srs.sm2.state;
                 }
-                const srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
+                srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
                 return !srsData || srsData.state === State.New;
             });
             break;
@@ -223,25 +221,29 @@ const CustomStudySetupPage = () => {
                 if (settings.scheduler === 'sm2') {
                     return !!c.srs?.sm2 && new Date(c.srs.sm2.due) <= now;
                 }
-                const srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
+                srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
                 return !!srsData && new Date(srsData.due) <= now;
             });
             break;
         case 'failed':
-            const failedDays = values.failedDays || 7;
-            const cutoffDate = new Date();
+            failedDays = values.failedDays || 7;
+            cutoffDate = new Date();
             cutoffDate.setDate(now.getDate() - failedDays);
-            const allLogs = await getAllReviewLogsFromDB();
-            const recentFailedCardIds = new Set<string>(allLogs.filter(log => new Date(log.review) >= cutoffDate && (log.rating === Rating.Again || log.rating === Rating.Hard)).map(log => log.cardId));
+            allLogs = await getAllReviewLogsFromDB() as Array<{ review: string; rating: Rating; cardId: string }>; // typed for TS
+            recentFailedCardIds = new Set<string>(
+                allLogs
+                    .filter(log => new Date(log.review) >= cutoffDate && (log.rating === Rating.Again || log.rating === Rating.Hard))
+                    .map(log => log.cardId)
+            );
             filteredCards = filteredCards.filter(c => recentFailedCardIds.has(c.id));
             break;
         case 'difficulty':
-            const min = values.filterDifficultyMin || 1;
-            const max = values.filterDifficultyMax || 10;
+            min = values.filterDifficultyMin || 1;
+            max = values.filterDifficultyMax || 10;
             filteredCards = filteredCards.filter(c => {
-                const srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
+                srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
                 if (!srsData || srsData.state === State.New) return false;
-                const difficulty = srsData.difficulty;
+                difficulty = srsData.difficulty;
                 return difficulty >= min && difficulty <= max;
             });
             break;
@@ -332,7 +334,7 @@ const CustomStudySetupPage = () => {
                     <FormField control={form.control} name="filterType" render={({ field }) => (
                         <FormItem>
                             <FormLabel>Filter by card state</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <Select onValueChange={field.onChange} value={field.value}>
                                 <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                                 <SelectContent>
                                     <SelectItem value="all">All cards</SelectItem>
@@ -363,7 +365,7 @@ const CustomStudySetupPage = () => {
                             <span className="text-sm font-medium">{difficultyRange[0]} - {difficultyRange[1]}</span>
                         </div>
                         <Slider
-                            defaultValue={difficultyRange}
+                            value={difficultyRange}
                             min={1} max={10} step={1}
                             onValueChange={(value) => {
                                 setDifficultyRange(value);
@@ -387,7 +389,7 @@ const CustomStudySetupPage = () => {
                     )} />
                     <FormField control={form.control} name="tagFilterType" render={({ field }) => (
                         <FormItem>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <Select onValueChange={field.onChange} value={field.value}>
                                 <FormControl><SelectTrigger className="w-[280px]"><SelectValue /></SelectTrigger></FormControl>
                                 <SelectContent>
                                     <SelectItem value="any">Match any of the selected tags</SelectItem>
@@ -403,7 +405,7 @@ const CustomStudySetupPage = () => {
                     <FormField control={form.control} name="order" render={({ field }) => (
                         <FormItem>
                             <FormLabel>Order</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <Select onValueChange={field.onChange} value={field.value}>
                                 <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                                 <SelectContent>
                                     <SelectItem value="random">Random</SelectItem>

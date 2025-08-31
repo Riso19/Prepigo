@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuestionBanks } from '@/contexts/QuestionBankContext';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -16,7 +16,7 @@ import { McqData, QuestionBankData } from '@/data/questionBanks';
 import Header from '@/components/Header';
 import { toast } from 'sonner';
 import { Loader2, ArrowLeft } from 'lucide-react';
-import { ExamLog } from '@/data/examLogs';
+import { ExamLog, ExamLogEntry } from '@/data/examLogs';
 
 const mistakeReviewSchema = z.object({
   mcqLimit: z.coerce.number().int().min(1, "Must be at least 1 MCQ."),
@@ -56,10 +56,10 @@ const MistakeReviewSetupPage = () => {
       if (logId === 'all') {
         const logs = await getAllExamLogsFromDB();
         const mistakeMap = new Map<string, McqData>();
-        logs.forEach(log => {
+        logs.forEach((log: ExamLog) => {
           log.entries
-            .filter(entry => !entry.isCorrect && entry.selectedOptionId !== null)
-            .forEach(entry => {
+            .filter((entry: ExamLogEntry) => !entry.isCorrect && entry.selectedOptionId !== null)
+            .forEach((entry: ExamLogEntry) => {
               if (!mistakeMap.has(entry.mcq.id)) {
                 mistakeMap.set(entry.mcq.id, entry.mcq);
               }
@@ -73,8 +73,8 @@ const MistakeReviewSetupPage = () => {
         if (log) {
           setExamLog(log);
           mistakes = log.entries
-            .filter(entry => !entry.isCorrect && entry.selectedOptionId !== null)
-            .map(entry => entry.mcq);
+            .filter((entry: ExamLogEntry) => !entry.isCorrect && entry.selectedOptionId !== null)
+            .map((entry: ExamLogEntry) => entry.mcq);
           setPageTitle("Review Mistakes");
           setPageDescription(`Create a focused practice session from the ${mistakes.length} questions you answered incorrectly in "${log.name}".`);
         }
@@ -186,7 +186,7 @@ const MistakeReviewSetupPage = () => {
                         <QuestionBankTreeSelector
                           banks={questionBanks}
                           selectedBankIds={field.value}
-                          onSelectionChange={(newIds) => field.onChange(newIds)}
+                          onSelectionChange={(newIds: Set<string>) => field.onChange(newIds)}
                         />
                       </FormControl>
                       <FormDescription>Select the topics you want to review mistakes from.</FormDescription>

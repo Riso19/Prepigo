@@ -4,17 +4,20 @@ import { useDecks } from "@/contexts/DecksContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { findDeckById, updateFlashcard, getEffectiveSrsSettings, buildSessionQueue } from "@/lib/deck-utils";
 import { addReviewLog } from "@/lib/idb";
-import { FlashcardData, ReviewLog, Sm2State, ExamData } from "@/data/decks";
+import { FlashcardData, ReviewLog, ExamData } from "@/data/decks";
 import Flashcard from "@/components/Flashcard";
 import ClozePlayer from "@/components/ClozePlayer";
 import ImageOcclusionPlayer from "@/components/ImageOcclusionPlayer";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Home, Calendar } from "lucide-react";
-import { fsrs, Card, State, Rating, RecordLog, generatorParameters, createEmptyCard } from "ts-fsrs";
+import { fsrs, Card, Rating, generatorParameters, createEmptyCard } from "ts-fsrs";
 import { fsrs6, Card as Fsrs6Card, generatorParameters as fsrs6GeneratorParameters } from "@/lib/fsrs6";
 import { sm2, Sm2Quality } from "@/lib/sm2";
 import { useExams } from "@/contexts/ExamsContext";
 import { differenceInDays, isPast } from "date-fns";
+import { outcomeByRating } from "@/lib/fsrs-helpers";
+import type { Sm2State } from "@/data/decks";
+import type { RecordLog } from "ts-fsrs";
 
 const parseSteps = (steps: string): number[] => {
   return steps.trim().split(/\s+/).filter(s => s).map(stepStr => {
@@ -128,12 +131,15 @@ const StudyPage = () => {
     }
 
     const settings = getEffectiveSrsSettings(decks, deckId || 'all', globalSettings);
-    const wasNew = (currentCard.srs?.fsrs?.reps === 0 || !currentCard.srs?.fsrs) || (currentCard.srs?.sm2?.repetitions === 0 || !currentCard.srs?.sm2);
+    const wasNew =
+      (currentCard.srs?.fsrs?.reps === 0 || !currentCard.srs?.fsrs) ||
+      (currentCard.srs?.fsrs6?.reps === 0 || !currentCard.srs?.fsrs6) ||
+      (currentCard.srs?.sm2?.repetitions === 0 || !currentCard.srs?.sm2);
     let updatedCard: FlashcardData = currentCard;
 
     if (settings.scheduler === 'fsrs' || settings.scheduler === 'fsrs6') {
       if (!fsrsOutcomes) return;
-      const nextState = fsrsOutcomes[rating];
+      const nextState = outcomeByRating(fsrsOutcomes, rating);
       const logEntry = nextState.log;
 
       const logToSave: ReviewLog = {
@@ -210,7 +216,7 @@ const StudyPage = () => {
       } else {
         const isNewCard = cardState === 'new';
         if (isNewCard) nextSm2State.easinessFactor = settings.sm2StartingEase;
-        
+
         if (rating === Rating.Easy) {
           nextSm2State.state = 'review';
           nextSm2State.learning_step = undefined;
@@ -221,22 +227,32 @@ const StudyPage = () => {
         } else {
           const steps = (cardState === 'relearning') ? parseSteps(settings.relearningSteps) : parseSteps(settings.learningSteps);
           const currentStep = sm2State.learning_step || 0;
-          const nextStep = currentStep + 1;
 
-          if (nextStep >= steps.length) {
-            nextSm2State.state = 'review';
-            nextSm2State.learning_step = undefined;
-            const graduationInterval = cardState === 'relearning' ? sm2State.interval : settings.sm2GraduatingInterval;
-            nextSm2State.interval = graduationInterval;
-            const nextDue = new Date();
-            nextDue.setDate(nextDue.getDate() + graduationInterval);
-            nextSm2State.due = nextDue.toISOString();
-          } else {
+          if (rating === Rating.Hard) {
+            // Repeat current step on Hard (do not promote)
             nextSm2State.state = isNewCard ? 'learning' : cardState;
-            nextSm2State.learning_step = nextStep;
+            nextSm2State.learning_step = currentStep;
+            const mins = steps.length > 0 ? steps[currentStep] : 1;
             const nextDue = new Date();
-            nextDue.setMinutes(nextDue.getMinutes() + steps[nextStep]);
+            nextDue.setMinutes(nextDue.getMinutes() + mins);
             nextSm2State.due = nextDue.toISOString();
+          } else { // Rating.Good
+            const nextStep = currentStep + 1;
+            if (nextStep >= steps.length) {
+              nextSm2State.state = 'review';
+              nextSm2State.learning_step = undefined;
+              const graduationInterval = cardState === 'relearning' ? sm2State.interval : settings.sm2GraduatingInterval;
+              nextSm2State.interval = graduationInterval;
+              const nextDue = new Date();
+              nextDue.setDate(nextDue.getDate() + graduationInterval);
+              nextSm2State.due = nextDue.toISOString();
+            } else {
+              nextSm2State.state = isNewCard ? 'learning' : cardState;
+              nextSm2State.learning_step = nextStep;
+              const nextDue = new Date();
+              nextDue.setMinutes(nextDue.getMinutes() + steps[nextStep]);
+              nextSm2State.due = nextDue.toISOString();
+            }
           }
         }
       }
@@ -266,7 +282,12 @@ const StudyPage = () => {
     );
     
     if (currentCard.noteId) {
-      const cardState = settings.scheduler === 'fsrs' ? updatedCard.srs?.fsrs?.state : updatedCard.srs?.sm2?.state;
+      const cardState =
+        settings.scheduler === 'fsrs6'
+          ? updatedCard.srs?.fsrs6?.state
+          : settings.scheduler === 'fsrs'
+          ? updatedCard.srs?.fsrs?.state
+          : updatedCard.srs?.sm2?.state;
       let shouldBury = false;
 
       if (cardState === 'new' && settings.buryNewSiblings) {
@@ -373,13 +394,23 @@ const StudyPage = () => {
   const getIntervalText = (rating: Rating) => {
     const settings = getEffectiveSrsSettings(decks, deckId || 'all', globalSettings);
     if ((settings.scheduler === 'fsrs' || settings.scheduler === 'fsrs6') && fsrsOutcomes) {
-      const nextDueDate = fsrsOutcomes[rating].card.due;
+      const nextDueDate = outcomeByRating(fsrsOutcomes, rating).card.due;
       const now = new Date();
       const diffDays = (nextDueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
       return formatInterval(diffDays);
     }
     if (settings.scheduler === 'sm2' && currentCard) {
-        const sm2State = currentCard.srs?.sm2 || { state: 'new', repetitions: 0, easinessFactor: settings.sm2StartingEase, interval: 0 };
+        const nowIso = new Date().toISOString();
+        const sm2State: Sm2State = currentCard.srs?.sm2 || {
+          state: 'new',
+          repetitions: 0,
+          easinessFactor: settings.sm2StartingEase,
+          interval: 0,
+          due: nowIso,
+          last_review: nowIso,
+          learning_step: 0,
+          lapses: 0,
+        };
         const cardState = sm2State.state || 'new';
 
         if (cardState === 'review') {
@@ -410,7 +441,11 @@ const StudyPage = () => {
             if (rating === Rating.Easy) {
                 return formatInterval(settings.sm2EasyInterval);
             }
-            if (rating === Rating.Good || rating === Rating.Hard) {
+            if (rating === Rating.Hard) {
+                const repeatMinutes = steps.length > 0 ? steps[currentStep] : 1;
+                return formatInterval(repeatMinutes / 1440);
+            }
+            if (rating === Rating.Good) {
                 const nextStepIndex = currentStep + 1;
                 if (nextStepIndex >= steps.length) {
                     // Card graduates

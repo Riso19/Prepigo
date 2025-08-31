@@ -202,25 +202,35 @@ const CustomMcqPracticeSetupPage = () => {
       if (srsEnabled) {
         const now = new Date();
         const scheduler = settings.scheduler === 'sm2' ? 'fsrs' : settings.scheduler;
+        // Variable declarations for switch cases
+        let days: number;
+        let cutoffDate: Date;
+        let allLogs: Array<{ review: string; rating: Rating; mcqId: string }>;
+        let recentFailedMcqIds: Set<string>;
+        let min: number;
+        let max: number;
+        let srsData: FsrsState | undefined;
+        let difficulty: number;
+        
         switch (filterType) {
           case 'new':
             mcqsToFilter = mcqsToFilter.filter(m => {
-              const srsData = scheduler === 'fsrs6' ? m.srs?.fsrs6 : m.srs?.fsrs;
+              srsData = scheduler === 'fsrs6' ? m.srs?.fsrs6 : m.srs?.fsrs;
               return !srsData || srsData.state === State.New;
             });
             break;
           case 'due':
             mcqsToFilter = mcqsToFilter.filter(m => {
-              const srsData = scheduler === 'fsrs6' ? m.srs?.fsrs6 : m.srs?.fsrs;
+              srsData = scheduler === 'fsrs6' ? m.srs?.fsrs6 : m.srs?.fsrs;
               return !!srsData && new Date(srsData.due) <= now;
             });
             break;
           case 'failed':
-            const days = failedDays || 7;
-            const cutoffDate = new Date();
+            days = failedDays || 7;
+            cutoffDate = new Date();
             cutoffDate.setDate(now.getDate() - days);
-            const allLogs = await getAllMcqReviewLogsFromDB();
-            const recentFailedMcqIds = new Set<string>();
+            allLogs = await getAllMcqReviewLogsFromDB() as Array<{ review: string; rating: Rating; mcqId: string }>; // typed for TS
+            recentFailedMcqIds = new Set<string>();
             allLogs.forEach(log => {
               if (new Date(log.review) >= cutoffDate && (log.rating === Rating.Again || log.rating === Rating.Hard)) {
                 recentFailedMcqIds.add(log.mcqId);
@@ -229,12 +239,12 @@ const CustomMcqPracticeSetupPage = () => {
             mcqsToFilter = mcqsToFilter.filter(m => recentFailedMcqIds.has(m.id));
             break;
           case 'difficulty':
-              const min = watchedValues.filterDifficultyMin || 1;
-              const max = watchedValues.filterDifficultyMax || 10;
+              min = watchedValues.filterDifficultyMin || 1;
+              max = watchedValues.filterDifficultyMax || 10;
               mcqsToFilter = mcqsToFilter.filter(m => {
-                  const srsData = scheduler === 'fsrs6' ? m.srs?.fsrs6 : m.srs?.fsrs;
+                  srsData = scheduler === 'fsrs6' ? m.srs?.fsrs6 : m.srs?.fsrs;
                   if (!srsData || srsData.state === State.New) return false;
-                  const difficulty = srsData.difficulty;
+                  difficulty = srsData.difficulty;
                   return difficulty >= min && difficulty <= max;
               });
               break;
@@ -253,13 +263,14 @@ const CustomMcqPracticeSetupPage = () => {
   }, [watchedValues, questionBanks, settings]);
 
   const onSubmit = async (values: CustomMcqPracticeFormValues) => {
-    if (availableMcqCount === 0) {
+    const available = availableMcqCount ?? 0;
+    if (available === 0) {
         toast.error("No MCQs found matching your criteria.");
         return;
     }
 
-    if (values.mcqLimit > availableMcqCount) {
-      toast.error(`You requested ${values.mcqLimit} questions, but only ${availableMcqCount} are available with the current filters.`);
+    if (values.mcqLimit > available) {
+      toast.error(`You requested ${values.mcqLimit} questions, but only ${available} are available with the current filters.`);
       return;
     }
     
@@ -282,7 +293,7 @@ const CustomMcqPracticeSetupPage = () => {
             const bank = allBanks.find(b => b.id === bankId);
             if (!bank) continue;
             
-            let filteredMcqs = bank.mcqs; // Only from the bank itself, not sub-banks
+            const filteredMcqs = bank.mcqs; // Only from the bank itself, not sub-banks
             // Apply filters... (this part is simplified for brevity, full logic would be here)
             availableMcqsByBank[bankId] = filteredMcqs;
         }
@@ -295,8 +306,8 @@ const CustomMcqPracticeSetupPage = () => {
         }));
 
         // Adjust for rounding errors
-        let currentTotal = requests.reduce((sum, r) => sum + r.numToTake, 0);
-        let diff = values.mcqLimit - currentTotal;
+        const currentTotal = requests.reduce((sum, r) => sum + r.numToTake, 0);
+        const diff = values.mcqLimit - currentTotal;
         requests.sort((a, b) => b.numToTake - a.numToTake);
         for (let i = 0; i < Math.abs(diff); i++) {
             requests[i % requests.length].numToTake += Math.sign(diff);
@@ -317,7 +328,7 @@ const CustomMcqPracticeSetupPage = () => {
             const bank = allBanks.find(b => b.id === id);
             if (bank) getAllMcqsFromBank(bank).forEach(mcq => mcqSet.add(mcq));
         });
-        let filteredMcqs = Array.from(mcqSet);
+        const filteredMcqs = Array.from(mcqSet);
         // Apply filters... (logic from useEffect)
         finalQueue = filteredMcqs;
     }
@@ -504,7 +515,7 @@ const CustomMcqPracticeSetupPage = () => {
                     <FormField control={form.control} name="filterType" render={({ field }) => (
                         <FormItem>
                             <FormLabel>Filter by MCQ state</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!isSrsOn}>
+                            <Select onValueChange={field.onChange} value={field.value} disabled={!isSrsOn}>
                                 <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                                 <SelectContent>
                                     <SelectItem value="all">All MCQs</SelectItem>
@@ -536,7 +547,7 @@ const CustomMcqPracticeSetupPage = () => {
                             <span className="text-sm font-medium">{difficultyRange[0]} - {difficultyRange[1]}</span>
                         </div>
                         <Slider
-                            defaultValue={difficultyRange}
+                            value={difficultyRange}
                             min={1} max={10} step={1}
                             onValueChange={(value) => {
                                 setDifficultyRange(value);
@@ -560,7 +571,7 @@ const CustomMcqPracticeSetupPage = () => {
                     )} />
                     <FormField control={form.control} name="tagFilterType" render={({ field }) => (
                         <FormItem>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <Select onValueChange={field.onChange} value={field.value}>
                                 <FormControl><SelectTrigger className="w-[280px]"><SelectValue /></SelectTrigger></FormControl>
                                 <SelectContent>
                                     <SelectItem value="any">Match any of the selected tags</SelectItem>
@@ -576,7 +587,7 @@ const CustomMcqPracticeSetupPage = () => {
                     <FormField control={form.control} name="order" render={({ field }) => (
                         <FormItem>
                             <FormLabel>Order</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <Select onValueChange={field.onChange} value={field.value}>
                                 <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                                 <SelectContent>
                                     <SelectItem value="random">Random</SelectItem>

@@ -7,7 +7,7 @@ import { getCardsForExam, calculateExamProgress, getMcqsForExam, calculateProjec
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { Calendar, Tag, MoreVertical, Trash2, Pencil, FileText, HelpCircle, TrendingUp } from 'lucide-react';
+import { Calendar, Tag, MoreVertical, Trash2, Pencil, FileText, HelpCircle } from 'lucide-react';
 import { format, differenceInDays, isPast } from 'date-fns';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { useExams } from '@/contexts/ExamsContext';
@@ -119,6 +119,11 @@ export const ExamItem = ({ exam }: ExamItemProps) => {
             </div>
           </div>
           <Progress value={progress.percentage} className="mt-2" />
+          <div className="flex flex-wrap gap-2 mt-3">
+            <Button asChild variant="secondary" size="sm">
+              <Link to={`/exams/${exam.id}/progress`}>View Progress</Link>
+            </Button>
+          </div>
           
           <div className="pt-4 border-t">
             <h4 className="text-sm font-semibold mb-2">Scope ({itemsInScope.length} items)</h4>

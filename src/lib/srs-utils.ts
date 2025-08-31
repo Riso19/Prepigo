@@ -4,7 +4,12 @@ import { State } from "ts-fsrs";
 
 export type ItemStatus = "New" | "Learning" | "Relearning" | "Young" | "Mature" | "Suspended";
 
-export const getItemStatus = (item: FlashcardData | McqData, scheduler: 'fsrs' | 'sm2' | 'fsrs6'): ItemStatus => {
+// maturityThresholdDays defaults to 21 for backward compatibility
+export const getItemStatus = (
+    item: FlashcardData | McqData,
+    scheduler: 'fsrs' | 'sm2' | 'fsrs6',
+    maturityThresholdDays: number = 21,
+): ItemStatus => {
     if (item.srs?.isSuspended) {
         return "Suspended";
     }
@@ -15,7 +20,7 @@ export const getItemStatus = (item: FlashcardData | McqData, scheduler: 'fsrs' |
         if (srsState.state === State.Learning) return "Learning";
         if (srsState.state === State.Relearning) return "Relearning";
         if (srsState.state === State.Review) {
-            return srsState.stability < 21 ? "Young" : "Mature";
+            return srsState.stability < maturityThresholdDays ? "Young" : "Mature";
         }
     } else { // sm2 (only for flashcards)
         if ('question' in item) { // Type guard for FlashcardData
@@ -24,7 +29,7 @@ export const getItemStatus = (item: FlashcardData | McqData, scheduler: 'fsrs' |
             if (srsState.state === 'learning') return "Learning";
             if (srsState.state === 'relearning') return "Relearning";
             if (srsState.state === 'review') {
-                return (srsState.interval || 0) < 21 ? "Young" : "Mature";
+                return (srsState.interval || 0) < maturityThresholdDays ? "Young" : "Mature";
             }
         } else { // MCQs don't use SM2, default to New if somehow called with it
             return "New";

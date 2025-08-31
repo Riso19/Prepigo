@@ -83,6 +83,11 @@ export const importAnkiTxtFile = async (
 
     const contentFieldIndexes = Object.values(headers);
     const contentFields = fields.filter((_, i) => !contentFieldIndexes.includes(i));
+    
+    // Variable declarations for switch cases
+    let question: string;
+    let answer: string;
+    let cleanedAnswer: string;
 
     switch (noteType) {
       case 'Basic':
@@ -109,9 +114,9 @@ export const importAnkiTxtFile = async (
         break;
 
       case 'Image Occlusion':
-        const question = contentFields[0] || '';
-        const answer = contentFields[1] || '';
-        const cleanedAnswer = answer.replace(/src=""([^"]+)""/g, 'src="$1"');
+        question = contentFields[0] || '';
+        answer = contentFields[1] || '';
+        cleanedAnswer = answer.replace(/src=""([^"]+)""/g, 'src="$1"');
         flashcard = {
             id: `txt-c-${guid}`,
             noteId,

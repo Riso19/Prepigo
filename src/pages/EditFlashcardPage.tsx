@@ -57,16 +57,54 @@ const EditFlashcardPage = () => {
   const handleSaveChanges = (updatedCardFields: Partial<FlashcardData>) => {
     if (!originalCard) return;
 
-    const updatedCard = { ...originalCard, ...updatedCardFields };
+    const merged = { ...originalCard, ...updatedCardFields } as FlashcardData;
+
+    // Construct a correctly typed card before updating, so required fields are satisfied per variant
+    const typedCard: FlashcardData = (() => {
+      switch (originalCard.type) {
+        case 'basic': {
+          const card: BasicFlashcard = {
+            ...(merged as BasicFlashcard),
+            type: 'basic',
+            // ensure required fields exist from original if not provided in update
+            question: (merged as BasicFlashcard).question ?? (originalCard as BasicFlashcard).question,
+            answer: (merged as BasicFlashcard).answer ?? (originalCard as BasicFlashcard).answer,
+            tags,
+          };
+          return card;
+        }
+        case 'cloze': {
+          const card: ClozeFlashcard = {
+            ...(merged as ClozeFlashcard),
+            type: 'cloze',
+            text: (merged as ClozeFlashcard).text ?? (originalCard as ClozeFlashcard).text,
+            description: (merged as ClozeFlashcard).description ?? (originalCard as ClozeFlashcard).description,
+            tags,
+          };
+          return card;
+        }
+        case 'imageOcclusion': {
+          const card: ImageOcclusionFlashcard = {
+            ...(merged as ImageOcclusionFlashcard),
+            type: 'imageOcclusion',
+            imageUrl: (merged as ImageOcclusionFlashcard).imageUrl ?? (originalCard as ImageOcclusionFlashcard).imageUrl,
+            occlusions: (merged as ImageOcclusionFlashcard).occlusions ?? (originalCard as ImageOcclusionFlashcard).occlusions,
+            questionOcclusionId: (merged as ImageOcclusionFlashcard).questionOcclusionId ?? (originalCard as ImageOcclusionFlashcard).questionOcclusionId,
+            description: (merged as ImageOcclusionFlashcard).description ?? (originalCard as ImageOcclusionFlashcard).description,
+            tags,
+          };
+          return card;
+        }
+      }
+    })();
 
     if (!originalCard.noteId) {
-        const cardWithTags = { ...updatedCard, tags };
-        setDecks(prevDecks => updateFlashcard(prevDecks, cardWithTags));
+      setDecks(prevDecks => updateFlashcard(prevDecks, typedCard));
     } else {
-        setDecks(prevDecks => {
-            const decksWithUpdatedCard = updateFlashcard(prevDecks, updatedCard);
-            return updateNoteTags(decksWithUpdatedCard, originalCard.noteId!, tags);
-        });
+      setDecks(prevDecks => {
+        const decksWithUpdatedCard = updateFlashcard(prevDecks, typedCard);
+        return updateNoteTags(decksWithUpdatedCard, originalCard.noteId!, tags);
+      });
     }
     showSuccess("Flashcard updated successfully!");
     navigate(`/deck/${deckId}/view`);

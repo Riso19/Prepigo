@@ -1,8 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useDecks } from '@/contexts/DecksContext';
 import { useQuestionBanks } from '@/contexts/QuestionBankContext';
 import Header from '@/components/Header';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+// removed unused Card UI imports
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, CartesianGrid, LabelList, LineChart, Line } from 'recharts';
 import { getAllFlashcardsFromDeck } from '@/lib/card-utils';
 import { getAllMcqsFromBank } from '@/lib/question-bank-utils';
@@ -10,24 +10,36 @@ import { getItemStatus, ItemStatus } from '@/lib/srs-utils';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useQuery } from '@tanstack/react-query';
 import { getAllReviewLogsFromDB, getAllMcqReviewLogsFromDB } from '@/lib/idb';
-import { format, subDays, startOfDay, isSameDay, differenceInDays } from 'date-fns';
-import { Loader2, TrendingUp, CalendarDays, Flame, BookOpen, HelpCircle, AlertTriangle, BrainCircuit, ShieldAlert, BarChartBig, Lightbulb, Activity, Hourglass, Repeat2, BrainCog } from 'lucide-react';
+import { subDays, startOfDay, isSameDay, differenceInDays } from 'date-fns';
+import { Loader2, TrendingUp, CalendarDays, Flame, BookOpen, HelpCircle, AlertTriangle, BrainCircuit, Activity, Hourglass, BrainCog } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { State } from 'ts-fsrs';
-import { DeckData, FlashcardData } from '@/data/decks';
-import { McqData, QuestionBankData } from '@/data/questionBanks';
+import { FlashcardData } from '@/data/decks';
+import { McqData } from '@/data/questionBanks';
 import { PerformanceAnalytics } from '@/components/PerformanceAnalytics';
 import { PerformanceGraph } from '@/components/PerformanceGraph';
 import { calculateAccuracy, calculateDueStats, calculateIntervalGrowth, calculateRetentionDistribution, calculateForecast, calculateLearningCurve, calculateForgettingCurve, calculateStabilityOverTime, calculateMemoryDecayVelocity, calculateAverageKnowledgeHalfLife, calculateDifficultyWeightedMastery, calculateTopicForgettingRate } from '@/lib/analytics-utils';
 import { ForgettingCurveChart } from '@/components/ForgettingCurveChart';
 import { StabilityTrendChart } from '@/components/StabilityTrendChart';
 import { AnimatedCard } from '@/components/AnimatedCard';
-import { DifficultyTrendChart } from '@/components/DifficultyTrendChart';
+// removed unused DifficultyTrendChart import
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { TopicForgettingRateChart } from '@/components/TopicForgettingRateChart';
 
-const ForecastTooltip = ({ active, payload, label }: any) => {
+interface TooltipProps {
+  active?: boolean;
+  payload?: Array<{
+    value: number;
+    payload: {
+      value: number;
+    };
+  }>;
+  label?: string;
+}
+
+const ForecastTooltip = ({ active, payload, label }: TooltipProps) => {
   if (active && payload && payload.length) {
     return (
       <div className="rounded-lg border bg-white p-2 shadow-sm">
@@ -45,6 +57,7 @@ const StatisticsPage = () => {
   const { decks } = useDecks();
   const { questionBanks } = useQuestionBanks();
   const { settings } = useSettings();
+  const [showAdvanced, setShowAdvanced] = useState(true);
   const isMobile = useIsMobile();
 
   const { data: logs, isLoading: isLoadingLogs } = useQuery({
@@ -182,11 +195,11 @@ const StatisticsPage = () => {
 
   const maturityData = useMemo(() => {
     const flashcardStatusCounts: Record<ItemStatus, number> = { New: 0, Learning: 0, Relearning: 0, Young: 0, Mature: 0, Suspended: 0 };
-    collectionStats.allFlashcards.forEach(card => flashcardStatusCounts[getItemStatus(card, settings.scheduler)]++);
+    collectionStats.allFlashcards.forEach(card => flashcardStatusCounts[getItemStatus(card, settings.scheduler, settings.maturityThresholdDays)]++);
     const mcqStatusCounts: Record<ItemStatus, number> = { New: 0, Learning: 0, Relearning: 0, Young: 0, Mature: 0, Suspended: 0 };
-    collectionStats.allMcqs.forEach(mcq => mcqStatusCounts[getItemStatus(mcq, settings.scheduler === 'sm2' ? 'fsrs' : settings.scheduler)]++);
+    collectionStats.allMcqs.forEach(mcq => mcqStatusCounts[getItemStatus(mcq, settings.scheduler === 'sm2' ? 'fsrs' : settings.scheduler, settings.maturityThresholdDays)]++);
     return { flashcardStatusCounts, mcqStatusCounts };
-  }, [collectionStats, settings.scheduler]);
+  }, [collectionStats, settings.scheduler, settings.maturityThresholdDays]);
 
   const performanceGraphData = useMemo(() => {
     if (!logs) return { deckPerformance: [], qBankPerformance: [] };
@@ -221,7 +234,15 @@ const StatisticsPage = () => {
             {chartData.map((entry) => <Cell key={`cell-${entry.name}`} fill={PIE_COLORS[entry.name as ItemStatus]} />)}
           </Pie>
           <Tooltip />
-          <Legend layout={isMobile ? 'vertical' : 'horizontal'} verticalAlign={isMobile ? 'middle' : 'bottom'} align={isMobile ? 'right' : 'center'} formatter={(value, entry) => `${value} (${entry.payload.value})`} />
+          <Legend
+            layout={isMobile ? 'vertical' : 'horizontal'}
+            verticalAlign={isMobile ? 'middle' : 'bottom'}
+            align={isMobile ? 'right' : 'center'}
+            formatter={(value: string, entry?: { payload?: { value: number } }) => {
+              const count = entry?.payload?.value ?? 0;
+              return `${value} (${count})`;
+            }}
+          />
         </PieChart>
       </ResponsiveContainer>
     );
@@ -256,12 +277,19 @@ const StatisticsPage = () => {
         <h2 className="text-xl sm:text-2xl font-bold mt-8 mb-4">Performance Analytics</h2>
         <PerformanceAnalytics />
 
-        <h2 className="text-xl sm:text-2xl font-bold mt-8 mb-4">FSRS-Specific Metrics</h2>
+        <div className="flex items-center justify-between mt-8 mb-4">
+          <h2 className="text-xl sm:text-2xl font-bold">FSRS-Specific Metrics</h2>
+          <Button variant="ghost" size="sm" onClick={() => setShowAdvanced(v => !v)}>
+            {showAdvanced ? 'Hide' : 'Show'} Advanced
+          </Button>
+        </div>
+        {showAdvanced && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
           <AnimatedCard delay={0.8}><CardHeader><CardTitle>Decay Velocity</CardTitle><CardDescription>Rate of change of avg. stability (30d).</CardDescription></CardHeader><CardContent className="space-y-4">{isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <><div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Activity className="h-4 w-4" />Flashcards</span><span className={`font-bold ${stabilityStats?.flashcards.velocity ?? 0 < 0 ? 'text-red-500' : 'text-green-500'}`}>{stabilityStats?.flashcards.velocity.toFixed(2)} d/d</span></div><div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Activity className="h-4 w-4" />MCQs</span><span className={`font-bold ${stabilityStats?.mcqs.velocity ?? 0 < 0 ? 'text-red-500' : 'text-green-500'}`}>{stabilityStats?.mcqs.velocity.toFixed(2)} d/d</span></div></>}</CardContent></AnimatedCard>
           <AnimatedCard delay={0.9}><CardHeader><CardTitle>Knowledge Half-Life</CardTitle><CardDescription>Time for memory to decay to 50% recall.</CardDescription></CardHeader><CardContent className="space-y-4">{isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <><div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Hourglass className="h-4 w-4" />Flashcards</span><span className="font-bold">{advancedFSRSStats?.flashcards.halfLife?.toFixed(1) ?? 'N/A'} days</span></div><div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><Hourglass className="h-4 w-4" />MCQs</span><span className="font-bold">{advancedFSRSStats?.mcqs.halfLife?.toFixed(1) ?? 'N/A'} days</span></div></>}</CardContent></AnimatedCard>
           <AnimatedCard delay={1.0}><CardHeader><CardTitle>Difficulty-Weighted Mastery</CardTitle><CardDescription>Overall knowledge score, penalizing for difficulty.</CardDescription></CardHeader><CardContent className="space-y-4">{isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : <><div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><BrainCog className="h-4 w-4" />Flashcards</span><span className="font-bold">{advancedFSRSStats?.flashcards.mastery?.toFixed(1) ?? 'N/A'}%</span></div><div className="flex items-center justify-between"><span className="flex items-center gap-2 text-muted-foreground"><BrainCog className="h-4 w-4" />MCQs</span><span className="font-bold">{advancedFSRSStats?.mcqs.mastery?.toFixed(1) ?? 'N/A'}%</span></div></>}</CardContent></AnimatedCard>
         </div>
+        )}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mt-6">
           <AnimatedCard delay={1.1}><CardHeader><CardTitle>Flashcard Stability Trend</CardTitle><CardDescription>Avg. memory strength over time.</CardDescription></CardHeader><CardContent>{isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : !stabilityStats || stabilityStats.flashcards.trend.length < 2 ? <p className="text-sm text-muted-foreground">Not enough data.</p> : <StabilityTrendChart data={stabilityStats.flashcards.trend} />}</CardContent></AnimatedCard>
           <AnimatedCard delay={1.2}><CardHeader><CardTitle>MCQ Stability Trend</CardTitle><CardDescription>Avg. memory strength over time.</CardDescription></CardHeader><CardContent>{isLoadingLogs ? <Loader2 className="h-6 w-6 animate-spin" /> : !stabilityStats || stabilityStats.mcqs.trend.length < 2 ? <p className="text-sm text-muted-foreground">Not enough data.</p> : <StabilityTrendChart data={stabilityStats.mcqs.trend} />}</CardContent></AnimatedCard>

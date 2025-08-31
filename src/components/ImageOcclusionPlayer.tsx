@@ -3,7 +3,6 @@ import { Occlusion } from "@/data/decks";
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useResolvedMediaUrl } from '@/hooks/use-resolved-media-url';
 import { HtmlRenderer } from "./HtmlRenderer";
-import { cn } from "@/lib/utils";
 
 interface ImageOcclusionPlayerProps {
   imageUrl: string;

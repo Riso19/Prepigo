@@ -27,13 +27,26 @@ const baseQuestionBankSchema = z.object({
   srsSettings: srsSettingsSchema.optional(),
 });
 
-export type QuestionBankData = z.infer<typeof baseQuestionBankSchema> & {
-  subBanks?: QuestionBankData[];
-};
+// Define the recursive schema first
+interface QuestionBankDataInternal extends z.infer<typeof baseQuestionBankSchema> {
+  subBanks?: QuestionBankDataInternal[];
+}
 
-export const questionBankDataSchema: z.ZodType<QuestionBankData> = baseQuestionBankSchema.extend({
-  subBanks: z.lazy(() => z.array(questionBankDataSchema)).optional(),
+const questionBankDataSchemaInternal: z.ZodType<QuestionBankDataInternal> = baseQuestionBankSchema.extend({
+  subBanks: z.lazy(() => z.array(questionBankDataSchemaInternal)).optional(),
 });
+
+export const questionBankDataSchema = questionBankDataSchemaInternal;
+
+// Explicit TS interface to avoid any in recursive inference
+export interface QuestionBankData {
+  id: string;
+  name: string;
+  mcqs: McqData[];
+  hasCustomSettings?: boolean;
+  srsSettings?: z.infer<typeof srsSettingsSchema>;
+  subBanks?: QuestionBankData[];
+}
 
 export type McqOption = z.infer<typeof mcqOptionSchema>;
 export type McqData = z.infer<typeof mcqDataSchema>;

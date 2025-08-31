@@ -30,7 +30,7 @@ export const sm2 = (quality: Sm2Quality, params: Sm2Parameters, cardState: Sm2St
     return cardState;
   }
 
-  let nextRepetitions = repetitions + 1;
+  const nextRepetitions = repetitions + 1;
   let nextEasinessFactor = easinessFactor;
   let nextInterval;
 
@@ -48,8 +48,8 @@ export const sm2 = (quality: Sm2Quality, params: Sm2Parameters, cardState: Sm2St
   // Apply the global interval modifier
   nextInterval *= params.intervalModifier;
 
-  // Ensure interval is at least 1 day greater than the last
-  nextInterval = Math.max(nextInterval, interval + 1);
+  // Ensure interval is at least 1 day (do not force growth relative to last)
+  nextInterval = Math.max(1, nextInterval);
 
   // Cap at the maximum interval
   nextInterval = Math.min(params.maximumInterval, Math.ceil(nextInterval));

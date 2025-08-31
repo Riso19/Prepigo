@@ -1,5 +1,15 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./globals.css";
+import AppErrorBoundary from "@/components/AppErrorBoundary";
+import { registerServiceWorker } from "@/lib/pwa";
+import "@/lib/sentry";
 
-createRoot(document.getElementById("root")!).render(<App />);
+// Initialize platform services
+registerServiceWorker();
+
+createRoot(document.getElementById("root")!).render(
+  <AppErrorBoundary>
+    <App />
+  </AppErrorBoundary>
+);

@@ -31,10 +31,19 @@ import CustomMcqPracticeSetupPage from "./pages/CustomMcqPracticeSetupPage";
 import ExamSessionPage from "./pages/ExamSessionPage";
 import ExamResultsPage from "./pages/ExamResultsPage";
 import ExamHistoryPage from "./pages/ExamHistoryPage";
+import ExamProgressPage from "./pages/ExamProgressPage";
 import MistakeReviewSetupPage from "./pages/MistakeReviewSetupPage";
 import ImportExportGuidePage from "./pages/ImportExportGuidePage";
 import AlgorithmGuidePage from "./pages/AlgorithmGuidePage";
 import StatisticsGuidePage from "./pages/StatisticsGuidePage";
+import OfflineIndicator from "@/components/OfflineIndicator";
+import SyncProvider from "@/contexts/SyncProvider";
+import SyncStatusIndicator from "@/components/SyncStatusIndicator";
+import ConflictCenter from "@/components/ConflictCenter";
+import { ResourcesProvider } from "@/contexts/ResourcesContext";
+import ResourcesPage from "./pages/ResourcesPage";
+import ResourceViewerPage from "./pages/ResourceViewerPage";
+import MobileBottomNav, { NAV_HEIGHT } from "@/components/MobileBottomNav";
 
 const queryClient = new QueryClient();
 
@@ -45,12 +54,21 @@ const App = () => (
         <DecksProvider>
           <QuestionBankProvider>
             <ExamsProvider>
+              <ResourcesProvider>
               <TooltipProvider>
                 <Toaster />
                 <Sonner />
+                <OfflineIndicator />
+                <div className="fixed bottom-2 right-3 flex gap-2 items-end pointer-events-none">
+                  <SyncStatusIndicator />
+                  <ConflictCenter className="pointer-events-auto" />
+                </div>
+                <SyncProvider />
                 <BrowserRouter>
                   <Routes>
                     <Route path="/" element={<Index />} />
+                    <Route path="/resources" element={<ResourcesPage />} />
+                    <Route path="/resources/:id/view" element={<ResourceViewerPage />} />
                     <Route path="/question-bank" element={<QuestionBankPage />} />
                     <Route path="/question-bank/:bankId/add" element={<CreateMcqPage />} />
                     <Route path="/question-bank/:bankId/view" element={<QuestionBankViewPage />} />
@@ -72,6 +90,7 @@ const App = () => (
                     <Route path="/exams" element={<ExamSchedulerPage />} />
                     <Route path="/exams/new" element={<CreateExamPage />} />
                     <Route path="/exams/:examId/edit" element={<EditExamPage />} />
+                    <Route path="/exams/:examId/progress" element={<ExamProgressPage />} />
                     <Route path="/exam-history" element={<ExamHistoryPage />} />
                     <Route path="/exam/session" element={<ExamSessionPage />} />
                     <Route path="/exam/results/:logId" element={<ExamResultsPage />} />
@@ -81,8 +100,16 @@ const App = () => (
                     {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                     <Route path="*" element={<NotFound />} />
                   </Routes>
+                  {/* Spacer to prevent content from being hidden behind the fixed bottom nav on mobile */}
+                  <div
+                    className="md:hidden"
+                    style={{ height: `calc(${NAV_HEIGHT}px + env(safe-area-inset-bottom))` }}
+                    aria-hidden
+                  />
+                  <MobileBottomNav />
                 </BrowserRouter>
               </TooltipProvider>
+              </ResourcesProvider>
             </ExamsProvider>
           </QuestionBankProvider>
         </DecksProvider>

@@ -1,7 +1,8 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { ExamData } from "@/data/exams";
-import { getAllExamsFromDB, saveExamsToDB } from "@/lib/idb";
-import { Loader2 } from "lucide-react";
+import { getAllExamsFromDB, saveExamsToDB, enqueueSyncOp } from "@/lib/idb";
+import { scheduleSyncNow } from "@/lib/sync";
+import { postMessage, subscribe } from "@/lib/broadcast";
 
 interface ExamsContextType {
   exams: ExamData[];
@@ -31,6 +32,23 @@ export const ExamsProvider = ({ children }: { children: ReactNode }) => {
       }
     };
     loadExams();
+
+    // Multi-tab: refresh when other tabs write to 'exams'
+    const unsubscribe = subscribe(async (msg) => {
+      if (msg.type === 'storage-write' && msg.resource === 'exams') {
+        try {
+          const latest = await getAllExamsFromDB();
+          setExamsState(latest);
+        } catch (e) {
+          // noop
+        }
+      }
+    });
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, []);
 
   const setExams = (newExams: ExamData[] | ((prevExams: ExamData[]) => ExamData[])) => {
@@ -39,20 +57,41 @@ export const ExamsProvider = ({ children }: { children: ReactNode }) => {
       saveExamsToDB(updatedExams).catch(error => {
         console.error("Failed to save exams to IndexedDB", error);
       });
+
+      // Enqueue bulk upsert for entire exams set
+      void enqueueSyncOp({ resource: 'exams', opType: 'bulk-upsert', payload: updatedExams })
+        .then(() => scheduleSyncNow())
+        .then(() => postMessage({ type: 'storage-write', resource: 'exams' }))
+        .catch(() => { /* noop */ });
       return updatedExams;
     });
   };
 
   const addExam = (exam: ExamData) => {
     setExams(prev => [...prev, exam]);
+    // Enqueue single create
+    void enqueueSyncOp({ resource: 'exams', opType: 'create', payload: exam })
+      .then(() => scheduleSyncNow())
+      .then(() => postMessage({ type: 'storage-write', resource: 'exams' }))
+      .catch(() => { /* noop */ });
   };
 
   const updateExam = (updatedExam: ExamData) => {
     setExams(prev => prev.map(exam => exam.id === updatedExam.id ? updatedExam : exam));
+    // Enqueue single update
+    void enqueueSyncOp({ resource: 'exams', opType: 'update', payload: updatedExam })
+      .then(() => scheduleSyncNow())
+      .then(() => postMessage({ type: 'storage-write', resource: 'exams' }))
+      .catch(() => { /* noop */ });
   };
 
   const deleteExam = (examId: string) => {
     setExams(prev => prev.filter(exam => exam.id !== examId));
+    // Enqueue delete
+    void enqueueSyncOp({ resource: 'exams', opType: 'delete', payload: { id: examId } })
+      .then(() => scheduleSyncNow())
+      .then(() => postMessage({ type: 'storage-write', resource: 'exams' }))
+      .catch(() => { /* noop */ });
   };
 
   return (

@@ -14,9 +14,11 @@ interface McqPlayerProps {
   onOptionSelect: (optionId: string) => void;
   isExamMode?: boolean;
   examAnswer?: { selectedOptionId: string | null; isCorrect: boolean };
+  // Optional: when provided, these options will be rendered instead of mcq.options
+  options?: McqData["options"]; 
 }
 
-const McqPlayer = ({ mcq, selectedOptionId, isSubmitted, onOptionSelect, isExamMode = false, examAnswer }: McqPlayerProps) => {
+const McqPlayer = ({ mcq, selectedOptionId, isSubmitted, onOptionSelect, isExamMode = false, examAnswer, options }: McqPlayerProps) => {
   const showFeedback = (isSubmitted && !isExamMode) || (isExamMode && examAnswer);
 
   const getOptionClass = (optionId: string, isCorrect: boolean) => {
@@ -51,7 +53,7 @@ const McqPlayer = ({ mcq, selectedOptionId, isSubmitted, onOptionSelect, isExamM
           disabled={isSubmitted || (isExamMode && !!examAnswer)}
         >
           <div className="space-y-4">
-            {mcq.options.map((option, index) => (
+            {(options ?? mcq.options).map((option, index) => (
               <Label
                 key={option.id}
                 htmlFor={option.id}

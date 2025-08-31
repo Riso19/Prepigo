@@ -15,10 +15,18 @@ const getBarColor = (forgetRate: number) => {
   return '#22c55e'; // green-500
 };
 
-const CustomYAxisTick = (props: any) => {
+interface CustomYAxisTickProps {
+  x?: number;
+  y?: number;
+  payload?: {
+    value: string;
+  };
+}
+
+const CustomYAxisTick = (props: CustomYAxisTickProps) => {
   const { x, y, payload } = props;
   const MAX_LENGTH = 25;
-  const truncatedValue = payload.value.length > MAX_LENGTH ? `${payload.value.substring(0, MAX_LENGTH - 2)}...` : payload.value;
+  const truncatedValue = payload?.value && payload.value.length > MAX_LENGTH ? `${payload.value.substring(0, MAX_LENGTH - 2)}...` : payload?.value || '';
   return (
     <g transform={`translate(${x},${y})`}>
       <text x={0} y={0} dy={4} textAnchor="end" fill="hsl(var(--muted-foreground))" fontSize={12}>
@@ -28,7 +36,16 @@ const CustomYAxisTick = (props: any) => {
   );
 };
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: Array<{
+    value: number;
+    payload: TopicForgettingRateData;
+  }>;
+  label?: string;
+}
+
+const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   if (active && payload && payload.length) {
     return (
       <div className="rounded-lg border bg-background p-2 shadow-sm">
