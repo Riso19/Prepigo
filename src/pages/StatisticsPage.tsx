@@ -238,7 +238,7 @@ const StatisticsPage = () => {
             layout={isMobile ? 'vertical' : 'horizontal'}
             verticalAlign={isMobile ? 'middle' : 'bottom'}
             align={isMobile ? 'right' : 'center'}
-            formatter={(value: string, entry?: { payload?: { value: number } }) => {
+            formatter={(value: any, entry: any) => {
               const count = entry?.payload?.value ?? 0;
               return `${value} (${count})`;
             }}

@@ -20,7 +20,7 @@ interface CustomTooltipProps {
 }
 
 const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
-  if (active && payload && payload.length) {
+  if (active && payload && payload.length && label) {
     return (
       <div className="rounded-lg border bg-background p-2 shadow-sm">
         <div className="flex flex-col gap-1">

@@ -609,3 +609,5 @@ export default function ResourceViewerPage() {
     </div>
   );
 }
+
+export default ResourceViewerPage;

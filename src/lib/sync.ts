@@ -30,7 +30,7 @@ import {
 } from './storage';
 import { postMessage } from './broadcast';
 
-export type PushHandler = (ops: SyncOperation[]) => Promise<{ syncedIds: number[] } | void>;
+export type PushHandler = <T>(ops: SyncOperation<T>[]) => Promise<{ syncedIds: number[] } | void>;
 
 let running = false;
 let stopped = true;

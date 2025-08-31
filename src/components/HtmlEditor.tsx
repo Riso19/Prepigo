@@ -62,7 +62,7 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
       const selection = window.getSelection();
       if (selection && selection.rangeCount > 0) {
         const node = selection.getRangeAt(0).startContainer;
-        const parent = node.nodeType === 3 ? node.parentNode : node;
+        let parent = node.nodeType === 3 ? node.parentNode : node;
         let inTable = false;
         while (parent) {
           if (parent.nodeName === 'TABLE') {
@@ -138,7 +138,7 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
     const node = selection.getRangeAt(0).startContainer;
     let cell: HTMLElement | null = null, row: HTMLElement | null = null, table: HTMLElement | null = null;
 
-    const parent = node.nodeType === 3 ? node.parentNode as HTMLElement : node as HTMLElement;
+    let parent = node.nodeType === 3 ? node.parentNode as HTMLElement : node as HTMLElement;
     while (parent) {
         const nodeName = parent.nodeName;
         if (nodeName === 'TD' || nodeName === 'TH') cell = parent;

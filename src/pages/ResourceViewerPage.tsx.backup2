@@ -430,182 +430,183 @@ export default function ResourceViewerPage() {
               <span>• Page {pageNum} / {pageCount}</span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => canPrev && setPageNum(p => Math.max(1, p - 1))} disabled={!canPrev}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => canNext && setPageNum(p => Math.min(pageCount, p + 1))} disabled={!canNext}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-              <Separator orientation="vertical" className="h-6" />
-              <div className="flex items-center gap-1 text-xs">
-                <Button variant="outline" size="icon" className="h-7 w-7" onClick={()=> setScale(s => Math.max(0.5, +(s - 0.25).toFixed(2)))}>-</Button>
-                <div className="w-12 text-center tabular-nums">{Math.round(scale*100)}%</div>
-                <Button variant="outline" size="icon" className="h-7 w-7" onClick={()=> setScale(s => Math.min(3, +(s + 0.25).toFixed(2)))}>+</Button>
-              </div>
-              <Separator orientation="vertical" className="h-6" />
-              <Button size="sm" className="gap-2" onClick={() => { setSelection({ text: "", page: pageNum }); setDialogOpen(true); }}>
-                <Plus className="h-4 w-4" /> Create flashcard
-              </Button>
-              <Sheet open={showHighlights} onOpenChange={setShowHighlights}>
-                <SheetTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-2"><List className="h-4 w-4"/> Highlights</Button>
-                </SheetTrigger>
-                <SheetContent side="right" className="w-full sm:w-[420px] flex flex-col">
-                  <SheetHeader>
-                    <SheetTitle>Highlights</SheetTitle>
-                  </SheetHeader>
-                  <div className="mt-4 space-y-3 overflow-y-auto max-h-[calc(100vh-8rem)] pr-1">
-                    {highlights.length === 0 && (
-                      <div className="text-sm text-muted-foreground">No highlights yet. Drag on the page to create one.</div>
-                    )}
-                    {highlights.sort((a,b)=>a.page-b.page || a.createdAt-b.createdAt).map(h => (
-                      <div key={h.id} className="rounded-md border p-2">
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                          <div>Page {h.page}</div>
-                          <div className="flex items-center gap-1">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7" title="Set color"><Paintbrush className="h-4 w-4"/></Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={()=>setColorForHighlight(h.id,'yellow')}>Yellow</DropdownMenuItem>
-                                <DropdownMenuItem onClick={()=>setColorForHighlight(h.id,'green')}>Green</DropdownMenuItem>
-                                <DropdownMenuItem onClick={()=>setColorForHighlight(h.id,'blue')}>Blue</DropdownMenuItem>
-                                <DropdownMenuItem onClick={()=>setColorForHighlight(h.id,'pink')}>Pink</DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                            <Button variant="ghost" size="icon" className="h-7 w-7" title="Add note" onClick={()=>openNoteEditor(h)}>
-                              <StickyNote className="h-4 w-4"/>
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-red-600" title="Delete" onClick={async ()=>{
-                              await deleteResourceHighlight(h.id);
-                              setHighlights(prev => prev.filter(x => x.id !== h.id));
-                              if (currentHighlightId === h.id) setCurrentHighlightId(null);
-                            }}>
-                              <Trash2 className="h-4 w-4"/>
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7" title="Go to" onClick={()=>{ setPageNum(h.page); }}>
-                              <ChevronRight className="h-4 w-4 rotate-180"/>
-                            </Button>
-                          </div>
-                        </div>
-                        {h.text && <div className="mt-1 text-sm">{h.text}</div>}
-                        {h.note && <div className="mt-1 text-xs text-muted-foreground">Note: {h.note}</div>}
-                      </div>
-                    ))}
-                  </div>
-                  {noteForId && (
-                    <div className="mt-4 border-t pt-3">
-                      <div className="text-sm font-medium mb-2">Edit note</div>
-                      <Textarea value={noteDraft} onChange={(e)=>setNoteDraft(e.target.value)} rows={4} placeholder="Add a note"/>
-                      <div className="mt-2 flex gap-2 justify-end">
-                        <Button variant="ghost" size="sm" onClick={()=>{ setNoteForId(null); setNoteDraft(""); }}>Cancel</Button>
-                        <Button size="sm" onClick={saveNote}>Save</Button>
-                      </div>
-                    </div>
+            <Button variant="outline" size="sm" onClick={() => canPrev && setPageNum(p => Math.max(1, p - 1))} disabled={!canPrev}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => canNext && setPageNum(p => Math.min(pageCount, p + 1))} disabled={!canNext}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <Separator orientation="vertical" className="h-6" />
+            <div className="flex items-center gap-1 text-xs">
+              <Button variant="outline" size="icon" className="h-7 w-7" onClick={()=> setScale(s => Math.max(0.5, +(s - 0.25).toFixed(2)))}>-</Button>
+              <div className="w-12 text-center tabular-nums">{Math.round(scale*100)}%</div>
+              <Button variant="outline" size="icon" className="h-7 w-7" onClick={()=> setScale(s => Math.min(3, +(s + 0.25).toFixed(2)))}>+</Button>
+            </div>
+            <Separator orientation="vertical" className="h-6" />
+            <Button size="sm" className="gap-2" onClick={() => { setSelection({ text: "", page: pageNum }); setDialogOpen(true); }}>
+              <Plus className="h-4 w-4" /> Create flashcard
+            </Button>
+            <Sheet open={showHighlights} onOpenChange={setShowHighlights}>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2"><List className="h-4 w-4"/> Highlights</Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="w-full sm:w-[420px] flex flex-col">
+                <SheetHeader>
+                  <SheetTitle>Highlights</SheetTitle>
+                </SheetHeader>
+                <div className="mt-4 space-y-3 overflow-y-auto max-h-[calc(100vh-8rem)] pr-1">
+                  {highlights.length === 0 && (
+                    <div className="text-sm text-muted-foreground">No highlights yet. Drag on the page to create one.</div>
                   )}
-                </SheetContent>
-              </Sheet>
-            </div>
-          </div>
-          {/* Reading progress bar */}
-          <div className="mt-2 flex items-center gap-3">
-            <div className="h-2 grow rounded bg-muted">
-              <div className="h-2 rounded bg-primary" style={{ width: `${(pageNum / Math.max(1, pageCount)) * 100}%` }} />
-            </div>
-            <div className="text-xs tabular-nums text-muted-foreground">{Math.round((pageNum / Math.max(1, pageCount)) * 100)}%</div>
-          </div>
-
-          {/* Inline toolbar for current selection */}
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="outline" className="gap-2" disabled={!currentHighlightId && !selection} onClick={copySelectionText}>
-              <Copy className="h-4 w-4"/> Copy text
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="outline" className="gap-2" disabled={!currentHighlightId}><Highlighter className="h-4 w-4"/> Color</Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuItem disabled={!currentHighlightId} onClick={()=> currentHighlightId && setColorForHighlight(currentHighlightId,'yellow')}>Yellow</DropdownMenuItem>
-                <DropdownMenuItem disabled={!currentHighlightId} onClick={()=> currentHighlightId && setColorForHighlight(currentHighlightId,'green')}>Green</DropdownMenuItem>
-                <DropdownMenuItem disabled={!currentHighlightId} onClick={()=> currentHighlightId && setColorForHighlight(currentHighlightId,'blue')}>Blue</DropdownMenuItem>
-                <DropdownMenuItem disabled={!currentHighlightId} onClick={()=> currentHighlightId && setColorForHighlight(currentHighlightId,'pink')}>Pink</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Button size="sm" variant="outline" className="gap-2" disabled={!currentHighlightId} onClick={()=>{
-              const h = highlights.find(x=>x.id===currentHighlightId);
-              if (h) { openNoteEditor(h); setShowHighlights(true); }
-            }}>
-              <StickyNote className="h-4 w-4"/> Note
-            </Button>
-            <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-              <span>Create card on select</span>
-              <Switch checked={createOnSelect} onCheckedChange={setCreateOnSelect} aria-label="Create card on select" />
-            </div>
-            {/* OCR feature removed as per request */}
-          </div>
-          <div className="mt-3 relative flex-1 min-h-[50vh] sm:min-h-[60vh] overflow-auto">
-            <div className="w-full h-full flex items-center justify-center">
-              <div
-                ref={canvasWrapRef}
-                className="relative inline-block"
-                onMouseDown={onMouseDown}
-                onMouseMove={onMouseMove}
-                onMouseUp={onMouseUp}
-              >
-                <canvas ref={canvasRef} className={"bg-muted rounded border block max-w-full h-auto" + (rendering ? " opacity-80" : "")} />
-                {/* Persisted highlights for current page */}
-                {highlights.filter(h => h.page === pageNum).flatMap((h) => (
-                  h.rects.map((r, idx) => {
-                    const color = h.color ?? 'yellow';
-                    const classes = {
-                      yellow: 'bg-yellow-300/30 ring-yellow-500/50',
-                      green: 'bg-green-300/30 ring-green-500/50',
-                      blue: 'bg-blue-300/30 ring-blue-500/50',
-                      pink: 'bg-pink-300/30 ring-pink-500/50',
-                    }[color];
-                    return (
-                      <div
-                        key={`${h.id}-${idx}`}
-                        className={`absolute ${classes} ring-1 rounded-sm pointer-events-auto cursor-pointer`}
-                        style={{
-                          left: r.x * scale,
-                          top: r.y * scale,
-                          width: r.w * scale,
-                          height: r.h * scale,
-                        }}
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`highlight ${color}`}
-                        title={h.text || 'Highlight'}
-                        onClick={(e) => onHighlightClick(e, h)}
-                        onKeyDown={(e) => { if (e.shiftKey && (e.key === 'Enter' || e.key === ' ')) onHighlightClick(e as any, h); }}
-                      />
-                    );
-                  })
-                ))}
-                {/* Active drag rectangle */}
-                {dragRect && (
-                  <div
-                    className="absolute bg-blue-300/20 ring-1 ring-blue-500/60 rounded-sm"
-                    style={{ left: dragRect.x, top: dragRect.y, width: dragRect.w, height: dragRect.h }}
-                  />
+                  {highlights.sort((a,b)=>a.page-b.page || a.createdAt-b.createdAt).map(h => (
+                    <div key={h.id} className="rounded-md border p-2">
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <div>Page {h.page}</div>
+                        <div className="flex items-center gap-1">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-7 w-7" title="Set color"><Paintbrush className="h-4 w-4"/></Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={()=>setColorForHighlight(h.id,'yellow')}>Yellow</DropdownMenuItem>
+                              <DropdownMenuItem onClick={()=>setColorForHighlight(h.id,'green')}>Green</DropdownMenuItem>
+                              <DropdownMenuItem onClick={()=>setColorForHighlight(h.id,'blue')}>Blue</DropdownMenuItem>
+                              <DropdownMenuItem onClick={()=>setColorForHighlight(h.id,'pink')}>Pink</DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" title="Add note" onClick={()=>openNoteEditor(h)}>
+                            <StickyNote className="h-4 w-4"/>
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-red-600" title="Delete" onClick={async ()=>{
+                            await deleteResourceHighlight(h.id);
+                            setHighlights(prev => prev.filter(x => x.id !== h.id));
+                            if (currentHighlightId === h.id) setCurrentHighlightId(null);
+                          }}>
+                            <Trash2 className="h-4 w-4"/>
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" title="Go to" onClick={()=>{ setPageNum(h.page); }}>
+                            <ChevronRight className="h-4 w-4 rotate-180"/>
+                          </Button>
+                        </div>
+                      </div>
+                      {h.text && <div className="mt-1 text-sm">{h.text}</div>}
+                      {h.note && <div className="mt-1 text-xs text-muted-foreground">Note: {h.note}</div>}
+                    </div>
+                  ))}
+                </div>
+                {noteForId && (
+                  <div className="mt-4 border-t pt-3">
+                    <div className="text-sm font-medium mb-2">Edit note</div>
+                    <Textarea value={noteDraft} onChange={(e)=>setNoteDraft(e.target.value)} rows={4} placeholder="Add a note"/>
+                    <div className="mt-2 flex gap-2 justify-end">
+                      <Button variant="ghost" size="sm" onClick={()=>{ setNoteForId(null); setNoteDraft(""); }}>Cancel</Button>
+                      <Button size="sm" onClick={saveNote}>Save</Button>
+                    </div>
+                  </div>
                 )}
-              </div>
+              </SheetContent>
+            </Sheet>
+          </div>
+        </div>
+        {/* Reading progress bar */}
+        <div className="mt-2 flex items-center gap-3">
+          <div className="h-2 grow rounded bg-muted">
+            <div className="h-2 rounded bg-primary" style={{ width: `${(pageNum / Math.max(1, pageCount)) * 100}%` }} />
+          </div>
+          <div className="text-xs tabular-nums text-muted-foreground">{Math.round((pageNum / Math.max(1, pageCount)) * 100)}%</div>
+        </div>
+
+        {/* Inline toolbar for current selection */}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" className="gap-2" disabled={!currentHighlightId && !selection} onClick={copySelectionText}>
+            <Copy className="h-4 w-4"/> Copy text
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="outline" className="gap-2" disabled={!currentHighlightId}><Highlighter className="h-4 w-4"/> Color</Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem disabled={!currentHighlightId} onClick={()=> currentHighlightId && setColorForHighlight(currentHighlightId,'yellow')}>Yellow</DropdownMenuItem>
+              <DropdownMenuItem disabled={!currentHighlightId} onClick={()=> currentHighlightId && setColorForHighlight(currentHighlightId,'green')}>Green</DropdownMenuItem>
+              <DropdownMenuItem disabled={!currentHighlightId} onClick={()=> currentHighlightId && setColorForHighlight(currentHighlightId,'blue')}>Blue</DropdownMenuItem>
+              <DropdownMenuItem disabled={!currentHighlightId} onClick={()=> currentHighlightId && setColorForHighlight(currentHighlightId,'pink')}>Pink</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button size="sm" variant="outline" className="gap-2" disabled={!currentHighlightId} onClick={()=>{
+            const h = highlights.find(x=>x.id===currentHighlightId);
+            if (h) { openNoteEditor(h); setShowHighlights(true); }
+          }}>
+            <StickyNote className="h-4 w-4"/> Note
+          </Button>
+          <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+            <span>Create card on select</span>
+            <Switch checked={createOnSelect} onCheckedChange={setCreateOnSelect} aria-label="Create card on select" />
+          </div>
+          {/* OCR feature removed as per request */}
+        </div>
+        <div className="mt-3 relative flex-1 min-h-[50vh] sm:min-h-[60vh] overflow-auto">
+          <div className="w-full h-full flex items-center justify-center">
+            <div
+              ref={canvasWrapRef}
+              className="relative inline-block"
+              onMouseDown={onMouseDown}
+              onMouseMove={onMouseMove}
+              onMouseUp={onMouseUp}
+            >
+              <canvas ref={canvasRef} className={"bg-muted rounded border block max-w-full h-auto" + (rendering ? " opacity-80" : "")} />
+              {/* Persisted highlights for current page */}
+              {highlights.filter(h => h.page === pageNum).flatMap((h) => (
+                h.rects.map((r, idx) => {
+                  const color = h.color ?? 'yellow';
+                  const classes = {
+                    yellow: 'bg-yellow-300/30 ring-yellow-500/50',
+                    green: 'bg-green-300/30 ring-green-500/50',
+                    blue: 'bg-blue-300/30 ring-blue-500/50',
+                    pink: 'bg-pink-300/30 ring-pink-500/50',
+                  }[color];
+                  return (
+                    <div
+                      key={`${h.id}-${idx}`}
+                      className={`absolute ${classes} ring-1 rounded-sm pointer-events-auto cursor-pointer`}
+                      style={{
+                        left: r.x * scale,
+                        top: r.y * scale,
+                        width: r.w * scale,
+                        height: r.h * scale,
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`highlight ${color}`}
+                      title={h.text || 'Highlight'}
+                      onClick={(e) => onHighlightClick(e, h)}
+                      onKeyDown={(e) => { if (e.shiftKey && (e.key === 'Enter' || e.key === ' ')) onHighlightClick(e as any, h); }}
+                    />
+                  );
+                })
+              ))}
+              {/* Active drag rectangle */}
+              {dragRect && (
+                <div
+                  className="absolute bg-blue-300/20 ring-1 ring-blue-500/60 rounded-sm"
+                  style={{ left: dragRect.x, top: dragRect.y, width: dragRect.w, height: dragRect.h }}
+                />
+              )}
             </div>
           </div>
-        </Card>
-        {resource && (
-          <FlashcardFromPdfDialog
-            open={dialogOpen}
-            onOpenChange={setDialogOpen}
-            resource={resource}
-            selection={selection}
-            occlusionSeed={occlusionSeed}
-            onCreate={onCreateCard}
-          />
-        )}
-      </div>
+        </div>
+      </Card>
+      {resource && (
+        <FlashcardFromPdfDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          resource={resource}
+          selection={selection}
+          occlusionSeed={occlusionSeed}
+          onCreate={onCreateCard}
+        />
+      )}
     </div>
   );
 }
+
+export default ResourceViewerPage;

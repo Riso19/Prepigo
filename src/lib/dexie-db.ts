@@ -1,7 +1,7 @@
 // Dexie adapter for Prepigo (opt-in via VITE_USE_DEXIE)
 // Mirrors the API of src/lib/idb.ts so migration can be toggled via env.
 
-import type { DeckData } from '@/data/decks';
+import type { DeckData, ReviewLog } from '@/data/decks';
 import type { QuestionBankData } from '@/data/questionBanks';
 import type { ExamData } from '@/data/exams';
 
@@ -234,7 +234,7 @@ export async function getReviewLogsForCard(cardId: string) {
 
 export async function getAllReviewLogsFromDB() {
   const t = await table(REVIEW_LOGS_STORE);
-  return t.toArray();
+  return t.toArray() as Promise<ReviewLog[]>;
 }
 
 export async function clearReviewLogsDB() {
@@ -255,7 +255,7 @@ export async function getReviewLogsForMcq(mcqId: string) {
 
 export async function getAllMcqReviewLogsFromDB() {
   const t = await table(MCQ_REVIEW_LOGS_STORE);
-  return t.toArray();
+  return t.toArray() as Promise<McqReviewLog[]>;
 }
 
 export async function clearMcqReviewLogsDB() {
@@ -290,7 +290,7 @@ export async function clearMediaDB() {
 // --- Session State ---
 export async function getIntroductionsFromDB() {
   const t = await table(SESSION_STATE_STORE);
-  return t.get('introductionsToday');
+  return t.get('introductionsToday') as Promise<{ date: string; ids: string[] } | undefined>;
 }
 
 export async function saveIntroductionsToDB(introductions: { date: string; ids: string[] }) {
@@ -300,7 +300,7 @@ export async function saveIntroductionsToDB(introductions: { date: string; ids: 
 
 export async function getMcqIntroductionsFromDB() {
   const t = await table(SESSION_STATE_STORE);
-  return t.get('mcqIntroductionsToday');
+  return t.get('mcqIntroductionsToday') as Promise<{ date: string; ids: string[] } | undefined>;
 }
 
 export async function saveMcqIntroductionsToDB(introductions: { date: string; ids: string[] }) {
