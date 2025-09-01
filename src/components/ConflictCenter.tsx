@@ -56,32 +56,35 @@ export default function ConflictCenter({ className }: { className?: string }) {
   // Minimal footprint: hide trigger entirely when no conflicts
   if (count === 0) return null;
 
+  const triggerButton = (
+    <Button
+      variant="secondary"
+      size="icon"
+      className={cn('pointer-events-auto relative', className)}
+      aria-label={`Open conflicts (${count})`}
+    >
+      <AlertTriangle className="h-4 w-4 text-red-600" />
+      <span className="sr-only">Open conflicts</span>
+      <span
+        aria-hidden
+        className="absolute -top-1 -right-1 h-5 min-w-5 px-1 rounded-full bg-red-600 text-[10px] font-medium text-white flex items-center justify-center"
+      >
+        {count}
+      </span>
+    </Button>
+  );
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="secondary"
-              size="icon"
-              className={cn('pointer-events-auto relative', className)}
-              aria-label={`Open conflicts (${count})`}
-            >
-              <AlertTriangle className="h-4 w-4 text-red-600" />
-              <span className="sr-only">Open conflicts</span>
-              {/* Red counter dot */}
-              <span
-                aria-hidden
-                className="absolute -top-1 -right-1 h-5 min-w-5 px-1 rounded-full bg-red-600 text-[10px] font-medium text-white flex items-center justify-center"
-              >
-                {count}
-              </span>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="left" className="text-xs">
-            {count} conflict{count === 1 ? '' : 's'} to resolve
-          </TooltipContent>
-        </Tooltip>
+        <div className="inline-block">
+          <Tooltip>
+            <TooltipTrigger asChild>{triggerButton}</TooltipTrigger>
+            <TooltipContent side="left" className="text-xs">
+              {count} conflict{count === 1 ? '' : 's'} to resolve
+            </TooltipContent>
+          </Tooltip>
+        </div>
       </DialogTrigger>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>

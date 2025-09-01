@@ -21,9 +21,12 @@ async function withTransaction<T>(
   operation: (tx: { table: <T>(name: string) => Table<T> }) => Promise<T>,
 ): Promise<T> {
   const db = await getDb();
-  const txFn: TransactionFunction = (db as unknown as { transaction: TransactionFunction })
-    .transaction;
-  return txFn(mode, storeNames, operation);
+  const dexieDb = db as unknown as { transaction?: TransactionFunction };
+  if (typeof dexieDb.transaction !== 'function') {
+    throw new Error('Database transaction method is unavailable (DB not initialized)');
+  }
+  // IMPORTANT: call as a method to preserve `this` binding inside Dexie
+  return dexieDb.transaction(mode, storeNames, operation);
 }
 
 import {

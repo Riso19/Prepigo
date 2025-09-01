@@ -3,18 +3,48 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowLeft, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardFooter,
+} from '@/components/ui/card';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  FormDescription,
+} from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import Header from '@/components/Header';
-import { useSettings, SrsSettings, clearSettingsDB, srsSettingsSchema } from '@/contexts/SettingsContext';
+import {
+  useSettings,
+  SrsSettings,
+  clearSettingsDB,
+  srsSettingsSchema,
+} from '@/contexts/SettingsContext';
 import { showSuccess, showError } from '@/utils/toast';
 import { Separator } from '@/components/ui/separator';
 import React, { useRef, useState } from 'react';
 import { useDecks } from '@/contexts/DecksContext';
 import { DeckData, decksSchema, FlashcardData } from '@/data/decks';
-import { getReviewLogsForCard, saveMediaToDB, clearMediaDB, clearQuestionBanksDB, clearMcqReviewLogsDB, getMediaFromDB, saveSingleMediaToDB, getReviewLogsForMcq, enqueueSyncOp } from '@/lib/idb';
+import {
+  getReviewLogsForCard,
+  saveMediaToDB,
+  clearMediaDB,
+  clearQuestionBanksDB,
+  clearMcqReviewLogsDB,
+  getMediaFromDB,
+  saveSingleMediaToDB,
+  getReviewLogsForMcq,
+  enqueueSyncOp,
+} from '@/lib/idb';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,12 +55,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { updateFlashcard, mergeDecks } from '@/lib/deck-utils';
 import { getAllFlashcardsFromDeck } from '@/lib/card-utils';
 import { fsrs, createEmptyCard, generatorParameters, Card as FsrsCard, Rating } from 'ts-fsrs';
-import { fsrs6, Card as Fsrs6Card, generatorParameters as fsrs6GeneratorParameters } from '@/lib/fsrs6';
+import {
+  fsrs6,
+  Card as Fsrs6Card,
+  generatorParameters as fsrs6GeneratorParameters,
+} from '@/lib/fsrs6';
 import { toast } from 'sonner';
 import { importAnkiFile } from '@/lib/anki-importer';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -38,7 +78,11 @@ import { Progress } from '@/components/ui/progress';
 import { importAnkiTxtFile } from '@/lib/anki-txt-importer';
 import { useQuestionBanks } from '@/contexts/QuestionBankContext';
 import { QuestionBankData, questionBanksSchema } from '@/data/questionBanks';
-import { mergeQuestionBanks, updateMcq, collectMediaFilenamesFromMcqs } from '@/lib/question-bank-utils';
+import {
+  mergeQuestionBanks,
+  updateMcq,
+  collectMediaFilenamesFromMcqs,
+} from '@/lib/question-bank-utils';
 import { getAllMcqsFromBank } from '@/lib/question-bank-utils';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import JSZip from 'jszip';
@@ -48,14 +92,18 @@ import { postMessage } from '@/lib/broadcast';
 import { outcomeByRating } from '@/lib/fsrs-helpers';
 
 const parseSteps = (steps: string): number[] => {
-  return steps.trim().split(/\s+/).filter(s => s).map(stepStr => {
-    const value = parseFloat(stepStr);
-    if (isNaN(value)) return 1;
-    if (stepStr.endsWith('d')) return value * 24 * 60;
-    if (stepStr.endsWith('h')) return value * 60;
-    if (stepStr.endsWith('s')) return Math.max(1, value / 60);
-    return value;
-  });
+  return steps
+    .trim()
+    .split(/\s+/)
+    .filter((s) => s)
+    .map((stepStr) => {
+      const value = parseFloat(stepStr);
+      if (isNaN(value)) return 1;
+      if (stepStr.endsWith('d')) return value * 24 * 60;
+      if (stepStr.endsWith('h')) return value * 60;
+      if (stepStr.endsWith('s')) return Math.max(1, value / 60);
+      return value;
+    });
 };
 
 const base64ToBlob = (base64: string): Blob => {
@@ -74,17 +122,17 @@ const SettingsPage = () => {
   const { settings, setSettings, isLoading } = useSettings();
   const { decks, setDecks } = useDecks();
   const { questionBanks, setQuestionBanks } = useQuestionBanks();
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mcqFileInputRef = useRef<HTMLInputElement>(null);
 
   const [isResetAlertOpen, setIsResetAlertOpen] = useState(false);
-  
+
   const [isImportAlertOpen, setIsImportAlertOpen] = useState(false);
   const [fileToImport, setFileToImport] = useState<File | null>(null);
   const [includeScheduling, setIncludeScheduling] = useState(true);
   const [replaceOnImport, setReplaceOnImport] = useState(false);
-  
+
   const [isMcqImportAlertOpen, setIsMcqImportAlertOpen] = useState(false);
   const [fileToImportMcq, setFileToImportMcq] = useState<File | null>(null);
   const [replaceOnMcqImport, setReplaceOnMcqImport] = useState(false);
@@ -105,66 +153,93 @@ const SettingsPage = () => {
     const schedulerChanged = oldScheduler !== newScheduler;
 
     if (data.newCardInsertionOrder !== settings.newCardInsertionOrder) {
-        const loadingToast = toast.loading("Updating new card order...");
-        const updateOrderRecursive = (decksToUpdate: DeckData[]): DeckData[] => {
-            return decksToUpdate.map(deck => {
-                const updatedFlashcards = deck.flashcards.map(fc => {
-                    const isNew = !fc.srs?.sm2 || fc.srs.sm2.state === 'new';
-                    if (isNew) {
-                        const newOrder = data.newCardInsertionOrder === 'sequential' 
-                            ? Date.now() + Math.random()
-                            : Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
-                        return { ...fc, srs: { ...fc.srs, newCardOrder: newOrder } };
-                    }
-                    return fc;
-                });
-                const updatedSubDecks = deck.subDecks ? updateOrderRecursive(deck.subDecks) : [];
-                return { ...deck, flashcards: updatedFlashcards, subDecks: updatedSubDecks };
-            });
-        };
-        setDecks(prevDecks => updateOrderRecursive(prevDecks));
-        toast.success("New card order updated.", { id: loadingToast });
+      const loadingToast = toast.loading('Updating new card order...');
+      const updateOrderRecursive = (decksToUpdate: DeckData[]): DeckData[] => {
+        return decksToUpdate.map((deck) => {
+          const updatedFlashcards = deck.flashcards.map((fc) => {
+            const isNew = !fc.srs?.sm2 || fc.srs.sm2.state === 'new';
+            if (isNew) {
+              const newOrder =
+                data.newCardInsertionOrder === 'sequential'
+                  ? Date.now() + Math.random()
+                  : Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+              return { ...fc, srs: { ...fc.srs, newCardOrder: newOrder } };
+            }
+            return fc;
+          });
+          const updatedSubDecks = deck.subDecks ? updateOrderRecursive(deck.subDecks) : [];
+          return { ...deck, flashcards: updatedFlashcards, subDecks: updatedSubDecks };
+        });
+      };
+      setDecks((prevDecks) => updateOrderRecursive(prevDecks));
+      toast.success('New card order updated.', { id: loadingToast });
     }
 
     setSettings(data);
-    showSuccess("Settings saved successfully!");
+    showSuccess('Settings saved successfully!');
 
     if (rescheduleOnSave || schedulerChanged) {
-      const toastId = toast.loading(schedulerChanged ? "Scheduler changed, starting full reschedule..." : "Starting reschedule...");
+      const toastId = toast.loading(
+        schedulerChanged
+          ? 'Scheduler changed, starting full reschedule...'
+          : 'Starting reschedule...',
+      );
       try {
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await new Promise((resolve) => setTimeout(resolve, 50));
 
         // Reschedule Flashcards
         if (newScheduler === 'fsrs' || newScheduler === 'fsrs6') {
-          const allFlashcards: FlashcardData[] = decks.flatMap(deck => getAllFlashcardsFromDeck(deck));
+          const allFlashcards: FlashcardData[] = decks.flatMap((deck) =>
+            getAllFlashcardsFromDeck(deck),
+          );
           const totalCards = allFlashcards.length;
-          const fsrsInstance = newScheduler === 'fsrs6' 
-            ? fsrs6(fsrs6GeneratorParameters(data.fsrs6Parameters), { learning: parseSteps(data.learningSteps), relearning: parseSteps(data.relearningSteps) })
-            : fsrs(generatorParameters(data.fsrsParameters));
-          
+          const fsrsInstance =
+            newScheduler === 'fsrs6'
+              ? fsrs6(fsrs6GeneratorParameters(data.fsrs6Parameters), {
+                  learning: parseSteps(data.learningSteps),
+                  relearning: parseSteps(data.relearningSteps),
+                })
+              : fsrs(generatorParameters(data.fsrsParameters));
+
           let currentDecks = decks;
           let processedCount = 0;
 
           for (const card of allFlashcards) {
             processedCount++;
-            const reviewLogs = await getReviewLogsForCard(card.id) as Array<{ review: string; rating: Rating }>;
+            const reviewLogs = (await getReviewLogsForCard(card.id)) as Array<{
+              review: string;
+              rating: Rating;
+            }>;
             if (reviewLogs.length > 0) {
-              reviewLogs.sort((a, b) => new Date(a.review).getTime() - new Date(b.review).getTime());
+              reviewLogs.sort(
+                (a, b) => new Date(a.review).getTime() - new Date(b.review).getTime(),
+              );
               let fsrsCard: FsrsCard | Fsrs6Card = createEmptyCard(new Date(reviewLogs[0].review));
               for (const log of reviewLogs) {
                 const rating = log.rating;
                 const schedulingResult = fsrsInstance.repeat(fsrsCard, new Date(log.review));
                 fsrsCard = outcomeByRating(schedulingResult, rating).card;
               }
-              const updatedSrsData = { ...fsrsCard, due: fsrsCard.due.toISOString(), last_review: fsrsCard.last_review?.toISOString() };
+              const updatedSrsData = {
+                ...fsrsCard,
+                due: fsrsCard.due.toISOString(),
+                last_review: fsrsCard.last_review?.toISOString(),
+              };
               const updatedCard: FlashcardData = {
                 ...card,
-                srs: { ...card.srs, ...(newScheduler === 'fsrs6' ? { fsrs6: updatedSrsData } : { fsrs: updatedSrsData }) }
+                srs: {
+                  ...card.srs,
+                  ...(newScheduler === 'fsrs6'
+                    ? { fsrs6: updatedSrsData }
+                    : { fsrs: updatedSrsData }),
+                },
               };
               currentDecks = updateFlashcard(currentDecks, updatedCard);
             }
             if (processedCount % 10 === 0 || processedCount === totalCards) {
-              toast.loading(`Rescheduling flashcards... (${processedCount}/${totalCards})`, { id: toastId });
+              toast.loading(`Rescheduling flashcards... (${processedCount}/${totalCards})`, {
+                id: toastId,
+              });
             }
           }
           setDecks(currentDecks);
@@ -174,48 +249,64 @@ const SettingsPage = () => {
         const mcqScheduler = newScheduler === 'sm2' ? 'fsrs' : newScheduler;
         const allMcqs = questionBanks.flatMap(getAllMcqsFromBank);
         const totalMcqs = allMcqs.length;
-        const mcqFsrsInstance = mcqScheduler === 'fsrs6'
-            ? fsrs6(fsrs6GeneratorParameters(data.mcqFsrs6Parameters), { learning: parseSteps(data.learningSteps), relearning: parseSteps(data.relearningSteps) })
+        const mcqFsrsInstance =
+          mcqScheduler === 'fsrs6'
+            ? fsrs6(fsrs6GeneratorParameters(data.mcqFsrs6Parameters), {
+                learning: parseSteps(data.learningSteps),
+                relearning: parseSteps(data.relearningSteps),
+              })
             : fsrs(data.mcqFsrsParameters);
-        
+
         let currentQuestionBanks = questionBanks;
         let processedMcqs = 0;
 
         for (const mcq of allMcqs) {
-            processedMcqs++;
-            const reviewLogs = await getReviewLogsForMcq(mcq.id) as Array<{ review: string; rating: Rating }>;
-            if (reviewLogs.length > 0) {
-                reviewLogs.sort((a, b) => new Date(a.review).getTime() - new Date(b.review).getTime());
-                let fsrsCard: FsrsCard | Fsrs6Card = createEmptyCard(new Date(reviewLogs[0].review));
-                for (const log of reviewLogs) {
-                    const rating = log.rating;
-                    const schedulingResult = mcqFsrsInstance.repeat(fsrsCard, new Date(log.review));
-                    fsrsCard = outcomeByRating(schedulingResult, rating).card;
-                }
-                const updatedSrsData = { ...fsrsCard, due: fsrsCard.due.toISOString(), last_review: fsrsCard.last_review?.toISOString() };
-                const updatedMcq = {
-                    ...mcq,
-                    srs: { ...mcq.srs, ...(mcqScheduler === 'fsrs6' ? { fsrs6: updatedSrsData } : { fsrs: updatedSrsData }) }
-                };
-                currentQuestionBanks = updateMcq(currentQuestionBanks, updatedMcq);
+          processedMcqs++;
+          const reviewLogs = (await getReviewLogsForMcq(mcq.id)) as Array<{
+            review: string;
+            rating: Rating;
+          }>;
+          if (reviewLogs.length > 0) {
+            reviewLogs.sort((a, b) => new Date(a.review).getTime() - new Date(b.review).getTime());
+            let fsrsCard: FsrsCard | Fsrs6Card = createEmptyCard(new Date(reviewLogs[0].review));
+            for (const log of reviewLogs) {
+              const rating = log.rating;
+              const schedulingResult = mcqFsrsInstance.repeat(fsrsCard, new Date(log.review));
+              fsrsCard = outcomeByRating(schedulingResult, rating).card;
             }
-            if (processedMcqs % 10 === 0 || processedMcqs === totalMcqs) {
-                toast.loading(`Rescheduling MCQs... (${processedMcqs}/${totalMcqs})`, { id: toastId });
-            }
+            const updatedSrsData = {
+              ...fsrsCard,
+              due: fsrsCard.due.toISOString(),
+              last_review: fsrsCard.last_review?.toISOString(),
+            };
+            const updatedMcq = {
+              ...mcq,
+              srs: {
+                ...mcq.srs,
+                ...(mcqScheduler === 'fsrs6'
+                  ? { fsrs6: updatedSrsData }
+                  : { fsrs: updatedSrsData }),
+              },
+            };
+            currentQuestionBanks = updateMcq(currentQuestionBanks, updatedMcq);
+          }
+          if (processedMcqs % 10 === 0 || processedMcqs === totalMcqs) {
+            toast.loading(`Rescheduling MCQs... (${processedMcqs}/${totalMcqs})`, { id: toastId });
+          }
         }
         setQuestionBanks(currentQuestionBanks);
 
         toast.success(`Rescheduling complete!`, { id: toastId });
       } catch (error) {
-        console.error("Failed to reschedule cards:", error);
-        toast.error("An error occurred during rescheduling.", { id: toastId });
+        console.error('Failed to reschedule cards:', error);
+        toast.error('An error occurred during rescheduling.', { id: toastId });
       }
     }
   };
 
   const handleExport = () => {
     const dataStr = JSON.stringify(decks, null, 2);
-    const blob = new Blob([dataStr], { type: "application/json" });
+    const blob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -224,16 +315,22 @@ const SettingsPage = () => {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    showSuccess("Data exported successfully!");
+    showSuccess('Data exported successfully!');
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.endsWith('.json') && !file.name.endsWith('.apkg') && !file.name.endsWith('.anki2') && !file.name.endsWith('.anki21') && !file.name.endsWith('.txt')) {
-      showError("Unsupported file type. Please select a .json, .apkg, .anki, or .txt file.");
-      if (fileInputRef.current) fileInputRef.current.value = "";
+    if (
+      !file.name.endsWith('.json') &&
+      !file.name.endsWith('.apkg') &&
+      !file.name.endsWith('.anki2') &&
+      !file.name.endsWith('.anki21') &&
+      !file.name.endsWith('.txt')
+    ) {
+      showError('Unsupported file type. Please select a .json, .apkg, .anki, or .txt file.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
@@ -245,28 +342,32 @@ const SettingsPage = () => {
     if (!fileToImport) return;
     setIsImportAlertOpen(false);
 
-    const toastId = toast.loading("Starting import...");
+    const toastId = toast.loading('Starting import...');
     const onProgress = (progress: { message: string; value: number }) => {
-        toast.loading(
-            <div className="flex flex-col gap-2">
-                <p>{progress.message}</p>
-                <Progress value={progress.value} className="w-full" />
-            </div>,
-            { id: toastId }
-        );
+      toast.loading(
+        <div className="flex flex-col gap-2">
+          <p>{progress.message}</p>
+          <Progress value={progress.value} className="w-full" />
+        </div>,
+        { id: toastId },
+      );
     };
 
     try {
       let importedDecks: DeckData[] | null = null;
       let importedMedia: Map<string, Blob> | null = null;
-      
+
       const fileName = fileToImport.name.toLowerCase();
 
       if (fileName.endsWith('.txt')) {
         const result = await importAnkiTxtFile(fileToImport, onProgress);
         importedDecks = result.decks;
         importedMedia = result.media;
-      } else if (fileName.endsWith('.apkg') || fileName.endsWith('.anki2') || fileName.endsWith('.anki21')) {
+      } else if (
+        fileName.endsWith('.apkg') ||
+        fileName.endsWith('.anki2') ||
+        fileName.endsWith('.anki21')
+      ) {
         const result = await importAnkiFile(fileToImport, includeScheduling, onProgress);
         importedDecks = result.decks;
         importedMedia = result.media;
@@ -279,17 +380,19 @@ const SettingsPage = () => {
         } catch (jsonError) {
           throw new Error(`Invalid JSON format. Parser error: ${(jsonError as Error).message}`);
         }
-        
+
         const validation = decksSchema.safeParse(parsedData);
         if (!validation.success) {
           const errorDetails = validation.error.flatten().formErrors.join(', ');
-          console.error("JSON validation failed:", validation.error.flatten());
+          console.error('JSON validation failed:', validation.error.flatten());
           throw new Error(`Backup file has incorrect data structure. Details: ${errorDetails}`);
         }
         importedDecks = validation.data;
         onProgress({ message: 'Backup file read successfully!', value: 100 });
       } else {
-        throw new Error("Unsupported file type. Please select a .json, .apkg, .anki, or .txt file.");
+        throw new Error(
+          'Unsupported file type. Please select a .json, .apkg, .anki, or .txt file.',
+        );
       }
 
       if (importedDecks) {
@@ -297,40 +400,46 @@ const SettingsPage = () => {
         if (replaceOnImport) {
           setDecks(importedDecks);
         } else {
-          setDecks(prevDecks => mergeDecks(prevDecks, importedDecks!));
+          setDecks((prevDecks) => mergeDecks(prevDecks, importedDecks!));
         }
         if (importedMedia && importedMedia.size > 0) {
-            // Convert Blob Map to File Map
-            const fileMap: Record<string, File> = {};
-            importedMedia.forEach((blob, id) => {
-              fileMap[id] = new File([blob], id, { type: blob.type });
+          // Convert Blob Map to File Map
+          const fileMap: Record<string, File> = {};
+          importedMedia.forEach((blob, id) => {
+            fileMap[id] = new File([blob], id, { type: blob.type });
+          });
+
+          await saveMediaToDB(fileMap);
+          // Enqueue sync ops for imported media and schedule background sync
+          const ids = Array.from(importedMedia.keys());
+          void Promise.all(
+            ids.map((id) =>
+              enqueueSyncOp({ resource: 'media', opType: 'upsert', payload: { id } }),
+            ),
+          )
+            .then(() => scheduleSyncNow())
+            .then(() => postMessage({ type: 'storage-write', resource: 'media' }))
+            .catch(() => {
+              /* noop */
             });
-            
-            await saveMediaToDB(fileMap);
-            // Enqueue sync ops for imported media and schedule background sync
-            const ids = Array.from(importedMedia.keys());
-            void Promise.all(ids.map((id) => enqueueSyncOp({ resource: 'media', opType: 'upsert', payload: { id } })))
-              .then(() => scheduleSyncNow())
-              .then(() => postMessage({ type: 'storage-write', resource: 'media' }))
-              .catch(() => { /* noop */ });
         }
-        toast.success("Data imported successfully!", { id: toastId });
+        toast.success('Data imported successfully!', { id: toastId });
       } else {
-        throw new Error("File processed, but no valid decks were found to import.");
+        throw new Error('File processed, but no valid decks were found to import.');
       }
     } catch (error) {
       const err = error as Error;
-      console.error("Import Error:", err);
+      console.error('Import Error:', err);
       toast.error(`Import failed: ${err.message}`, { id: toastId, duration: 15000 });
     } finally {
       setFileToImport(null);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      if (fileInputRef.current) fileInputRef.current.value = '';
       setReplaceOnImport(false);
     }
   };
 
   const handleExportMcqs = async () => {
-    const toastId = toast.loading("Preparing MCQ export...");
+    const toastId = toast.loading('Preparing MCQ export...');
     try {
       const zip = new JSZip();
 
@@ -338,16 +447,16 @@ const SettingsPage = () => {
         exportDate: new Date().toISOString(),
         appName: 'Prepigo',
         appVersion: '1.0.0',
-        format: 'zip-v1'
+        format: 'zip-v1',
       };
 
       const mediaFilenames = collectMediaFilenamesFromMcqs(questionBanks);
 
       const exportData = { metadata, questionBanks };
-      zip.file("data.json", JSON.stringify(exportData, null, 2));
+      zip.file('data.json', JSON.stringify(exportData, null, 2));
 
       if (mediaFilenames.size > 0) {
-        const mediaFolder = zip.folder("media");
+        const mediaFolder = zip.folder('media');
         if (mediaFolder) {
           let processed = 0;
           for (const filename of mediaFilenames) {
@@ -356,13 +465,15 @@ const SettingsPage = () => {
               mediaFolder.file(filename, blob);
             }
             processed++;
-            toast.loading(`Packaging media... (${processed}/${mediaFilenames.size})`, { id: toastId });
+            toast.loading(`Packaging media... (${processed}/${mediaFilenames.size})`, {
+              id: toastId,
+            });
           }
         }
       }
 
-      toast.loading("Generating download...", { id: toastId });
-      const zipBlob = await zip.generateAsync({ type: "blob" });
+      toast.loading('Generating download...', { id: toastId });
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
       const downloadUrl = URL.createObjectURL(zipBlob);
       const link = document.createElement('a');
       link.href = downloadUrl;
@@ -371,10 +482,10 @@ const SettingsPage = () => {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(downloadUrl);
-      toast.success("MCQ data exported successfully!", { id: toastId });
+      toast.success('MCQ data exported successfully!', { id: toastId });
     } catch (error) {
-      console.error("Export failed", error);
-      toast.error("Failed to export MCQ data.", { id: toastId });
+      console.error('Export failed', error);
+      toast.error('Failed to export MCQ data.', { id: toastId });
     }
   };
 
@@ -383,8 +494,8 @@ const SettingsPage = () => {
     if (!file) return;
 
     if (!file.name.endsWith('.json') && !file.name.endsWith('.zip')) {
-      showError("Unsupported file type. Please select a .json or .zip file for MCQs.");
-      if (mcqFileInputRef.current) mcqFileInputRef.current.value = "";
+      showError('Unsupported file type. Please select a .json or .zip file for MCQs.');
+      if (mcqFileInputRef.current) mcqFileInputRef.current.value = '';
       return;
     }
 
@@ -396,13 +507,13 @@ const SettingsPage = () => {
     if (!fileToImportMcq) return;
     setIsMcqImportAlertOpen(false);
 
-    const toastId = toast.loading("Importing MCQs...");
+    const toastId = toast.loading('Importing MCQs...');
     const importPrefix = `mcq-${Date.now()}`;
     const fileNameMap = new Map<string, string>();
 
     const cleanup = () => {
       setFileToImportMcq(null);
-      if (mcqFileInputRef.current) mcqFileInputRef.current.value = "";
+      if (mcqFileInputRef.current) mcqFileInputRef.current.value = '';
       setReplaceOnMcqImport(false);
     };
 
@@ -411,42 +522,54 @@ const SettingsPage = () => {
       const fileName = fileToImportMcq.name.toLowerCase();
 
       if (fileName.endsWith('.zip')) {
-        toast.loading("Unzipping package...", { id: toastId });
+        toast.loading('Unzipping package...', { id: toastId });
         const zip = await JSZip.loadAsync(fileToImportMcq);
-        const dataFile = zip.file("data.json");
-        if (!dataFile) throw new Error("data.json not found in zip archive.");
+        const dataFile = zip.file('data.json');
+        if (!dataFile) throw new Error('data.json not found in zip archive.');
 
-        const content = await dataFile.async("string");
+        const content = await dataFile.async('string');
         const parsedData = JSON.parse(content);
-        
-        importedBanks = parsedData.metadata && parsedData.questionBanks ? parsedData.questionBanks : parsedData;
 
-        const mediaFolder = zip.folder("media");
+        importedBanks =
+          parsedData.metadata && parsedData.questionBanks ? parsedData.questionBanks : parsedData;
+
+        const mediaFolder = zip.folder('media');
         if (mediaFolder) {
-          const mediaFiles = Object.values(mediaFolder.files).filter(f => !f.dir);
+          const mediaFiles = Object.values(mediaFolder.files).filter((f) => !f.dir);
           let processed = 0;
           for (const file of mediaFiles) {
             const originalFileName = file.name.replace('media/', '');
             const newFileName = `${importPrefix}-${originalFileName}`;
             fileNameMap.set(originalFileName, newFileName);
-            
-            const blob = await file.async("blob");
+
+            const blob = await file.async('blob');
             const fileObj = new File([blob], newFileName, { type: blob.type });
             await saveSingleMediaToDB(newFileName, fileObj);
-            void enqueueSyncOp({ resource: 'media', opType: 'upsert', payload: { id: newFileName } })
+            void enqueueSyncOp({
+              resource: 'media',
+              opType: 'upsert',
+              payload: { id: newFileName },
+            })
               .then(() => scheduleSyncNow())
-              .then(() => postMessage({ type: 'storage-write', resource: 'media', id: newFileName }))
-              .catch(() => { /* noop */ });
+              .then(() =>
+                postMessage({ type: 'storage-write', resource: 'media', id: newFileName }),
+              )
+              .catch(() => {
+                /* noop */
+              });
             processed++;
-            toast.loading(`Importing media... (${processed}/${mediaFiles.length})`, { id: toastId });
+            toast.loading(`Importing media... (${processed}/${mediaFiles.length})`, {
+              id: toastId,
+            });
           }
         }
-      } else { // Legacy JSON format
+      } else {
+        // Legacy JSON format
         const content = await fileToImportMcq.text();
         const parsedData = JSON.parse(content);
-        
+
         if (parsedData.version === 2 && parsedData.questionBanks && parsedData.media) {
-          toast.loading("Importing media files...", { id: toastId });
+          toast.loading('Importing media files...', { id: toastId });
           const mediaMap = parsedData.media as { [key: string]: string };
           for (const originalFileName in mediaMap) {
             const newFileName = `${importPrefix}-${originalFileName}`;
@@ -455,10 +578,18 @@ const SettingsPage = () => {
             const blob = base64ToBlob(base64Data);
             const fileObj = new File([blob], newFileName, { type: blob.type });
             await saveSingleMediaToDB(newFileName, fileObj);
-            void enqueueSyncOp({ resource: 'media', opType: 'upsert', payload: { id: newFileName } })
+            void enqueueSyncOp({
+              resource: 'media',
+              opType: 'upsert',
+              payload: { id: newFileName },
+            })
               .then(() => scheduleSyncNow())
-              .then(() => postMessage({ type: 'storage-write', resource: 'media', id: newFileName }))
-              .catch(() => { /* noop */ });
+              .then(() =>
+                postMessage({ type: 'storage-write', resource: 'media', id: newFileName }),
+              )
+              .catch(() => {
+                /* noop */
+              });
           }
           importedBanks = parsedData.questionBanks;
         } else {
@@ -467,9 +598,9 @@ const SettingsPage = () => {
       }
 
       if (!importedBanks) {
-        throw new Error("Could not find question bank data in the file.");
+        throw new Error('Could not find question bank data in the file.');
       }
-      
+
       const updateHtmlContent = (html: string): string => {
         if (!html || fileNameMap.size === 0) return html;
         return html.replace(/src="media:\/\/([^"]+)"/g, (match, originalFileName) => {
@@ -479,12 +610,12 @@ const SettingsPage = () => {
       };
 
       const traverseAndUpdateBanks = (banks: QuestionBankData[]): QuestionBankData[] => {
-        return banks.map(bank => {
-          const updatedMcqs = bank.mcqs.map(mcq => ({
+        return banks.map((bank) => {
+          const updatedMcqs = bank.mcqs.map((mcq) => ({
             ...mcq,
             question: updateHtmlContent(mcq.question),
             explanation: updateHtmlContent(mcq.explanation),
-            options: mcq.options.map(opt => ({
+            options: mcq.options.map((opt) => ({
               ...opt,
               text: updateHtmlContent(opt.text),
             })),
@@ -498,51 +629,56 @@ const SettingsPage = () => {
 
       const validation = questionBanksSchema.safeParse(banksWithUpdatedMedia);
       if (!validation.success) {
-        console.error("MCQ JSON validation failed:", validation.error.issues);
-        
+        console.error('MCQ JSON validation failed:', validation.error.issues);
+
         const formatZodErrorForToast = (error: z.ZodError): React.ReactNode => {
-            const issues = error.issues;
-            if (issues.length === 0) return "Unknown validation error.";
+          const issues = error.issues;
+          if (issues.length === 0) return 'Unknown validation error.';
 
-            const issueMessages = issues.slice(0, 5).map((issue, index) => {
-                const path = issue.path.map(p => (typeof p === 'number' ? `[${p}]` : p)).join('.');
-                return (
-                    <div key={index} className="text-xs font-mono">
-                        <span className="font-semibold text-destructive-foreground">{path || 'Root'}:</span> <span className="text-destructive-foreground/80">{issue.message}</span>
-                    </div>
-                );
-            });
-
+          const issueMessages = issues.slice(0, 5).map((issue, index) => {
+            const path = issue.path.map((p) => (typeof p === 'number' ? `[${p}]` : p)).join('.');
             return (
-                <div className="flex flex-col gap-2 text-left">
-                    <p className="font-bold">Import Failed: Invalid Data Structure</p>
-                    <p className="text-sm opacity-80">Please check the file structure and try again. See the guide for more details.</p>
-                    <div className="mt-2 p-2 bg-destructive/80 text-destructive-foreground rounded-md space-y-1 max-h-40 overflow-y-auto">
-                        {issueMessages}
-                        {issues.length > 5 && <p className="text-xs italic">...and {issues.length - 5} more issues.</p>}
-                    </div>
-                </div>
+              <div key={index} className="text-xs font-mono">
+                <span className="font-semibold text-destructive-foreground">{path || 'Root'}:</span>{' '}
+                <span className="text-destructive-foreground/80">{issue.message}</span>
+              </div>
             );
+          });
+
+          return (
+            <div className="flex flex-col gap-2 text-left">
+              <p className="font-bold">Import Failed: Invalid Data Structure</p>
+              <p className="text-sm opacity-80">
+                Please check the file structure and try again. See the guide for more details.
+              </p>
+              <div className="mt-2 p-2 bg-destructive/80 text-destructive-foreground rounded-md space-y-1 max-h-40 overflow-y-auto">
+                {issueMessages}
+                {issues.length > 5 && (
+                  <p className="text-xs italic">...and {issues.length - 5} more issues.</p>
+                )}
+              </div>
+            </div>
+          );
         };
 
         toast.error(formatZodErrorForToast(validation.error), { id: toastId, duration: 20000 });
         cleanup();
         return;
       }
-      
+
       const validBanks = validation.data;
 
-      toast.loading("Saving question banks...", { id: toastId });
+      toast.loading('Saving question banks...', { id: toastId });
       if (replaceOnMcqImport) {
         setQuestionBanks(validBanks);
       } else {
-        setQuestionBanks(prevBanks => mergeQuestionBanks(prevBanks, validBanks));
+        setQuestionBanks((prevBanks) => mergeQuestionBanks(prevBanks, validBanks));
       }
-      
-      toast.success("MCQ data imported successfully!", { id: toastId });
+
+      toast.success('MCQ data imported successfully!', { id: toastId });
     } catch (error) {
       const err = error as Error;
-      console.error("MCQ Import Error:", err);
+      console.error('MCQ Import Error:', err);
       toast.error(`MCQ import failed: ${err.message}`, { id: toastId, duration: 15000 });
     } finally {
       cleanup();
@@ -551,21 +687,21 @@ const SettingsPage = () => {
 
   const handleReset = async () => {
     setIsResetAlertOpen(false);
-    const toastId = toast.loading("Resetting all data...");
+    const toastId = toast.loading('Resetting all data...');
     try {
-        // Clear decks by setting to empty array
-        setDecks([]);
-        await clearQuestionBanksDB();
-        await clearSettingsDB();
-        await clearMediaDB();
-        await clearMcqReviewLogsDB();
-        toast.success("All data has been reset. The app will now reload.", { id: toastId });
-        setTimeout(() => {
-            window.location.reload();
-        }, 1500);
+      // Clear decks by setting to empty array
+      setDecks([]);
+      await clearQuestionBanksDB();
+      await clearSettingsDB();
+      await clearMediaDB();
+      await clearMcqReviewLogsDB();
+      toast.success('All data has been reset. The app will now reload.', { id: toastId });
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
     } catch (error) {
-        console.error("Reset error:", error);
-        toast.error("Failed to reset data.", { id: toastId });
+      console.error('Reset error:', error);
+      toast.error('Failed to reset data.', { id: toastId });
     }
   };
 
@@ -582,12 +718,9 @@ const SettingsPage = () => {
             <Card className="w-full max-w-4xl mx-auto">
               <CardHeader>
                 <CardTitle className="text-2xl">Settings</CardTitle>
-                <CardDescription>
-                  Configure your study experience.
-                </CardDescription>
+                <CardDescription>Configure your study experience.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-8 pt-6">
-                
                 <Card>
                   <CardHeader>
                     <div className="flex items-center gap-2">
@@ -619,7 +752,8 @@ const SettingsPage = () => {
                             </SelectContent>
                           </Select>
                           <FormDescription>
-                            FSRS is a modern, evidence-based algorithm. SM-2 is a classic, simpler alternative. Changing this will automatically reschedule all items.
+                            FSRS is a modern, evidence-based algorithm. SM-2 is a classic, simpler
+                            alternative. Changing this will automatically reschedule all items.
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
@@ -628,40 +762,56 @@ const SettingsPage = () => {
                   </CardContent>
                 </Card>
 
-                
-
                 {scheduler === 'fsrs' && (
                   <Card>
                     <CardHeader>
                       <CardTitle>FSRS-4.5 Parameters</CardTitle>
                       <CardDescription>
-                        These settings only apply if FSRS-4.5 is selected as the scheduler. It's recommended to keep the defaults unless you know what you're doing.
+                        These settings only apply if FSRS-4.5 is selected as the scheduler. It's
+                        recommended to keep the defaults unless you know what you're doing.
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <FormField control={form.control} name="fsrsParameters.request_retention" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Requested Retention</FormLabel>
-                          <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
-                          <FormDescription>The probability of recalling a card you want to aim for.</FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                      <FormField control={form.control} name="fsrsParameters.maximum_interval" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Maximum Interval (days)</FormLabel>
-                          <FormControl><Input type="number" {...field} /></FormControl>
-                          <FormDescription>The longest possible interval between reviews.</FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
+                      <FormField
+                        control={form.control}
+                        name="fsrsParameters.request_retention"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Requested Retention</FormLabel>
+                            <FormControl>
+                              <Input type="number" step="0.01" {...field} />
+                            </FormControl>
+                            <FormDescription>
+                              The probability of recalling a card you want to aim for.
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="fsrsParameters.maximum_interval"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Maximum Interval (days)</FormLabel>
+                            <FormControl>
+                              <Input type="number" {...field} />
+                            </FormControl>
+                            <FormDescription>
+                              The longest possible interval between reviews.
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                     </CardContent>
                     <CardFooter>
                       <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm w-full">
                         <div className="space-y-0.5">
                           <FormLabel>Reschedule cards on change</FormLabel>
                           <FormDescription>
-                            Recalculates all card schedules. This can cause many cards to become due. Use sparingly and create a backup first.
+                            Recalculates all card schedules. This can cause many cards to become
+                            due. Use sparingly and create a backup first.
                           </FormDescription>
                         </div>
                         <FormControl>
@@ -680,33 +830,51 @@ const SettingsPage = () => {
                     <CardHeader>
                       <CardTitle>FSRS-6 Parameters (Experimental)</CardTitle>
                       <CardDescription>
-                        This is an experimental scheduler based on the latest FSRS research. The default parameters are placeholders and not yet optimized.
+                        This is an experimental scheduler based on the latest FSRS research. The
+                        default parameters are placeholders and not yet optimized.
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <FormField control={form.control} name="fsrs6Parameters.request_retention" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Requested Retention</FormLabel>
-                          <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
-                          <FormDescription>The probability of recalling a card you want to aim for.</FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                      <FormField control={form.control} name="fsrs6Parameters.maximum_interval" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Maximum Interval (days)</FormLabel>
-                          <FormControl><Input type="number" {...field} /></FormControl>
-                          <FormDescription>The longest possible interval between reviews.</FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
+                      <FormField
+                        control={form.control}
+                        name="fsrs6Parameters.request_retention"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Requested Retention</FormLabel>
+                            <FormControl>
+                              <Input type="number" step="0.01" {...field} />
+                            </FormControl>
+                            <FormDescription>
+                              The probability of recalling a card you want to aim for.
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="fsrs6Parameters.maximum_interval"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Maximum Interval (days)</FormLabel>
+                            <FormControl>
+                              <Input type="number" {...field} />
+                            </FormControl>
+                            <FormDescription>
+                              The longest possible interval between reviews.
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                     </CardContent>
-                     <CardFooter>
+                    <CardFooter>
                       <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm w-full">
                         <div className="space-y-0.5">
                           <FormLabel>Reschedule cards on change</FormLabel>
                           <FormDescription>
-                            Recalculates all card schedules. This can cause many cards to become due. Use sparingly and create a backup first.
+                            Recalculates all card schedules. This can cause many cards to become
+                            due. Use sparingly and create a backup first.
                           </FormDescription>
                         </div>
                         <FormControl>
@@ -727,78 +895,144 @@ const SettingsPage = () => {
                         <CardTitle>SM-2: New Cards</CardTitle>
                       </CardHeader>
                       <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <FormField control={form.control} name="learningSteps" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Learning Steps</FormLabel>
-                            <FormControl><Input {...field} /></FormControl>
-                            <FormDescription>Delays for new cards (e.g., "1m 10m 1d").</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                        <FormField control={form.control} name="sm2GraduatingInterval" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Graduating Interval (days)</FormLabel>
-                            <FormControl><Input type="number" {...field} /></FormControl>
-                            <FormDescription>Interval after the final "Good" learning step.</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                        <FormField control={form.control} name="sm2EasyInterval" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Easy Interval (days)</FormLabel>
-                            <FormControl><Input type="number" {...field} /></FormControl>
-                            <FormDescription>Interval for cards immediately rated "Easy".</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
+                        <FormField
+                          control={form.control}
+                          name="learningSteps"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Learning Steps</FormLabel>
+                              <FormControl>
+                                <Input {...field} />
+                              </FormControl>
+                              <FormDescription>
+                                Delays for new cards (e.g., "1m 10m 1d").
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="sm2GraduatingInterval"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Graduating Interval (days)</FormLabel>
+                              <FormControl>
+                                <Input type="number" {...field} />
+                              </FormControl>
+                              <FormDescription>
+                                Interval after the final "Good" learning step.
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="sm2EasyInterval"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Easy Interval (days)</FormLabel>
+                              <FormControl>
+                                <Input type="number" {...field} />
+                              </FormControl>
+                              <FormDescription>
+                                Interval for cards immediately rated "Easy".
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
                       </CardContent>
                     </Card>
                     <Card>
                       <CardHeader>
                         <CardTitle>SM-2: Reviews</CardTitle>
-                        <CardDescription>Fine-tune the SM-2 scheduling algorithm for review cards.</CardDescription>
+                        <CardDescription>
+                          Fine-tune the SM-2 scheduling algorithm for review cards.
+                        </CardDescription>
                       </CardHeader>
                       <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <FormField control={form.control} name="sm2StartingEase" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Starting Ease</FormLabel>
-                            <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
-                            <FormDescription>Initial ease factor for new cards (default: 2.50).</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                        <FormField control={form.control} name="sm2EasyBonus" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Easy Bonus</FormLabel>
-                            <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
-                            <FormDescription>A multiplier for "Easy" reviews (default: 1.30).</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                        <FormField control={form.control} name="sm2IntervalModifier" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Interval Modifier</FormLabel>
-                            <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
-                            <FormDescription>A global multiplier for all intervals (default: 1.00).</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                        <FormField control={form.control} name="sm2HardIntervalMultiplier" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Hard Interval Multiplier</FormLabel>
-                            <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
-                            <FormDescription>Multiplier for the previous interval on "Hard" (default: 1.20).</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                        <FormField control={form.control} name="sm2MaximumInterval" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Maximum Interval (days)</FormLabel>
-                            <FormControl><Input type="number" {...field} /></FormControl>
-                            <FormDescription>The longest a review interval can be (default: 365).</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
+                        <FormField
+                          control={form.control}
+                          name="sm2StartingEase"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Starting Ease</FormLabel>
+                              <FormControl>
+                                <Input type="number" step="0.01" {...field} />
+                              </FormControl>
+                              <FormDescription>
+                                Initial ease factor for new cards (default: 2.50).
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="sm2EasyBonus"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Easy Bonus</FormLabel>
+                              <FormControl>
+                                <Input type="number" step="0.01" {...field} />
+                              </FormControl>
+                              <FormDescription>
+                                A multiplier for "Easy" reviews (default: 1.30).
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="sm2IntervalModifier"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Interval Modifier</FormLabel>
+                              <FormControl>
+                                <Input type="number" step="0.01" {...field} />
+                              </FormControl>
+                              <FormDescription>
+                                A global multiplier for all intervals (default: 1.00).
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="sm2HardIntervalMultiplier"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Hard Interval Multiplier</FormLabel>
+                              <FormControl>
+                                <Input type="number" step="0.01" {...field} />
+                              </FormControl>
+                              <FormDescription>
+                                Multiplier for the previous interval on "Hard" (default: 1.20).
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="sm2MaximumInterval"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Maximum Interval (days)</FormLabel>
+                              <FormControl>
+                                <Input type="number" {...field} />
+                              </FormControl>
+                              <FormDescription>
+                                The longest a review interval can be (default: 365).
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
                       </CardContent>
                     </Card>
                     <Card>
@@ -806,85 +1040,160 @@ const SettingsPage = () => {
                         <CardTitle>SM-2: Lapses</CardTitle>
                       </CardHeader>
                       <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <FormField control={form.control} name="relearningSteps" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Relearning Steps</FormLabel>
-                            <FormControl><Input {...field} /></FormControl>
-                            <FormDescription>Steps for cards you forget during review.</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                        <FormField control={form.control} name="sm2LapsedIntervalMultiplier" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>New Interval Multiplier</FormLabel>
-                            <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
-                            <FormDescription>Multiplier for a lapsed card's interval (default: 0.60).</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                        <FormField control={form.control} name="sm2MinimumInterval" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Minimum Interval (days)</FormLabel>
-                            <FormControl><Input type="number" {...field} /></FormControl>
-                            <FormDescription>The minimum interval after a lapse (default: 1).</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                        <FormField control={form.control} name="leechThreshold" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Leech Threshold</FormLabel>
-                            <FormControl><Input type="number" {...field} /></FormControl>
-                            <FormDescription>Number of lapses to mark as leech.</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                        <FormField control={form.control} name="leechAction" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Leech Action</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                              <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                              <SelectContent>
-                                <SelectItem value="tag">Tag Only</SelectItem>
-                                <SelectItem value="suspend">Suspend Card</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormDescription>Action when a card becomes a leech.</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
+                        <FormField
+                          control={form.control}
+                          name="relearningSteps"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Relearning Steps</FormLabel>
+                              <FormControl>
+                                <Input {...field} />
+                              </FormControl>
+                              <FormDescription>
+                                Steps for cards you forget during review.
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="sm2LapsedIntervalMultiplier"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>New Interval Multiplier</FormLabel>
+                              <FormControl>
+                                <Input type="number" step="0.01" {...field} />
+                              </FormControl>
+                              <FormDescription>
+                                Multiplier for a lapsed card's interval (default: 0.60).
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="sm2MinimumInterval"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Minimum Interval (days)</FormLabel>
+                              <FormControl>
+                                <Input type="number" {...field} />
+                              </FormControl>
+                              <FormDescription>
+                                The minimum interval after a lapse (default: 1).
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="leechThreshold"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Leech Threshold</FormLabel>
+                              <FormControl>
+                                <Input type="number" {...field} />
+                              </FormControl>
+                              <FormDescription>Number of lapses to mark as leech.</FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="leechAction"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Leech Action</FormLabel>
+                              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="tag">Tag Only</SelectItem>
+                                  <SelectItem value="suspend">Suspend Card</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormDescription>Action when a card becomes a leech.</FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
                       </CardContent>
                     </Card>
                   </>
                 )}
 
                 <Card>
-                  <CardHeader><CardTitle>Daily Limits</CardTitle></CardHeader>
+                  <CardHeader>
+                    <CardTitle>Daily Limits</CardTitle>
+                  </CardHeader>
                   <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormField control={form.control} name="newCardsPerDay" render={({ field }) => (
-                      <FormItem><FormLabel>New cards/day</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="maxReviewsPerDay" render={({ field }) => (
-                      <FormItem><FormLabel>Maximum reviews/day</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                  </CardContent>
-                  <CardFooter className="flex flex-col gap-4 pt-4">
-                    <FormField control={form.control} name="newCardsIgnoreReviewLimit" render={({ field }) => (
-                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm w-full">
-                          <div className="space-y-0.5">
-                            <FormLabel>New cards ignore review limit</FormLabel>
-                            <FormDescription>If enabled, new cards will be shown regardless of the review limit.</FormDescription>
-                          </div>
-                          <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                    <FormField
+                      control={form.control}
+                      name="newCardsPerDay"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>New cards/day</FormLabel>
+                          <FormControl>
+                            <Input type="number" {...field} />
+                          </FormControl>
+                          <FormMessage />
                         </FormItem>
                       )}
                     />
-                    <FormField control={form.control} name="limitsStartFromTop" render={({ field }) => (
+                    <FormField
+                      control={form.control}
+                      name="maxReviewsPerDay"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Maximum reviews/day</FormLabel>
+                          <FormControl>
+                            <Input type="number" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </CardContent>
+                  <CardFooter className="flex flex-col gap-4 pt-4">
+                    <FormField
+                      control={form.control}
+                      name="newCardsIgnoreReviewLimit"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm w-full">
+                          <div className="space-y-0.5">
+                            <FormLabel>New cards ignore review limit</FormLabel>
+                            <FormDescription>
+                              If enabled, new cards will be shown regardless of the review limit.
+                            </FormDescription>
+                          </div>
+                          <FormControl>
+                            <Switch checked={field.value} onCheckedChange={field.onChange} />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="limitsStartFromTop"
+                      render={({ field }) => (
                         <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm w-full">
                           <div className="space-y-0.5">
                             <FormLabel>Limits start from top</FormLabel>
-                            <FormDescription>If enabled, limits from the top-level deck will apply to subdeck study sessions.</FormDescription>
+                            <FormDescription>
+                              If enabled, limits from the top-level deck will apply to subdeck study
+                              sessions.
+                            </FormDescription>
                           </div>
-                          <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                          <FormControl>
+                            <Switch checked={field.value} onCheckedChange={field.onChange} />
+                          </FormControl>
                         </FormItem>
                       )}
                     />
@@ -894,138 +1203,226 @@ const SettingsPage = () => {
                 <Card>
                   <CardHeader>
                     <CardTitle>Display Order</CardTitle>
-                    <CardDescription>Control how cards are gathered, sorted, and mixed during study.</CardDescription>
+                    <CardDescription>
+                      Control how cards are gathered, sorted, and mixed during study.
+                    </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
-                    <FormField control={form.control} name="newCardInsertionOrder" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>New card insertion order</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            <SelectItem value="sequential">Sequential (order added)</SelectItem>
-                            <SelectItem value="random">Random</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormDescription>Controls how new cards are ordered when they are created.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="newCardGatherOrder" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>New card gather order</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            <SelectItem value="deck">Deck</SelectItem>
-                            <SelectItem value="ascending">Ascending position</SelectItem>
-                            <SelectItem value="descending">Descending position</SelectItem>
-                            <SelectItem value="randomNotes">Random notes</SelectItem>
-                            <SelectItem value="randomCards">Random cards</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormDescription>How new cards are collected from your decks.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="newCardSortOrder" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>New card sort order</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            <SelectItem value="gathered">Order gathered</SelectItem>
-                            <SelectItem value="typeThenGathered">Card type, then order gathered</SelectItem>
-                            <SelectItem value="typeThenRandom">Card type, then random</SelectItem>
-                            <SelectItem value="randomNote">Random note, then card type</SelectItem>
-                            <SelectItem value="random">Random</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormDescription>How gathered new cards are sorted before showing.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="newReviewOrder" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>New/review order</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            <SelectItem value="mix">Mix with reviews</SelectItem>
-                            <SelectItem value="after">Show after reviews</SelectItem>
-                            <SelectItem value="before">Show before reviews</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormDescription>When to show new cards in relation to reviews.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="interdayLearningReviewOrder" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Interday learning/review order</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            <SelectItem value="mix">Mix with reviews</SelectItem>
-                            <SelectItem value="after">Show after reviews</SelectItem>
-                            <SelectItem value="before">Show before reviews</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormDescription>When to show learning cards that cross a day boundary.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="reviewSortOrder" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Review sort order</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            <SelectItem value="dueDateRandom">Due date, then random</SelectItem>
-                            <SelectItem value="dueDateDeck">Due date, then deck</SelectItem>
-                            <SelectItem value="overdue">Relative overdueness</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormDescription>The order review cards are shown in.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
+                    <FormField
+                      control={form.control}
+                      name="newCardInsertionOrder"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>New card insertion order</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="sequential">Sequential (order added)</SelectItem>
+                              <SelectItem value="random">Random</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormDescription>
+                            Controls how new cards are ordered when they are created.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="newCardGatherOrder"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>New card gather order</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="deck">Deck</SelectItem>
+                              <SelectItem value="ascending">Ascending position</SelectItem>
+                              <SelectItem value="descending">Descending position</SelectItem>
+                              <SelectItem value="randomNotes">Random notes</SelectItem>
+                              <SelectItem value="randomCards">Random cards</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormDescription>
+                            How new cards are collected from your decks.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="newCardSortOrder"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>New card sort order</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="gathered">Order gathered</SelectItem>
+                              <SelectItem value="typeThenGathered">
+                                Card type, then order gathered
+                              </SelectItem>
+                              <SelectItem value="typeThenRandom">Card type, then random</SelectItem>
+                              <SelectItem value="randomNote">
+                                Random note, then card type
+                              </SelectItem>
+                              <SelectItem value="random">Random</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormDescription>
+                            How gathered new cards are sorted before showing.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="newReviewOrder"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>New/review order</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="mix">Mix with reviews</SelectItem>
+                              <SelectItem value="after">Show after reviews</SelectItem>
+                              <SelectItem value="before">Show before reviews</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormDescription>
+                            When to show new cards in relation to reviews.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="interdayLearningReviewOrder"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Interday learning/review order</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="mix">Mix with reviews</SelectItem>
+                              <SelectItem value="after">Show after reviews</SelectItem>
+                              <SelectItem value="before">Show before reviews</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormDescription>
+                            When to show learning cards that cross a day boundary.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="reviewSortOrder"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Review sort order</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="dueDateRandom">Due date, then random</SelectItem>
+                              <SelectItem value="dueDateDeck">Due date, then deck</SelectItem>
+                              <SelectItem value="overdue">Relative overdueness</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormDescription>The order review cards are shown in.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader>
                     <CardTitle>Burying</CardTitle>
-                    <CardDescription>Control how sibling cards are hidden during study.</CardDescription>
+                    <CardDescription>
+                      Control how sibling cards are hidden during study.
+                    </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <FormField control={form.control} name="buryNewSiblings" render={({ field }) => (
+                    <FormField
+                      control={form.control}
+                      name="buryNewSiblings"
+                      render={({ field }) => (
                         <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
                           <div className="space-y-0.5">
                             <FormLabel>Bury new siblings</FormLabel>
-                            <FormDescription>Hide other new cards from the same note until the next day.</FormDescription>
+                            <FormDescription>
+                              Hide other new cards from the same note until the next day.
+                            </FormDescription>
                           </div>
-                          <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                          <FormControl>
+                            <Switch checked={field.value} onCheckedChange={field.onChange} />
+                          </FormControl>
                         </FormItem>
                       )}
                     />
-                    <FormField control={form.control} name="buryReviewSiblings" render={({ field }) => (
+                    <FormField
+                      control={form.control}
+                      name="buryReviewSiblings"
+                      render={({ field }) => (
                         <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
                           <div className="space-y-0.5">
                             <FormLabel>Bury review siblings</FormLabel>
-                            <FormDescription>Hide other review cards from the same note until the next day.</FormDescription>
+                            <FormDescription>
+                              Hide other review cards from the same note until the next day.
+                            </FormDescription>
                           </div>
-                          <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                          <FormControl>
+                            <Switch checked={field.value} onCheckedChange={field.onChange} />
+                          </FormControl>
                         </FormItem>
                       )}
                     />
-                    <FormField control={form.control} name="buryInterdayLearningSiblings" render={({ field }) => (
+                    <FormField
+                      control={form.control}
+                      name="buryInterdayLearningSiblings"
+                      render={({ field }) => (
                         <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
                           <div className="space-y-0.5">
                             <FormLabel>Bury interday learning siblings</FormLabel>
-                            <FormDescription>Hide other learning cards from the same note (due tomorrow or later) until the next day.</FormDescription>
+                            <FormDescription>
+                              Hide other learning cards from the same note (due tomorrow or later)
+                              until the next day.
+                            </FormDescription>
                           </div>
-                          <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                          <FormControl>
+                            <Switch checked={field.value} onCheckedChange={field.onChange} />
+                          </FormControl>
                         </FormItem>
                       )}
                     />
@@ -1041,17 +1438,26 @@ const SettingsPage = () => {
                     <div className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
                       <div className="space-y-0.5">
                         <Label>Theme</Label>
-                        <p className="text-sm text-muted-foreground">Select the application theme.</p>
+                        <p className="text-sm text-muted-foreground">
+                          Select the application theme.
+                        </p>
                       </div>
                       <ThemeToggle />
                     </div>
-                    <FormField control={form.control} name="disableFlipAnimation" render={({ field }) => (
+                    <FormField
+                      control={form.control}
+                      name="disableFlipAnimation"
+                      render={({ field }) => (
                         <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
                           <div className="space-y-0.5">
                             <FormLabel>Disable flip animation</FormLabel>
-                            <FormDescription>Instantly show the back of the card without an animation.</FormDescription>
+                            <FormDescription>
+                              Instantly show the back of the card without an animation.
+                            </FormDescription>
                           </div>
-                          <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                          <FormControl>
+                            <Switch checked={field.value} onCheckedChange={field.onChange} />
+                          </FormControl>
                         </FormItem>
                       )}
                     />
@@ -1059,7 +1465,9 @@ const SettingsPage = () => {
                 </Card>
 
                 <div className="flex justify-end">
-                  <Button type="submit" size="lg">Save All Settings</Button>
+                  <Button type="submit" size="lg">
+                    Save All Settings
+                  </Button>
                 </div>
 
                 <Separator />
@@ -1075,31 +1483,87 @@ const SettingsPage = () => {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <div className="space-y-2 p-4 border rounded-lg">
-                        <h4 className="font-medium">Flashcards</h4>
-                        <div className="flex flex-col sm:flex-row gap-2">
-                            <Button onClick={handleExport} variant="outline" type="button" className="flex-1">Export Decks</Button>
-                            <Button asChild variant="outline" type="button" className="flex-1"><Label htmlFor="import-file" className="cursor-pointer w-full text-center">Import Decks</Label></Button>
-                            <Input id="import-file" type="file" className="hidden" onChange={handleFileSelect} accept=".json,.apkg,.anki2,.anki21,.txt" ref={fileInputRef} />
+                      <h4 className="font-medium">Flashcards</h4>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <Button
+                          onClick={handleExport}
+                          variant="outline"
+                          type="button"
+                          className="flex-1"
+                        >
+                          Export Decks
+                        </Button>
+                        <div className="relative flex-1">
+                          <Label
+                            htmlFor="import-file"
+                            className="flex h-10 items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 cursor-pointer w-full text-center"
+                          >
+                            Import Decks
+                          </Label>
+                          <Input
+                            id="import-file"
+                            type="file"
+                            className="hidden"
+                            onChange={handleFileSelect}
+                            accept=".json,.apkg,.anki2,.anki21,.txt"
+                            ref={fileInputRef}
+                          />
                         </div>
+                      </div>
                     </div>
                     <div className="space-y-2 p-4 border rounded-lg">
-                        <h4 className="font-medium">MCQs</h4>
-                        <div className="flex flex-col sm:flex-row gap-2">
-                            <Button onClick={handleExportMcqs} variant="outline" type="button" className="flex-1">Export MCQs</Button>
-                            <Button asChild variant="outline" type="button" className="flex-1"><Label htmlFor="import-mcq-file" className="cursor-pointer w-full text-center">Import MCQs</Label></Button>
-                            <Input id="import-mcq-file" type="file" className="hidden" onChange={handleMcqFileSelect} accept=".json,.zip" ref={mcqFileInputRef} />
+                      <h4 className="font-medium">MCQs</h4>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <Button
+                          onClick={handleExportMcqs}
+                          variant="outline"
+                          type="button"
+                          className="flex-1"
+                        >
+                          Export MCQs
+                        </Button>
+                        <div className="relative flex-1">
+                          <Label
+                            htmlFor="import-mcq-file"
+                            className="flex h-10 items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 cursor-pointer w-full text-center"
+                          >
+                            Import MCQs
+                          </Label>
+                          <Input
+                            id="import-mcq-file"
+                            type="file"
+                            className="hidden"
+                            onChange={handleMcqFileSelect}
+                            accept=".json,.zip"
+                            ref={mcqFileInputRef}
+                          />
                         </div>
+                      </div>
                     </div>
                   </div>
                   <div className="p-4 border rounded-lg mt-6">
                     <h4 className="font-medium">Application Data</h4>
-                    <p className="text-sm text-muted-foreground mb-4">This will permanently delete all decks, MCQs, and settings.</p>
-                    <Button variant="destructive" onClick={() => setIsResetAlertOpen(true)} type="button" className="w-full sm:w-auto">Reset All Data</Button>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      This will permanently delete all decks, MCQs, and settings.
+                    </p>
+                    <Button
+                      variant="destructive"
+                      onClick={() => setIsResetAlertOpen(true)}
+                      type="button"
+                      className="w-full sm:w-auto"
+                    >
+                      Reset All Data
+                    </Button>
                   </div>
                 </div>
 
                 <div className="flex items-center justify-start pt-4">
-                  <Button asChild variant="outline" type="button"><Link to="/"><ArrowLeft className="mr-2 h-4 w-4" />Back to My Decks</Link></Button>
+                  <Button asChild variant="outline" type="button">
+                    <Link to="/">
+                      <ArrowLeft className="mr-2 h-4 w-4" />
+                      Back to My Decks
+                    </Link>
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -1112,7 +1576,9 @@ const SettingsPage = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Import Data</AlertDialogTitle>
             <AlertDialogDescription>
-              You can merge the imported decks with your existing ones, or replace everything. Merging will add new decks and cards, but will not overwrite existing ones with the same name or ID.
+              You can merge the imported decks with your existing ones, or replace everything.
+              Merging will add new decks and cards, but will not overwrite existing ones with the
+              same name or ID.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-4 pt-2">
@@ -1122,11 +1588,16 @@ const SettingsPage = () => {
                 checked={replaceOnImport}
                 onCheckedChange={(checked) => setReplaceOnImport(!!checked)}
               />
-              <Label htmlFor="replace-on-import" className="cursor-pointer font-semibold text-destructive">
+              <Label
+                htmlFor="replace-on-import"
+                className="cursor-pointer font-semibold text-destructive"
+              >
                 Replace all existing data with this import
               </Label>
             </div>
-            {(fileToImport?.name.endsWith('.apkg') || fileToImport?.name.endsWith('.anki2') || fileToImport?.name.endsWith('.anki21')) && (
+            {(fileToImport?.name.endsWith('.apkg') ||
+              fileToImport?.name.endsWith('.anki2') ||
+              fileToImport?.name.endsWith('.anki21')) && (
               <div className="flex items-center space-x-2">
                 <Checkbox
                   id="include-scheduling"
@@ -1148,35 +1619,54 @@ const SettingsPage = () => {
 
       <AlertDialog open={isMcqImportAlertOpen} onOpenChange={setIsMcqImportAlertOpen}>
         <AlertDialogContent>
-            <AlertDialogHeader>
-                <AlertDialogTitle>Import MCQ Data</AlertDialogTitle>
-                <AlertDialogDescription>
-                    You can merge the imported question banks with your existing ones, or replace everything. Merging will add new banks and MCQs, but will not overwrite existing ones with the same name or ID.
-                </AlertDialogDescription>
-            </AlertDialogHeader>
-            <div className="space-y-4 pt-2">
-                <div className="flex items-center space-x-2">
-                    <Checkbox
-                        id="replace-on-mcq-import"
-                        checked={replaceOnMcqImport}
-                        onCheckedChange={(checked) => setReplaceOnMcqImport(!!checked)}
-                    />
-                    <Label htmlFor="replace-on-mcq-import" className="cursor-pointer font-semibold text-destructive">
-                        Replace all existing MCQ data with this import
-                    </Label>
-                </div>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Import MCQ Data</AlertDialogTitle>
+            <AlertDialogDescription>
+              You can merge the imported question banks with your existing ones, or replace
+              everything. Merging will add new banks and MCQs, but will not overwrite existing ones
+              with the same name or ID.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="replace-on-mcq-import"
+                checked={replaceOnMcqImport}
+                onCheckedChange={(checked) => setReplaceOnMcqImport(!!checked)}
+              />
+              <Label
+                htmlFor="replace-on-mcq-import"
+                className="cursor-pointer font-semibold text-destructive"
+              >
+                Replace all existing MCQ data with this import
+              </Label>
             </div>
-            <AlertDialogFooter>
-                <AlertDialogCancel onClick={() => setFileToImportMcq(null)}>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={confirmMcqImport}>Import</AlertDialogAction>
-            </AlertDialogFooter>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setFileToImportMcq(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmMcqImport}>Import</AlertDialogAction>
+          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
       <AlertDialog open={isResetAlertOpen} onOpenChange={setIsResetAlertOpen}>
         <AlertDialogContent>
-          <AlertDialogHeader><AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle><AlertDialogDescription>This will permanently delete all your decks, flashcards, and settings. This action cannot be undone.</AlertDialogDescription></AlertDialogHeader>
-          <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleReset} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Yes, reset everything</AlertDialogAction></AlertDialogFooter>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete all your decks, flashcards, and settings. This action
+              cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleReset}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Yes, reset everything
+            </AlertDialogAction>
+          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>
