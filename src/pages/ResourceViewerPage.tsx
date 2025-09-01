@@ -59,7 +59,7 @@ GlobalWorkerOptions.workerSrc = pdfWorker as string;
 export default function ResourceViewerPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { getBlobUrl } = useResources();
+  const { getBlobUrl, remove } = useResources();
   const { setDecks } = useDecks();
 
   const [resource, setResource] = useState<ResourceItem | null>(null);
@@ -98,6 +98,22 @@ export default function ResourceViewerPage() {
     imageUrl: string;
     masks?: { x: number; y: number; width: number; height: number }[];
   } | null>(null);
+
+  const onDeleteResource = async () => {
+    if (!resource) return;
+    const ok = window.confirm(
+      'Delete this resource and all its highlights? This cannot be undone.',
+    );
+    if (!ok) return;
+    try {
+      await remove(resource.id);
+      // Revoke blob URL if any to free memory
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+      navigate(-1);
+    } catch (e) {
+      console.error('Failed to delete resource', e);
+    }
+  };
 
   // Load resource
   useEffect(() => {
@@ -515,6 +531,17 @@ export default function ResourceViewerPage() {
                 <ChevronRight className="h-4 w-4" />
               </Button>
               <Separator orientation="vertical" className="h-6" />
+              <Button
+                size="sm"
+                variant="destructive"
+                className="gap-2"
+                onClick={onDeleteResource}
+                disabled={!resource}
+                aria-label="Delete resource"
+                title="Delete resource"
+              >
+                <Trash2 className="h-4 w-4" /> Delete
+              </Button>
               <div className="flex items-center gap-1 text-xs">
                 <Button
                   variant="outline"
