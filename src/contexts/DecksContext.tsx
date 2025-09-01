@@ -35,11 +35,11 @@ export const DecksProvider = ({ children }: { children: ReactNode }) => {
         const todayStr = new Date().toISOString().split('T')[0];
         const storedIntroductions = await getIntroductionsFromDB();
         if (storedIntroductions && storedIntroductions.date === todayStr) {
-          setIntroductionsToday(new Set(storedIntroductions.ids));
+          setIntroductionsToday(new Set(storedIntroductions.cardIds));
         } else {
           // It's a new day or no data exists, start fresh
           setIntroductionsToday(new Set());
-          await saveIntroductionsToDB({ date: todayStr, ids: [] });
+await saveIntroductionsToDB({ date: todayStr, cardIds: [] });
         }
       } catch (error) {
         console.error("Failed to load data from IndexedDB, falling back to in-memory data.", error);
@@ -75,7 +75,7 @@ export const DecksProvider = ({ children }: { children: ReactNode }) => {
     setIntroductionsToday(prev => {
       const newSet = new Set(prev);
       newSet.add(cardId);
-      saveIntroductionsToDB({ date: todayStr, ids: Array.from(newSet) });
+      saveIntroductionsToDB({ date: todayStr, cardIds: Array.from(newSet) });
 
       // Enqueue sync for introductions metadata (non-blocking)
       void enqueueSyncOp({ resource: 'meta:introductions', opType: 'upsert', payload: { date: todayStr, ids: Array.from(newSet) } })

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { ExamData } from "@/data/exams";
-import { getAllExamsFromDB, saveExamsToDB, enqueueSyncOp } from "@/lib/idb";
+import { getAllExamsFromDB, saveExamsToDB, enqueueSyncOp, enqueueCriticalSyncOp } from "@/lib/idb";
 import { scheduleSyncNow } from "@/lib/sync";
 import { postMessage, subscribe } from "@/lib/broadcast";
 
@@ -58,7 +58,7 @@ export const ExamsProvider = ({ children }: { children: ReactNode }) => {
         console.error("Failed to save exams to IndexedDB", error);
       });
 
-      // Enqueue bulk upsert for entire exams set
+      // Enqueue bulk upsert for entire exams set (normal priority)
       void enqueueSyncOp({ resource: 'exams', opType: 'bulk-upsert', payload: updatedExams })
         .then(() => scheduleSyncNow())
         .then(() => postMessage({ type: 'storage-write', resource: 'exams' }))
@@ -69,8 +69,8 @@ export const ExamsProvider = ({ children }: { children: ReactNode }) => {
 
   const addExam = (exam: ExamData) => {
     setExams(prev => [...prev, exam]);
-    // Enqueue single create
-    void enqueueSyncOp({ resource: 'exams', opType: 'create', payload: exam })
+    // Enqueue single create (critical)
+    void enqueueCriticalSyncOp({ resource: 'exams', opType: 'create', payload: exam })
       .then(() => scheduleSyncNow())
       .then(() => postMessage({ type: 'storage-write', resource: 'exams' }))
       .catch(() => { /* noop */ });
@@ -78,8 +78,8 @@ export const ExamsProvider = ({ children }: { children: ReactNode }) => {
 
   const updateExam = (updatedExam: ExamData) => {
     setExams(prev => prev.map(exam => exam.id === updatedExam.id ? updatedExam : exam));
-    // Enqueue single update
-    void enqueueSyncOp({ resource: 'exams', opType: 'update', payload: updatedExam })
+    // Enqueue single update (critical)
+    void enqueueCriticalSyncOp({ resource: 'exams', opType: 'update', payload: updatedExam })
       .then(() => scheduleSyncNow())
       .then(() => postMessage({ type: 'storage-write', resource: 'exams' }))
       .catch(() => { /* noop */ });
@@ -87,8 +87,8 @@ export const ExamsProvider = ({ children }: { children: ReactNode }) => {
 
   const deleteExam = (examId: string) => {
     setExams(prev => prev.filter(exam => exam.id !== examId));
-    // Enqueue delete
-    void enqueueSyncOp({ resource: 'exams', opType: 'delete', payload: { id: examId } })
+    // Enqueue delete (critical)
+    void enqueueCriticalSyncOp({ resource: 'exams', opType: 'delete', payload: { id: examId } })
       .then(() => scheduleSyncNow())
       .then(() => postMessage({ type: 'storage-write', resource: 'exams' }))
       .catch(() => { /* noop */ });

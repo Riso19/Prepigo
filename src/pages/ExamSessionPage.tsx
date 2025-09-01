@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { McqData } from '@/data/questionBanks';
-import { ExamLog, ExamLogEntry } from '@/data/examLogs';
-import { addMcqReviewLog, McqReviewLog, saveExamLogToDB, enqueueCriticalSyncOp } from '@/lib/idb';
+import { ExamLogEntry } from '@/data/examLogs';
+import { addMcqReviewLog, McqReviewLog, enqueueCriticalSyncOp } from '@/lib/idb';
+import { saveExamLogToDB, ExamLog } from '@/lib/dexie-db';
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
@@ -280,18 +281,27 @@ const ExamSessionPage = () => {
         correctCount * examSettings.marksPerCorrect -
         incorrectCount * examSettings.negativeMarksPerWrong;
 
+      const now = Date.now();
+      // Create answers record from user responses
+      const answersRecord: Record<string, string> = {};
+      Object.entries(answers).forEach(([key, value]) => {
+        if (value !== null) {
+          answersRecord[key] = value;
+        }
+      });
+
       const examLog: ExamLog = {
-        id: `examlog-${Date.now()}`,
-        name: examSettings.name,
-        date: new Date().toISOString(),
-        settings: {
-          timeLimit: examSettings.timeLimit,
-          totalQuestions: queue.length,
-          marksPerCorrect: examSettings.marksPerCorrect,
-          negativeMarksPerWrong: examSettings.negativeMarksPerWrong,
-        },
-        results: { score, correctCount, incorrectCount, skippedCount, timeTaken },
-        entries,
+        id: `examlog-${now}`,
+        examId: examSettings.id || 'unknown',
+        userId: 'current-user', // TODO: Replace with actual user ID from auth context
+        answers: answersRecord,
+        score,
+        totalQuestions: queue.length,
+        completed: true,
+        startedAt: now - timeTaken * 1000, // Convert seconds to ms
+        submittedAt: now,
+        createdAt: now,
+        updatedAt: now,
       };
 
       await saveExamLogToDB(examLog);

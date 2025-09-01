@@ -2,6 +2,7 @@ import Header from "@/components/Header";
 import UploadResourceDialog from "@/components/resources/UploadResourceDialog";
 import ResourceCard from "@/components/resources/ResourceCard";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -10,7 +11,7 @@ import { useMemo, useState } from "react";
 import { FileText } from "lucide-react";
 
 const ResourcesPage = () => {
-  const { items, isLoading } = useResources();
+  const { items, isLoading, page, pageSize, total, setPage, setPageSize } = useResources();
   const [q, setQ] = useState("");
   const [tab, setTab] = useState("all");
   const [tag, setTag] = useState<string>("all");
@@ -120,11 +121,50 @@ const ResourcesPage = () => {
             <div className="flex justify-center"><UploadResourceDialog /></div>
           </div>
         ) : (
-          <div className="grid gap-4 md:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 mt-6">
-            {filtered.map((it) => (
-              <ResourceCard key={it.id} item={it} />
-            ))}
-          </div>
+          <>
+            <div className="grid gap-4 md:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 mt-6">
+              {filtered.map((it) => (
+                <ResourceCard key={it.id} item={it} />
+              ))}
+            </div>
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-6">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Rows per page</span>
+                <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+                  <SelectTrigger className="w-[100px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="20">20</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="text-sm text-muted-foreground">
+                  {total === 0 ? (
+                    "0"
+                  ) : (
+                    `${page * pageSize + 1}–${Math.min((page + 1) * pageSize, total)} of ${total}`
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setPage(Math.max(0, page - 1))} disabled={page <= 0}>
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage(page + 1)}
+                    disabled={(page + 1) * pageSize >= total}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </>
         )}
       </main>
     </div>

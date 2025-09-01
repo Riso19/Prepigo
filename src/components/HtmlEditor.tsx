@@ -295,7 +295,9 @@ const HtmlEditor = ({ value, onChange, placeholder }: HtmlEditorProps) => {
       }
       const blob = await response.blob();
       const fileName = `media-${Date.now()}-${imageUrlInput.split('/').pop()?.split('?')[0] || 'image'}`;
-      await saveSingleMediaToDB(fileName, blob);
+      // Convert Blob to File
+      const file = new File([blob], fileName, { type: blob.type });
+      await saveSingleMediaToDB(fileName, file);
       void enqueueSyncOp({ resource: 'media', opType: 'upsert', payload: { id: fileName } })
         .then(() => scheduleSyncNow())
         .then(() => postMessage({ type: 'storage-write', resource: 'media', id: fileName }))

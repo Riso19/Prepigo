@@ -14,7 +14,7 @@ import { Separator } from '@/components/ui/separator';
 import React, { useRef, useState } from 'react';
 import { useDecks } from '@/contexts/DecksContext';
 import { DeckData, decksSchema, FlashcardData } from '@/data/decks';
-import { clearDecksDB, getReviewLogsForCard, saveMediaToDB, clearMediaDB, clearQuestionBanksDB, clearMcqReviewLogsDB, getMediaFromDB, saveSingleMediaToDB, getReviewLogsForMcq, enqueueSyncOp } from '@/lib/idb';
+import { getReviewLogsForCard, saveMediaToDB, clearMediaDB, clearQuestionBanksDB, clearMcqReviewLogsDB, getMediaFromDB, saveSingleMediaToDB, getReviewLogsForMcq, enqueueSyncOp } from '@/lib/idb';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -300,7 +300,13 @@ const SettingsPage = () => {
           setDecks(prevDecks => mergeDecks(prevDecks, importedDecks!));
         }
         if (importedMedia && importedMedia.size > 0) {
-            await saveMediaToDB(importedMedia);
+            // Convert Blob Map to File Map
+            const fileMap: Record<string, File> = {};
+            importedMedia.forEach((blob, id) => {
+              fileMap[id] = new File([blob], id, { type: blob.type });
+            });
+            
+            await saveMediaToDB(fileMap);
             // Enqueue sync ops for imported media and schedule background sync
             const ids = Array.from(importedMedia.keys());
             void Promise.all(ids.map((id) => enqueueSyncOp({ resource: 'media', opType: 'upsert', payload: { id } })))
@@ -425,7 +431,8 @@ const SettingsPage = () => {
             fileNameMap.set(originalFileName, newFileName);
             
             const blob = await file.async("blob");
-            await saveSingleMediaToDB(newFileName, blob);
+            const fileObj = new File([blob], newFileName, { type: blob.type });
+            await saveSingleMediaToDB(newFileName, fileObj);
             void enqueueSyncOp({ resource: 'media', opType: 'upsert', payload: { id: newFileName } })
               .then(() => scheduleSyncNow())
               .then(() => postMessage({ type: 'storage-write', resource: 'media', id: newFileName }))
@@ -446,7 +453,8 @@ const SettingsPage = () => {
             fileNameMap.set(originalFileName, newFileName);
             const base64Data = mediaMap[originalFileName];
             const blob = base64ToBlob(base64Data);
-            await saveSingleMediaToDB(newFileName, blob);
+            const fileObj = new File([blob], newFileName, { type: blob.type });
+            await saveSingleMediaToDB(newFileName, fileObj);
             void enqueueSyncOp({ resource: 'media', opType: 'upsert', payload: { id: newFileName } })
               .then(() => scheduleSyncNow())
               .then(() => postMessage({ type: 'storage-write', resource: 'media', id: newFileName }))
@@ -545,7 +553,8 @@ const SettingsPage = () => {
     setIsResetAlertOpen(false);
     const toastId = toast.loading("Resetting all data...");
     try {
-        await clearDecksDB();
+        // Clear decks by setting to empty array
+        setDecks([]);
         await clearQuestionBanksDB();
         await clearSettingsDB();
         await clearMediaDB();
@@ -555,6 +564,7 @@ const SettingsPage = () => {
             window.location.reload();
         }, 1500);
     } catch (error) {
+        console.error("Reset error:", error);
         toast.error("Failed to reset data.", { id: toastId });
     }
   };

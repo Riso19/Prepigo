@@ -1,14 +1,14 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import {
   ResourceItem,
-  getAllResourcesFromDB,
-  saveResource,
-  deleteResource as deleteResourceFromDB,
-  saveSingleMediaToDB,
+  getResourcesPage,
+  getLastDbError,
+  saveResourceWithMedia,
+  deleteResourceAndMedia,
   getResourceBlob,
-  MEDIA_STORE,
-  table,
 } from '@/lib/dexie-db';
+import { subscribe } from '@/lib/broadcast';
+import { toast } from '@/hooks/use-toast';
 
 export type CreateResourceInput = {
   file: File; // must be PDF
@@ -19,6 +19,11 @@ export type CreateResourceInput = {
 
 export type ResourcesContextType = {
   items: ResourceItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  setPage: (p: number) => void;
+  setPageSize: (s: number) => void;
   create: (input: CreateResourceInput) => Promise<void>;
   remove: (id: string) => Promise<void>;
   getBlobUrl: (res: ResourceItem) => Promise<string | null>;
@@ -30,14 +35,18 @@ const ResourcesContext = createContext<ResourcesContextType | undefined>(undefin
 
 export const ResourcesProvider = ({ children }: { children: React.ReactNode }) => {
   const [items, setItems] = useState<ResourceItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(20);
   const [isLoading, setIsLoading] = useState(true);
   const [blobUrlCache] = useState<Map<string, string>>(new Map());
 
   const refresh = async () => {
     setIsLoading(true);
     try {
-      const list = await getAllResourcesFromDB();
+      const { items: list, total } = await getResourcesPage(page, pageSize);
       setItems(list);
+      setTotal(total);
     } finally {
       setIsLoading(false);
     }
@@ -45,7 +54,25 @@ export const ResourcesProvider = ({ children }: { children: React.ReactNode }) =
 
   useEffect(() => {
     refresh();
-  }, []);
+    // Multi-tab updates: refresh when other tabs write to resources/highlights
+    const unsub = subscribe((msg) => {
+      if (msg.type === 'storage-write' && (msg.resource === 'resources' || msg.resource === 'resource_highlights' || msg.resource === 'resource_highlights_v2')) {
+        refresh();
+      }
+      if (msg.type === 'sync-error') {
+        // Fetch and show the last DB error details
+        getLastDbError().then((err) => {
+          if (!err) return;
+          toast({
+            title: 'Sync error',
+            description: `${err.context}: ${err.message}`,
+            variant: 'destructive',
+          });
+        });
+      }
+    });
+    return unsub;
+  }, [page, pageSize]);
 
   const create = async (input: CreateResourceInput) => {
     try {
@@ -69,14 +96,6 @@ export const ResourcesProvider = ({ children }: { children: React.ReactNode }) =
       const id = crypto.randomUUID();
       const mediaId = `res-${id}`;
 
-      // Save the file content to media store
-      try {
-        await saveSingleMediaToDB(mediaId, input.file);
-      } catch (mediaError) {
-        console.error('Error saving media:', mediaError);
-        throw new Error('Failed to save PDF content. The file might be corrupted or too large.');
-      }
-
       // Create resource metadata
       const now = Date.now();
       const resource: ResourceItem = {
@@ -91,20 +110,8 @@ export const ResourcesProvider = ({ children }: { children: React.ReactNode }) =
         updatedAt: now,
       };
 
-      // Save resource metadata
-      try {
-        await saveResource(resource);
-      } catch (saveError) {
-        console.error('Error saving resource:', saveError);
-        // Clean up the media if metadata save fails
-        try {
-          const t = await table(MEDIA_STORE);
-          await t.delete(mediaId);
-        } catch (cleanupError) {
-          console.error('Error cleaning up after failed save:', cleanupError);
-        }
-        throw new Error('Failed to save resource metadata. Please try again.');
-      }
+      // Transactional save (media + resource)
+      await saveResourceWithMedia(resource, input.file);
 
       // Refresh the resources list
       await refresh();
@@ -115,7 +122,7 @@ export const ResourcesProvider = ({ children }: { children: React.ReactNode }) =
   };
 
   const remove = async (id: string) => {
-    await deleteResourceFromDB(id);
+    await deleteResourceAndMedia(id);
     await refresh();
   };
 
@@ -130,8 +137,8 @@ export const ResourcesProvider = ({ children }: { children: React.ReactNode }) =
   };
 
   const value: ResourcesContextType = useMemo(
-    () => ({ items, create, remove, getBlobUrl, refresh, isLoading }),
-    [items, isLoading],
+    () => ({ items, total, page, pageSize, setPage, setPageSize, create, remove, getBlobUrl, refresh, isLoading }),
+    [items, total, page, pageSize, isLoading],
   );
 
   return <ResourcesContext.Provider value={value}>{children}</ResourcesContext.Provider>;

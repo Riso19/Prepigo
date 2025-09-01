@@ -1,5 +1,6 @@
-import { getMeta, setMeta, listMetaKeys, deleteMeta } from '@/lib/storage';
-import { getAllExamsFromDB, saveExamsToDB } from '@/lib/storage';
+import { table } from '@/lib/dexie-db';
+
+const META_STORE = 'meta';
 
 const PREFIX = 'conflict::';
 
@@ -17,6 +18,30 @@ function conflictKey(resource: string, id: string) {
   return `${PREFIX}${resource}::${id}`;
 }
 
+async function setMeta<T = unknown>(key: string, value: T): Promise<void> {
+  const t = await table<{ key: string; value: T }>(META_STORE);
+  await t.put({ key, value } as any, key);
+}
+
+async function getMeta<T = unknown>(key: string): Promise<T | undefined> {
+  const t = await table<{ key: string; value: T }>(META_STORE);
+  const result = await t.get(key);
+  return result?.value;
+}
+
+async function listMetaKeys(prefix: string): Promise<string[]> {
+  const t = await table<{ key: string }>(META_STORE);
+  const allItems = await t.toArray();
+  return allItems
+    .filter(item => item.key?.startsWith(prefix))
+    .map(item => item.key);
+}
+
+async function deleteMeta(key: string): Promise<void> {
+  const t = await table<{ key: string }>(META_STORE);
+  await t.delete(key);
+}
+
 export async function saveConflict<T>(resource: string, id: string, local: T, server: T, fields?: string[]) {
   const key = conflictKey(resource, id);
   const rec: ConflictRecord<T> = { key, resource, id, local, server, fields, createdAt: Date.now() };
@@ -25,7 +50,7 @@ export async function saveConflict<T>(resource: string, id: string, local: T, se
 }
 
 export async function getConflict<T>(resource: string, id: string) {
-  return (await getMeta(conflictKey(resource, id))) as ConflictRecord<T> | undefined;
+  return (await getMeta<ConflictRecord<T>>(conflictKey(resource, id)));
 }
 
 export async function listConflicts<T>(resource?: string): Promise<ConflictRecord<T>[]> {
@@ -33,7 +58,7 @@ export async function listConflicts<T>(resource?: string): Promise<ConflictRecor
   const keys = await listMetaKeys(prefix);
   const results: ConflictRecord<T>[] = [];
   for (const k of keys) {
-    const rec = (await getMeta(k)) as ConflictRecord<T> | undefined;
+    const rec = await getMeta<ConflictRecord<T>>(k);
     if (rec) results.push(rec);
   }
   // sort by createdAt desc
@@ -59,22 +84,23 @@ export function resolveKeepServer<T>(server: T): T {
 }
 
 // Apply chosen resolution to storage for known resources
-export async function applyResolution<T extends { id: string; name: string; date: string; deckIds: string[]; questionBankIds: string[]; tags: string[]; tagFilterType: 'all' | 'any'; filterMode: 'all' | 'due' | 'difficulty'; filterDifficultyMin?: number; filterDifficultyMax?: number }>(
+export async function applyResolution<T>(
   resource: string, 
   id: string, 
   resolved: T
 ) {
+  // Delete conflict record
+  await deleteConflict(resource, id);
+  
+  // Apply resolution based on resource type
   if (resource === 'exams') {
-    const all = await getAllExamsFromDB();
-    const idx = all.findIndex((e) => e.id === id);
-    if (idx >= 0) {
-      all[idx] = resolved;
-    } else {
-      all.push(resolved);
+    try {
+      const examsTable = await table<{ id: string }>('exams');
+      await examsTable.put(resolved as any, id);
+    } catch (e) {
+      console.error('Failed to apply resolution:', e);
+      throw e;
     }
-    await saveExamsToDB(all);
-    return;
   }
-  // For unknown resources, just store the resolution inside conflict for consumers to pick up.
-  await setMeta(conflictKey(resource, id) + '::resolved', resolved);
+  // Add other resource handlers as needed
 }

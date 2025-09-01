@@ -22,13 +22,37 @@ export interface SyncOperation {
   retryCount?: number;
 }
 
-import {
-  takeSyncBatch,
-  markOpsAsSynced,
-  getMeta,
-  setMeta,
-} from './storage';
+import { table } from './dexie-db';
 import { postMessage } from './broadcast';
+
+// Constants
+const SYNC_OPS_STORE = 'sync-ops';
+const META_STORE = 'meta';
+
+// Helper functions for sync operations
+async function getMeta<T = unknown>(key: string): Promise<T | undefined> {
+  const t = await table<{ key: string; value: T }>(META_STORE);
+  const result = await t.get(key);
+  return result?.value;
+}
+
+async function setMeta<T = unknown>(key: string, value: T): Promise<void> {
+  const t = await table<{ key: string; value: T }>(META_STORE);
+  await t.put({ key, value } as any, key);
+}
+
+async function takeSyncBatch(limit = 20): Promise<SyncOperation[]> {
+  const t = await table<SyncOperation>(SYNC_OPS_STORE);
+  // Get all operations and then take the first 'limit' items
+  const allOps = await t.toArray();
+  return allOps.slice(0, limit);
+}
+
+async function markOpsAsSynced(ids: number[]): Promise<void> {
+  if (ids.length === 0) return;
+  const t = await table<SyncOperation>(SYNC_OPS_STORE);
+  await t.bulkDelete(ids);
+}
 
 export type PushHandler = (ops: SyncOperation[]) => Promise<{ syncedIds: number[] } | void>;
 
