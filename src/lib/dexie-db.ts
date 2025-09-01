@@ -11,17 +11,18 @@ import type { QuestionBankData } from '@/data/questionBanks';
 type TransactionFunction = <T>(
   mode: 'rw' | 'r',
   tables: string[],
-  callback: (tx: { table: <T>(name: string) => Table<T> }) => Promise<T>
+  callback: (tx: { table: <T>(name: string) => Table<T> }) => Promise<T>,
 ) => Promise<T>;
 
 // Type-safe transaction helper
 async function withTransaction<T>(
   storeNames: string[],
   mode: 'rw' | 'r',
-  operation: (tx: { table: <T>(name: string) => Table<T> }) => Promise<T>
+  operation: (tx: { table: <T>(name: string) => Table<T> }) => Promise<T>,
 ): Promise<T> {
   const db = await getDb();
-  const txFn: TransactionFunction = (db as unknown as { transaction: TransactionFunction }).transaction;
+  const txFn: TransactionFunction = (db as unknown as { transaction: TransactionFunction })
+    .transaction;
   return txFn(mode, storeNames, operation);
 }
 
@@ -38,10 +39,12 @@ function withDbMetrics<T>(name: string, fn: () => Promise<T>): Promise<T> {
   // DEBUG_DB is defined elsewhere in this file
   const enabled = typeof DEBUG_DB !== 'undefined' && !!DEBUG_DB;
   if (!enabled) return fn();
-  const start = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  const start =
+    typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
   return fn()
     .then((res) => {
-      const end = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      const end =
+        typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
       const dur = end - start;
       if (dur > 100) console.warn(`[DB][slow] ${name}: ${dur.toFixed(1)}ms`);
       return res;
@@ -58,7 +61,7 @@ type StorageWriteEvent = {
   id?: string;
   clear?: boolean;
 };
-let _pendingWrites: StorageWriteEvent[] = [];
+const _pendingWrites: StorageWriteEvent[] = [];
 let _writeTimer: ReturnType<typeof setTimeout> | null = null;
 function broadcastStorageWrite(ev: StorageWriteEvent) {
   _pendingWrites.push(ev);
@@ -67,7 +70,11 @@ function broadcastStorageWrite(ev: StorageWriteEvent) {
     const batch = _pendingWrites.splice(0);
     _writeTimer = null;
     for (const it of batch) {
-      try { postMessage({ type: 'storage-write', resource: it.resource, id: it.id }); } catch { /* noop */ }
+      try {
+        postMessage({ type: 'storage-write', resource: it.resource, id: it.id });
+      } catch {
+        /* noop */
+      }
     }
   }, 50);
 }
@@ -79,7 +86,7 @@ declare global {
       request<T>(
         name: string,
         options: { mode: 'exclusive' | 'shared' },
-        callback: () => Promise<T> | T
+        callback: () => Promise<T> | T,
       ): Promise<T>;
     };
   }
@@ -93,7 +100,11 @@ async function runWithLock<T>(name: string, fn: () => Promise<T>): Promise<T> {
 }
 
 // Resource-scoped lock to narrow contention windows
-async function withResourceLock<T>(resourceId: string, name: string, fn: () => Promise<T>): Promise<T> {
+async function withResourceLock<T>(
+  resourceId: string,
+  name: string,
+  fn: () => Promise<T>,
+): Promise<T> {
   const locks = globalThis.navigator?.locks;
   const lockName = `prepigo:resource:${resourceId}:${name}`;
   if (!locks?.request) return fn();
@@ -156,7 +167,7 @@ export async function table<T = unknown>(name: string): Promise<Table<T>> {
 
 async function setMeta<T = unknown>(key: string, value: T): Promise<void> {
   const t = await table<{ key: string; value: T }>(META_STORE);
-  await t.put({ key, value } as unknown as any, key);
+  await t.put({ key, value }, key);
 }
 
 // Validators (Zod)
@@ -205,10 +216,12 @@ const MAX_MEDIA_TOTAL_BYTES = (() => {
 async function notifyDbError(context: string, error: unknown) {
   console.error(`[DB][notify] ${context}:`, error);
   // Broadcast minimal payload matching BroadcastEvent type
-  try { 
+  try {
     const event: BroadcastEvent = { type: 'sync-error', attempt: 0, delay: 0 };
-    postMessage(event); 
-  } catch { /* noop */ }
+    postMessage(event);
+  } catch {
+    /* noop */
+  }
   // Persist last error (best-effort; ignore failures)
   try {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -217,12 +230,18 @@ async function notifyDbError(context: string, error: unknown) {
       context,
       message: errorMessage,
     });
-  } catch { /* noop */ }
+  } catch {
+    /* noop */
+  }
 }
 
 type RunDbOptions = { swallow?: boolean };
 
-async function runDbOp<T>(name: string, fn: () => Promise<T>, opts?: RunDbOptions): Promise<T | undefined> {
+async function runDbOp<T>(
+  name: string,
+  fn: () => Promise<T>,
+  opts?: RunDbOptions,
+): Promise<T | undefined> {
   try {
     return await withDbMetrics(name, fn);
   } catch (e) {
@@ -233,7 +252,6 @@ async function runDbOp<T>(name: string, fn: () => Promise<T>, opts?: RunDbOption
     throw e;
   }
 }
-
 
 // Store names (must match src/lib/idb.ts)
 export const DECKS_STORE = 'decks';
@@ -307,9 +325,8 @@ interface ImportMeta {
 
 declare const importMeta: ImportMeta;
 
-const DEBUG_DB = typeof importMeta !== 'undefined' && 
-                 importMeta.env && 
-                 importMeta.env.VITE_DEBUG_DB === 'true';
+const DEBUG_DB =
+  typeof importMeta !== 'undefined' && importMeta.env && importMeta.env.VITE_DEBUG_DB === 'true';
 
 const DB_NAME = 'PrepigoDB';
 // Schema version history:
@@ -484,7 +501,8 @@ async function getDb(): Promise<DbInstance> {
     // Apply schema versions
     for (let i = 1; i <= Math.min(DB_VERSION, 12); i++) {
       const schema = SCHEMA_VERSIONS[i as keyof typeof SCHEMA_VERSIONS];
-      if (DEBUG_DB) console.log(`  Version ${i}:`, schema ? 'Applying schema' : 'No schema changes');
+      if (DEBUG_DB)
+        console.log(`  Version ${i}:`, schema ? 'Applying schema' : 'No schema changes');
       if (schema) {
         try {
           db.version(i).stores(schema);
@@ -497,7 +515,9 @@ async function getDb(): Promise<DbInstance> {
 
     // v13: add resource_highlights_v2 and migrate data from v1 (numeric ++id) to v2 (string id)
     try {
-      const v13schema = SCHEMA_VERSIONS[13 as keyof typeof SCHEMA_VERSIONS] as Record<string, string> | undefined;
+      const v13schema = SCHEMA_VERSIONS[13 as keyof typeof SCHEMA_VERSIONS] as
+        | Record<string, string>
+        | undefined;
       if (v13schema) {
         db.version(13)
           .stores(v13schema)
@@ -509,61 +529,70 @@ async function getDb(): Promise<DbInstance> {
                 table: (name: string) => Table<unknown> | undefined;
                 [key: string]: Table<unknown> | unknown;
               };
-              
-              const tables = typedTx.db.tables?.map(t => t.name) ?? [];
+
+              const tables = typedTx.db.tables?.map((t) => t.name) ?? [];
               const hasV1 = tables.includes(RESOURCE_HIGHLIGHTS_STORE);
-              const v1 = typedTx.table?.(RESOURCE_HIGHLIGHTS_STORE) ?? 
-                        typedTx[RESOURCE_HIGHLIGHTS_STORE] as Table<unknown> | undefined;
-              const v2 = typedTx.table?.(RESOURCE_HIGHLIGHTS_V2_STORE) ?? 
-                        typedTx[RESOURCE_HIGHLIGHTS_V2_STORE] as Table<unknown> | undefined;
-              
+              const v1 =
+                typedTx.table?.(RESOURCE_HIGHLIGHTS_STORE) ??
+                (typedTx[RESOURCE_HIGHLIGHTS_STORE] as Table<unknown> | undefined);
+              const v2 =
+                typedTx.table?.(RESOURCE_HIGHLIGHTS_V2_STORE) ??
+                (typedTx[RESOURCE_HIGHLIGHTS_V2_STORE] as Table<unknown> | undefined);
+
               if (hasV1 && v1 && v2) {
                 const already = await v2.toArray();
                 if (!already?.length) {
                   const all: unknown[] = await v1.toArray();
                   const errors: Array<{ id: string; error: string }> = [];
-                  
+
                   for (const h of all) {
                     if (!h || typeof h !== 'object' || !('id' in h)) continue;
-                    
+
                     const highlight = h as Record<string, unknown>;
-                    const stringId = typeof highlight.id === 'string' 
-                      ? highlight.id 
-                      : String(highlight.id ?? crypto.randomUUID?.() ?? `hl-${Date.now()}`);
-                    
+                    const stringId =
+                      typeof highlight.id === 'string'
+                        ? highlight.id
+                        : String(highlight.id ?? crypto.randomUUID?.() ?? `hl-${Date.now()}`);
+
                     const rec = { ...highlight, id: stringId };
-                    
+
                     try {
                       // Validate with v2 schema before writing
-                      validate(ResourceHighlightSchema, rec as ZResourceHighlight, 'ResourceHighlight');
+                      validate(
+                        ResourceHighlightSchema,
+                        rec as ZResourceHighlight,
+                        'ResourceHighlight',
+                      );
                       await v2.put(rec);
                     } catch (ve) {
                       const error = ve instanceof Error ? ve.message : String(ve);
                       errors.push({ id: stringId, error });
                     }
                   }
-                  
+
                   if (errors.length) {
-                    const meta = typedTx.table?.(META_STORE) ?? 
-                               typedTx[META_STORE] as Table<{ key: string; value: unknown }> | undefined;
+                    const meta =
+                      typedTx.table?.(META_STORE) ??
+                      (typedTx[META_STORE] as Table<{ key: string; value: unknown }> | undefined);
                     const key = `migration:errors:${Date.now()}`;
-                    await meta?.put?.({ 
-                      key, 
-                      value: { 
-                        store: RESOURCE_HIGHLIGHTS_V2_STORE, 
-                        count: errors.length, 
-                        items: errors.slice(0, 50) 
-                      } 
+                    await meta?.put?.({
+                      key,
+                      value: {
+                        store: RESOURCE_HIGHLIGHTS_V2_STORE,
+                        count: errors.length,
+                        items: errors.slice(0, 50),
+                      },
                     });
                   }
                 }
-                
+
                 // Mark migration as complete
-                const meta = typedTx.table?.(META_STORE) ?? 
-                           typedTx[META_STORE] as Table<{ key: string; value: unknown }> | undefined;
-                await meta?.put?.({ 
-                  key: 'migration:resource_highlights_v2', 
-                  value: true 
+                const meta =
+                  typedTx.table?.(META_STORE) ??
+                  (typedTx[META_STORE] as Table<{ key: string; value: unknown }> | undefined);
+                await meta?.put?.({
+                  key: 'migration:resource_highlights_v2',
+                  value: true,
                 });
               }
             } catch (mErr) {
@@ -578,7 +607,7 @@ async function getDb(): Promise<DbInstance> {
     return db;
   };
 
-  let db = buildDb();
+  const db = buildDb();
   try {
     if (DEBUG_DB) console.log('Opening database...');
     // Attach multi-tab handlers before opening
@@ -590,7 +619,11 @@ async function getDb(): Promise<DbInstance> {
       console.warn('[Dexie] Upgrade blocked by another tab. Please close other tabs to continue.');
     });
     dexieLike.on?.('versionchange', () => {
-      try { dexieLike.close(); } catch { /* noop */ }
+      try {
+        dexieLike.close();
+      } catch {
+        /* noop */
+      }
       console.warn('[Dexie] Database version change detected; connection closed to allow upgrade.');
     });
 
@@ -619,31 +652,39 @@ export async function clearMediaDB() {
 export async function takeSyncBatch(limit = 20) {
   const t = await table(SYNC_QUEUE_STORE);
   const now = Date.now();
-  const list = (await t.orderBy('createdAt').limit(limit * 5).toArray()) as Array<SyncOperationInternal>;
+  const list = (await t
+    .orderBy('createdAt')
+    .limit(limit * 5)
+    .toArray()) as Array<SyncOperationInternal>;
   // Sort by priority desc, then createdAt asc; filter by readiness; cap
   return list
     .filter((op) => (op.nextAttemptAt ?? 0) <= now)
-    .sort((a, b) => (b.priority ?? 1) - (a.priority ?? 1) || (a.createdAt - b.createdAt))
+    .sort((a, b) => (b.priority ?? 1) - (a.priority ?? 1) || a.createdAt - b.createdAt)
     .slice(0, limit) as SyncOperationInternal[];
 }
 
 // ...
 
 // Paginated resources (mobile-friendly). Returns { items, total }.
-export async function getResourcesPage(page: number, pageSize: number): Promise<{ items: ResourceItem[]; total: number }> {
+export async function getResourcesPage(
+  page: number,
+  pageSize: number,
+): Promise<{ items: ResourceItem[]; total: number }> {
   if (page < 0 || pageSize <= 0) throw new Error('Invalid pagination');
   const t = await table(RESOURCES_STORE);
   try {
     const total = (await t.toArray()).length; // Dexie lacks count() on our typed shim; use simple length to avoid adding more anys
-    const items = await (t as unknown as {
-      orderBy: (key: string) => {
-        reverse: () => {
-          offset: (n: number) => {
-            limit: (n: number) => { toArray: () => Promise<ResourceItem[]> };
+    const items = await (
+      t as unknown as {
+        orderBy: (key: string) => {
+          reverse: () => {
+            offset: (n: number) => {
+              limit: (n: number) => { toArray: () => Promise<ResourceItem[]> };
+            };
           };
         };
-      };
-    })
+      }
+    )
       .orderBy('createdAt')
       .reverse()
       .offset(page * pageSize)
@@ -685,22 +726,32 @@ export type ResourceProgress = {
 
 const progressKey = (id: string) => `resourceProgress:${id}`;
 
-export async function setResourceProgress(resourceId: string, page: number, pageCount?: number): Promise<void> {
+export async function setResourceProgress(
+  resourceId: string,
+  page: number,
+  pageCount?: number,
+): Promise<void> {
   await runDbOp('setResourceProgress', async () => {
     const t = await table<{ key: string; value: ResourceProgress }>(META_STORE);
     const value: ResourceProgress = { resourceId, page, pageCount, updatedAt: Date.now() };
-    await t.put({ key: progressKey(resourceId), value } as unknown as any, progressKey(resourceId));
+    await t.put({ key: progressKey(resourceId), value }, progressKey(resourceId));
   });
 }
 
-export async function getResourceProgress(resourceId: string): Promise<{ page: number; pageCount?: number } | undefined> {
-  return runDbOp('getResourceProgress', async () => {
-    const t = await table<{ key: string; value: ResourceProgress }>(META_STORE);
-    const rec = await t.get(progressKey(resourceId));
-    if (!rec?.value) return undefined;
-    const { page, pageCount } = rec.value;
-    return { page, pageCount };
-  }, { swallow: true });
+export async function getResourceProgress(
+  resourceId: string,
+): Promise<{ page: number; pageCount?: number } | undefined> {
+  return runDbOp(
+    'getResourceProgress',
+    async () => {
+      const t = await table<{ key: string; value: ResourceProgress }>(META_STORE);
+      const rec = await t.get(progressKey(resourceId));
+      if (!rec?.value) return undefined;
+      const { page, pageCount } = rec.value;
+      return { page, pageCount };
+    },
+    { swallow: true },
+  );
 }
 
 // ============ Resources (v11+) ============
@@ -717,41 +768,43 @@ export type ResourceItem = {
 };
 
 export async function saveResource(resource: ResourceItem) {
-  await runDbOp('saveResource', async () => withResourceLock(resource.id, 'saveResource', async () => {
-    assertResourceItem(resource);
-    const t = asTable<ResourceItem>(await table(RESOURCES_STORE));
-    await t.put(resource);
-    broadcastStorageWrite({ resource: RESOURCES_STORE, id: resource.id });
-  }))
+  await runDbOp('saveResource', async () =>
+    withResourceLock(resource.id, 'saveResource', async () => {
+      assertResourceItem(resource);
+      const t = asTable<ResourceItem>(await table(RESOURCES_STORE));
+      await t.put(resource);
+      broadcastStorageWrite({ resource: RESOURCES_STORE, id: resource.id });
+    }),
+  );
 }
 
 export async function saveResourceWithMedia(resource: ResourceItem, file: Blob) {
-  await runDbOp('saveResourceWithMedia', async () => withResourceLock(resource.id, 'saveResourceWithMedia', async () => {
-    if (!resource?.id || !resource?.mediaId) throw new Error('Invalid resource: missing id/mediaId');
-    if (file.size > MAX_MEDIA_BYTES) throw new Error(`Media exceeds limit (${file.size} > ${MAX_MEDIA_BYTES})`);
-    if (file.type !== 'application/pdf') throw new Error(`Unsupported media type: ${file.type}`);
-    await ensureMediaQuotaWillFit(file.size);
-    const arrayBuffer = await file.arrayBuffer();
-    
-    await withTransaction(
-      [MEDIA_STORE, RESOURCES_STORE],
-      'rw',
-      async (tx) => {
+  await runDbOp('saveResourceWithMedia', async () =>
+    withResourceLock(resource.id, 'saveResourceWithMedia', async () => {
+      if (!resource?.id || !resource?.mediaId)
+        throw new Error('Invalid resource: missing id/mediaId');
+      if (file.size > MAX_MEDIA_BYTES)
+        throw new Error(`Media exceeds limit (${file.size} > ${MAX_MEDIA_BYTES})`);
+      if (file.type !== 'application/pdf') throw new Error(`Unsupported media type: ${file.type}`);
+      await ensureMediaQuotaWillFit(file.size);
+      const arrayBuffer = await file.arrayBuffer();
+
+      await withTransaction([MEDIA_STORE, RESOURCES_STORE], 'rw', async (tx) => {
         const mediaT = tx.table<MediaRecord>(MEDIA_STORE);
         const resT = tx.table<ResourceItem>(RESOURCES_STORE);
-        
+
         await Promise.all([
-          mediaT.put({ 
-            id: resource.mediaId, 
-            blob: arrayBuffer, 
-            type: file.type 
+          mediaT.put({
+            id: resource.mediaId,
+            blob: arrayBuffer,
+            type: file.type,
           }),
-          resT.put(resource)
+          resT.put(resource),
         ]);
-      }
-    );
-    broadcastStorageWrite({ resource: RESOURCES_STORE, id: resource.id });
-  }))
+      });
+      broadcastStorageWrite({ resource: RESOURCES_STORE, id: resource.id });
+    }),
+  );
 }
 
 export async function getAllResourcesFromDB(): Promise<ResourceItem[]> {
@@ -792,34 +845,36 @@ export async function deleteResource(id: string) {
 
 // Transactional delete: remove resource, media, and both v1/v2 highlights
 export async function deleteResourceAndMedia(id: string) {
-  await runDbOp('deleteResourceAndMedia', async () => withResourceLock(id, 'deleteResourceAndMedia', async () => {
-    await withTransaction(
-      [RESOURCES_STORE, MEDIA_STORE, RESOURCE_HIGHLIGHTS_V2_STORE, RESOURCE_HIGHLIGHTS_STORE],
-      'rw',
-      async (tx) => {
-        const resT = tx.table<ResourceItem>(RESOURCES_STORE);
-        const mediaT = tx.table<MediaRecord>(MEDIA_STORE);
-        const hlV2T = tx.table<ZResourceHighlight>(RESOURCE_HIGHLIGHTS_V2_STORE);
-        const hlV1T = tx.table<ZResourceHighlight>(RESOURCE_HIGHLIGHTS_STORE);
+  await runDbOp('deleteResourceAndMedia', async () =>
+    withResourceLock(id, 'deleteResourceAndMedia', async () => {
+      await withTransaction(
+        [RESOURCES_STORE, MEDIA_STORE, RESOURCE_HIGHLIGHTS_V2_STORE, RESOURCE_HIGHLIGHTS_STORE],
+        'rw',
+        async (tx) => {
+          const resT = tx.table<ResourceItem>(RESOURCES_STORE);
+          const mediaT = tx.table<MediaRecord>(MEDIA_STORE);
+          const hlV2T = tx.table<ZResourceHighlight>(RESOURCE_HIGHLIGHTS_V2_STORE);
+          const hlV1T = tx.table<ZResourceHighlight>(RESOURCE_HIGHLIGHTS_STORE);
 
-        const resource = await resT.get(id);
-        if (!resource) return;
+          const resource = await resT.get(id);
+          if (!resource) return;
 
-        // Delete resource and its media
-        await Promise.all([
-          resT.delete(id),
-          mediaT.delete(resource.mediaId),
-          // Delete v2 highlights
-          hlV2T.where('resourceId').equals(id).delete(),
-          // Delete v1 highlights
-          hlV1T.where('resourceId').equals(id).delete()
-        ]);
-      }
-    );
-    
-    // Notify about the deletion
-    broadcastStorageWrite({ resource: RESOURCES_STORE, id });
-  }));
+          // Delete resource and its media
+          await Promise.all([
+            resT.delete(id),
+            mediaT.delete(resource.mediaId),
+            // Delete v2 highlights
+            hlV2T.where('resourceId').equals(id).delete(),
+            // Delete v1 highlights
+            hlV1T.where('resourceId').equals(id).delete(),
+          ]);
+        },
+      );
+
+      // Notify about the deletion
+      broadcastStorageWrite({ resource: RESOURCES_STORE, id });
+    }),
+  );
 }
 
 export async function getResourceById(id: string): Promise<ResourceItem | undefined> {
@@ -845,23 +900,25 @@ export interface ResourceHighlight {
   linkedCardId?: string;
   color?: 'yellow' | 'green' | 'blue' | 'pink';
   note?: string;
-};
+}
 
 export async function saveResourceHighlight(highlight: ResourceHighlight) {
   // Prefer v2 store
-  await runDbOp('saveResourceHighlight', async () => withResourceLock(highlight.resourceId, 'saveResourceHighlight', async () => {
-    try {
-      const t2 = await table(RESOURCE_HIGHLIGHTS_V2_STORE);
-      validate(ResourceHighlightSchema, highlight as ZResourceHighlight, 'ResourceHighlight');
-      await t2.put(highlight);
-      broadcastStorageWrite({ resource: RESOURCE_HIGHLIGHTS_V2_STORE, id: highlight.id });
-    } catch {
-      // Fallback to v1 for older DBs (will be migrated later)
-      const t1 = await table(RESOURCE_HIGHLIGHTS_STORE);
-      await t1.put(highlight as unknown as { id?: number } as any);
-      broadcastStorageWrite({ resource: RESOURCE_HIGHLIGHTS_STORE });
-    }
-  }))
+  await runDbOp('saveResourceHighlight', async () =>
+    withResourceLock(highlight.resourceId, 'saveResourceHighlight', async () => {
+      try {
+        const t2 = await table(RESOURCE_HIGHLIGHTS_V2_STORE);
+        validate(ResourceHighlightSchema, highlight as ZResourceHighlight, 'ResourceHighlight');
+        await t2.put(highlight);
+        broadcastStorageWrite({ resource: RESOURCE_HIGHLIGHTS_V2_STORE, id: highlight.id });
+      } catch {
+        // Fallback to v1 for older DBs (will be migrated later)
+        const t1 = await table(RESOURCE_HIGHLIGHTS_STORE);
+        await t1.put(highlight as unknown as { id?: number });
+        broadcastStorageWrite({ resource: RESOURCE_HIGHLIGHTS_STORE });
+      }
+    }),
+  );
 }
 
 export async function getHighlightsForResource(resourceId: string): Promise<ResourceHighlight[]> {
@@ -869,31 +926,42 @@ export async function getHighlightsForResource(resourceId: string): Promise<Reso
     const t2 = asTable<ResourceHighlight>(await table(RESOURCE_HIGHLIGHTS_V2_STORE));
     const list = await t2.where('resourceId').equals(resourceId).toArray();
     if (list?.length) return list;
-  } catch { /* noop */ }
+  } catch {
+    /* noop */
+  }
   // Fallback to v1
   try {
-    const t1 = asTable<any>(await table(RESOURCE_HIGHLIGHTS_STORE));
-    const list1 = (await t1.where('resourceId').equals(resourceId).toArray()) as any[];
-    return list1.map((h) => ({ ...h, id: String(h.id) })) as ResourceHighlight[];
+    const t1 = asTable<{ id: number; resourceId: string }>(await table(RESOURCE_HIGHLIGHTS_STORE));
+    const list1 = await t1.where('resourceId').equals(resourceId).toArray();
+    return (list1 as unknown as Array<Record<string, unknown>>).map((h) => ({
+      ...(h as Record<string, unknown>),
+      id: String((h as { id: number }).id),
+    })) as ResourceHighlight[];
   } catch {
     return [];
   }
 }
 
 export async function deleteResourceHighlight(id: string) {
-  await runDbOp('deleteResourceHighlight', async () => runWithLock('deleteResourceHighlight', async () => {
-    try {
-      const t2 = await table(RESOURCE_HIGHLIGHTS_V2_STORE);
-      await t2.delete(id);
-      broadcastStorageWrite({ resource: RESOURCE_HIGHLIGHTS_V2_STORE, id });
-      return;
-    } catch { /* noop */ }
-    try {
-      const t1 = await table(RESOURCE_HIGHLIGHTS_STORE);
-      await t1.delete(id as unknown as number);
-      broadcastStorageWrite({ resource: RESOURCE_HIGHLIGHTS_STORE });
-    } catch { /* noop */ }
-  }))
+  await runDbOp('deleteResourceHighlight', async () =>
+    runWithLock('deleteResourceHighlight', async () => {
+      try {
+        const t2 = await table(RESOURCE_HIGHLIGHTS_V2_STORE);
+        await t2.delete(id);
+        broadcastStorageWrite({ resource: RESOURCE_HIGHLIGHTS_V2_STORE, id });
+        return;
+      } catch {
+        /* noop */
+      }
+      try {
+        const t1 = await table(RESOURCE_HIGHLIGHTS_STORE);
+        await t1.delete(id as unknown as number);
+        broadcastStorageWrite({ resource: RESOURCE_HIGHLIGHTS_STORE });
+      } catch {
+        /* noop */
+      }
+    }),
+  );
 }
 
 // Quick DB health check to validate table access across the DB
@@ -902,7 +970,7 @@ export async function checkDatabaseHealth(_mode: 'quick' | 'deep' = 'quick') {
     // Simple table access to verify DB health
     const t = await table(META_STORE);
     await t.toArray();
-    
+
     // If we got here, the database is accessible
     return { healthy: true as const };
   } catch (error) {
@@ -917,31 +985,31 @@ export async function verifyV13Migration(): Promise<{ ok: boolean; details?: str
   try {
     const v2Table = await table<ResourceHighlight>(RESOURCE_HIGHLIGHTS_V2_STORE);
     const v1Table = await table<ResourceHighlight>(RESOURCE_HIGHLIGHTS_STORE);
-    
+
     // Use toArray() and length instead of count()
     const v2Highlights = await v2Table.toArray();
     const v1Highlights = await v1Table.toArray();
-    
+
     if (v2Highlights.length !== v1Highlights.length) {
       return {
         ok: false,
-        details: `Highlight count mismatch: v1=${v1Highlights.length}, v2=${v2Highlights.length}`
+        details: `Highlight count mismatch: v1=${v1Highlights.length}, v2=${v2Highlights.length}`,
       };
     }
-    
+
     // Create a Set of all v1 highlight IDs for faster lookup
-    const v1Ids = new Set(v1Highlights.map(h => h.id));
-    
+    const v1Ids = new Set(v1Highlights.map((h) => h.id));
+
     // Verify all v2 highlights have corresponding v1 entries
     for (const h of v2Highlights) {
       if (!v1Ids.has(h.id)) {
         return {
           ok: false,
-          details: `Missing v1 highlight for v2 ID: ${h.id}`
+          details: `Missing v1 highlight for v2 ID: ${h.id}`,
         };
       }
     }
-    
+
     await setMeta('migration:v13:lastVerifiedAt', Date.now());
     return { ok: true };
   } catch (e) {
@@ -955,7 +1023,7 @@ export async function linkHighlightToCard(id: string, cardId: string): Promise<v
   try {
     const highlightsTable = await table<ResourceHighlight>(RESOURCE_HIGHLIGHTS_V2_STORE);
     const highlight = await highlightsTable.get(id);
-    
+
     if (highlight) {
       // Create an updated version of the highlight
       const updatedHighlight: ResourceHighlight = {
@@ -963,7 +1031,7 @@ export async function linkHighlightToCard(id: string, cardId: string): Promise<v
         linkedCardId: cardId,
         updatedAt: Date.now(),
       };
-      
+
       // Update the highlight in the database
       await highlightsTable.put(updatedHighlight, id);
       broadcastStorageWrite({ resource: RESOURCE_HIGHLIGHTS_V2_STORE });
@@ -977,18 +1045,21 @@ export async function linkHighlightToCard(id: string, cardId: string): Promise<v
   }
 }
 
-export async function updateResourceHighlight(id: string, patch: Partial<ResourceHighlight>): Promise<void> {
+export async function updateResourceHighlight(
+  id: string,
+  patch: Partial<ResourceHighlight>,
+): Promise<void> {
   await withResourceLock(id, 'update-highlight', async () => {
     const t = await table(RESOURCE_HIGHLIGHTS_STORE);
     const existing = await t.get(id);
     if (!existing) throw new Error(`Highlight ${id} not found`);
-    
+
     const updated = { ...existing, ...patch, updatedAt: Date.now() };
     validate(ResourceHighlightSchema, updated, 'ResourceHighlight');
-    
+
     await t.put(updated);
     broadcastStorageWrite({ resource: 'resource-highlight', id });
-    
+
     // Enqueue a sync operation if this is linked to a card
     if (updated.linkedCardId) {
       await enqueueSyncOp({
@@ -1054,17 +1125,21 @@ interface McqIntroductionsData {
   date: string;
 }
 
-export async function getIntroductionsFromDB(): Promise<{cardIds: string[]; date: string}> {
+export async function getIntroductionsFromDB(): Promise<{ cardIds: string[]; date: string }> {
   const today = new Date().toISOString().split('T')[0];
   const t = await table<IntroductionsData>(META_STORE);
-  const data = await t.get('introductions') as IntroductionsData | undefined;
-  return data?.date === today ? { cardIds: data.cardIds, date: data.date } : { cardIds: [], date: today };
+  const data = (await t.get('introductions')) as IntroductionsData | undefined;
+  return data?.date === today
+    ? { cardIds: data.cardIds, date: data.date }
+    : { cardIds: [], date: today };
 }
 
-export async function saveIntroductionsToDB(params: { cardIds: string[]; date?: string } | string[]): Promise<void> {
+export async function saveIntroductionsToDB(
+  params: { cardIds: string[]; date?: string } | string[],
+): Promise<void> {
   let cardIds: string[];
   let date: string;
-  
+
   if (Array.isArray(params)) {
     cardIds = params;
     date = new Date().toISOString().split('T')[0];
@@ -1072,7 +1147,7 @@ export async function saveIntroductionsToDB(params: { cardIds: string[]; date?: 
     cardIds = params.cardIds;
     date = params.date || new Date().toISOString().split('T')[0];
   }
-  
+
   const t = await table<IntroductionsData>(META_STORE);
   await t.put({ id: 'introductions', cardIds, date });
   broadcastStorageWrite({ resource: 'introductions' });
@@ -1081,16 +1156,18 @@ export async function saveIntroductionsToDB(params: { cardIds: string[]; date?: 
 export async function getMcqIntroductionsFromDB(): Promise<{ ids: string[]; date: string }> {
   const today = new Date().toISOString().split('T')[0];
   const t = await table<McqIntroductionsData>(META_STORE);
-  const data = await t.get('mcq-introductions') as McqIntroductionsData | undefined;
-  return data?.date === today 
-    ? { ids: data.ids || data.mcqIds || [], date: data.date } 
+  const data = (await t.get('mcq-introductions')) as McqIntroductionsData | undefined;
+  return data?.date === today
+    ? { ids: data.ids || data.mcqIds || [], date: data.date }
     : { ids: [], date: today };
 }
 
-export async function saveMcqIntroductionsToDB(params: { ids: string[]; date?: string } | string[]): Promise<void> {
+export async function saveMcqIntroductionsToDB(
+  params: { ids: string[]; date?: string } | string[],
+): Promise<void> {
   let ids: string[];
   let date: string;
-  
+
   if (Array.isArray(params)) {
     ids = params;
     date = new Date().toISOString().split('T')[0];
@@ -1098,15 +1175,15 @@ export async function saveMcqIntroductionsToDB(params: { ids: string[]; date?: s
     ids = params.ids;
     date = params.date || new Date().toISOString().split('T')[0];
   }
-  
+
   const t = await table<McqIntroductionsData>(META_STORE);
-  await t.put({ 
-    id: 'mcq-introductions', 
-    ids, 
+  await t.put({
+    id: 'mcq-introductions',
+    ids,
     date,
-    mcqIds: ids 
+    mcqIds: ids,
   });
-  
+
   broadcastStorageWrite({ resource: 'mcq-introductions' });
   broadcastStorageWrite({ resource: 'decks', clear: true });
 }
@@ -1173,7 +1250,7 @@ export interface ReviewLog {
 export async function addReviewLog(log: Omit<ReviewLog, 'id' | 'createdAt'>): Promise<string> {
   const t = asTable<ReviewLog>(await table(REVIEW_LOGS_STORE));
   const id = crypto.randomUUID();
-  
+
   // Ensure all required fields are present with proper types
   const reviewLog: ReviewLog = {
     ...log,
@@ -1189,7 +1266,7 @@ export async function addReviewLog(log: Omit<ReviewLog, 'id' | 'createdAt'>): Pr
     duration: log.duration,
     learning_steps: log.learning_steps,
   };
-  
+
   await t.add(reviewLog);
   broadcastStorageWrite({ resource: 'review-logs', id });
   return id;
@@ -1206,7 +1283,9 @@ export async function getAllReviewLogsFromDB(): Promise<ReviewLog[]> {
 }
 
 // MCQ Review log functions
-export async function addMcqReviewLog(log: Omit<McqReviewLog, 'id' | 'createdAt'>): Promise<string> {
+export async function addMcqReviewLog(
+  log: Omit<McqReviewLog, 'id' | 'createdAt'>,
+): Promise<string> {
   const t = asTable<McqReviewLog>(await table(MCQ_REVIEW_LOGS_STORE));
   const id = crypto.randomUUID();
   const reviewLog = {
@@ -1236,7 +1315,7 @@ export async function saveSingleMediaToDB(id: string, file: File): Promise<void>
     id,
     blob: await file.arrayBuffer(),
     type: file.type,
-    lastAccess: Date.now()
+    lastAccess: Date.now(),
   };
   await t.put(mediaRecord);
   broadcastStorageWrite({ resource: 'media', id });
@@ -1249,8 +1328,8 @@ export async function saveMediaToDB(files: Record<string, File>): Promise<void> 
       id,
       blob: await file.arrayBuffer(),
       type: file.type,
-      lastAccess: Date.now()
-    }))
+      lastAccess: Date.now(),
+    })),
   );
   await t.bulkPut(records);
   broadcastStorageWrite({ resource: 'media' });
@@ -1282,7 +1361,9 @@ export async function enqueueSyncOp(op: Omit<SyncOperation, 'timestamp'>): Promi
   await enqueueSyncOperation({ ...op, timestamp: Date.now(), priority: op.priority ?? 1 });
 }
 
-export async function enqueueCriticalSyncOp(op: Omit<SyncOperation, 'timestamp' | 'priority'>): Promise<void> {
+export async function enqueueCriticalSyncOp(
+  op: Omit<SyncOperation, 'timestamp' | 'priority'>,
+): Promise<void> {
   await enqueueSyncOperation({ ...op, timestamp: Date.now(), priority: 10 });
 }
 

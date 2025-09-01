@@ -20,7 +20,7 @@ function conflictKey(resource: string, id: string) {
 
 async function setMeta<T = unknown>(key: string, value: T): Promise<void> {
   const t = await table<{ key: string; value: T }>(META_STORE);
-  await t.put({ key, value } as any, key);
+  await t.put({ key, value }, key);
 }
 
 async function getMeta<T = unknown>(key: string): Promise<T | undefined> {
@@ -32,9 +32,7 @@ async function getMeta<T = unknown>(key: string): Promise<T | undefined> {
 async function listMetaKeys(prefix: string): Promise<string[]> {
   const t = await table<{ key: string }>(META_STORE);
   const allItems = await t.toArray();
-  return allItems
-    .filter(item => item.key?.startsWith(prefix))
-    .map(item => item.key);
+  return allItems.filter((item) => item.key?.startsWith(prefix)).map((item) => item.key);
 }
 
 async function deleteMeta(key: string): Promise<void> {
@@ -42,15 +40,29 @@ async function deleteMeta(key: string): Promise<void> {
   await t.delete(key);
 }
 
-export async function saveConflict<T>(resource: string, id: string, local: T, server: T, fields?: string[]) {
+export async function saveConflict<T>(
+  resource: string,
+  id: string,
+  local: T,
+  server: T,
+  fields?: string[],
+) {
   const key = conflictKey(resource, id);
-  const rec: ConflictRecord<T> = { key, resource, id, local, server, fields, createdAt: Date.now() };
+  const rec: ConflictRecord<T> = {
+    key,
+    resource,
+    id,
+    local,
+    server,
+    fields,
+    createdAt: Date.now(),
+  };
   await setMeta(key, rec);
   return rec;
 }
 
 export async function getConflict<T>(resource: string, id: string) {
-  return (await getMeta<ConflictRecord<T>>(conflictKey(resource, id)));
+  return await getMeta<ConflictRecord<T>>(conflictKey(resource, id));
 }
 
 export async function listConflicts<T>(resource?: string): Promise<ConflictRecord<T>[]> {
@@ -71,8 +83,12 @@ export async function deleteConflict(resource: string, id: string) {
 }
 
 export function computeFieldConflicts(local: unknown, server: unknown): string[] {
-  const keys = Array.from(new Set([...(Object.keys(local || {})), ...(Object.keys(server || {}))]));
-  return keys.filter((k) => JSON.stringify(local?.[k as keyof typeof local]) !== JSON.stringify(server?.[k as keyof typeof server]));
+  const keys = Array.from(new Set([...Object.keys(local || {}), ...Object.keys(server || {})]));
+  return keys.filter(
+    (k) =>
+      JSON.stringify(local?.[k as keyof typeof local]) !==
+      JSON.stringify(server?.[k as keyof typeof server]),
+  );
 }
 
 export function resolveKeepLocal<T>(local: T): T {
@@ -84,19 +100,15 @@ export function resolveKeepServer<T>(server: T): T {
 }
 
 // Apply chosen resolution to storage for known resources
-export async function applyResolution<T>(
-  resource: string, 
-  id: string, 
-  resolved: T
-) {
+export async function applyResolution<T>(resource: string, id: string, resolved: T) {
   // Delete conflict record
   await deleteConflict(resource, id);
-  
+
   // Apply resolution based on resource type
   if (resource === 'exams') {
     try {
       const examsTable = await table<{ id: string }>('exams');
-      await examsTable.put(resolved as any, id);
+      await examsTable.put(resolved as unknown as { id: string }, id);
     } catch (e) {
       console.error('Failed to apply resolution:', e);
       throw e;

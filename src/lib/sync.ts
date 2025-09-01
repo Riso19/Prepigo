@@ -38,7 +38,7 @@ async function getMeta<T = unknown>(key: string): Promise<T | undefined> {
 
 async function setMeta<T = unknown>(key: string, value: T): Promise<void> {
   const t = await table<{ key: string; value: T }>(META_STORE);
-  await t.put({ key, value } as any, key);
+  await t.put({ key, value }, key);
 }
 
 async function takeSyncBatch(limit = 20): Promise<SyncOperation[]> {
@@ -107,9 +107,9 @@ export function stopSync() {
 
 async function loopOnce() {
   if (stopped) return;
-  let attempt: number = (await getMeta('sync_attempt') as number | undefined) ?? 0;
+  let attempt: number = ((await getMeta('sync_attempt')) as number | undefined) ?? 0;
   try {
-    const batch = await takeSyncBatch(20) as SyncOperation[];
+    const batch = (await takeSyncBatch(20)) as SyncOperation[];
     if (!batch.length) {
       // Nothing to do; slow down polling modestly
       currentTimer = setTimeout(() => void loopOnce(), 5000);
@@ -126,7 +126,8 @@ async function loopOnce() {
     postMessage({ type: 'sync-scheduled' });
 
     const res = await pushHandler(batch);
-    const syncedIds = res?.syncedIds ?? batch.map((b) => b.id).filter((id): id is number => id != null);
+    const syncedIds =
+      res?.syncedIds ?? batch.map((b) => b.id).filter((id): id is number => id != null);
     // Mark successful ones as synced
     if (syncedIds.length) {
       await markOpsAsSynced(syncedIds);

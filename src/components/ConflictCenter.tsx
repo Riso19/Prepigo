@@ -1,8 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
-import { listConflicts, computeFieldConflicts, applyResolution, deleteConflict, type ConflictRecord } from '@/lib/conflict';
+import {
+  listConflicts,
+  computeFieldConflicts,
+  applyResolution,
+  deleteConflict,
+  type ConflictRecord,
+} from '@/lib/conflict';
 import { subscribe } from '@/lib/broadcast';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -102,13 +114,22 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-function ConflictItem({ conflict, onResolved }: { conflict: ConflictRecord; onResolved: () => void }) {
-  const fields = useMemo(() => conflict.fields ?? computeFieldConflicts(conflict.local, conflict.server), [conflict]);
+function ConflictItem({
+  conflict,
+  onResolved,
+}: {
+  conflict: ConflictRecord;
+  onResolved: () => void;
+}) {
+  const fields = useMemo(
+    () => conflict.fields ?? computeFieldConflicts(conflict.local, conflict.server),
+    [conflict],
+  );
 
   const handleKeep = async (which: 'local' | 'server') => {
     const resolved = which === 'local' ? conflict.local : conflict.server;
-    // Type assertion to ensure the resolved object matches the expected type
-    await applyResolution(conflict.resource, conflict.id, resolved as any);
+    // Pass through value; generic will infer the type from the argument
+    await applyResolution(conflict.resource, conflict.id, resolved);
     await deleteConflict(conflict.resource, conflict.id);
     onResolved();
   };
@@ -116,24 +137,36 @@ function ConflictItem({ conflict, onResolved }: { conflict: ConflictRecord; onRe
   return (
     <div className="rounded-md border p-3 space-y-2">
       <div className="flex items-center justify-between">
-        <div className="font-medium">{conflict.resource} / {conflict.id}</div>
-        <div className="text-xs text-muted-foreground">{new Date(conflict.createdAt).toLocaleString()}</div>
+        <div className="font-medium">
+          {conflict.resource} / {conflict.id}
+        </div>
+        <div className="text-xs text-muted-foreground">
+          {new Date(conflict.createdAt).toLocaleString()}
+        </div>
       </div>
       <Row label="Fields in conflict">
         <div className="flex flex-wrap gap-2">
           {fields.map((f) => (
-            <Badge key={f} variant="outline">{f}</Badge>
+            <Badge key={f} variant="outline">
+              {f}
+            </Badge>
           ))}
         </div>
       </Row>
       <Row label="Local value">
-        <pre className="text-xs bg-muted p-2 rounded overflow-auto max-h-40">{JSON.stringify(conflict.local, null, 2)}</pre>
+        <pre className="text-xs bg-muted p-2 rounded overflow-auto max-h-40">
+          {JSON.stringify(conflict.local, null, 2)}
+        </pre>
       </Row>
       <Row label="Server value">
-        <pre className="text-xs bg-muted p-2 rounded overflow-auto max-h-40">{JSON.stringify(conflict.server, null, 2)}</pre>
+        <pre className="text-xs bg-muted p-2 rounded overflow-auto max-h-40">
+          {JSON.stringify(conflict.server, null, 2)}
+        </pre>
       </Row>
       <div className="flex gap-2 justify-end pt-1">
-        <Button variant="secondary" onClick={() => void handleKeep('server')}>Keep Server</Button>
+        <Button variant="secondary" onClick={() => void handleKeep('server')}>
+          Keep Server
+        </Button>
         <Button onClick={() => void handleKeep('local')}>Keep Local</Button>
       </div>
     </div>

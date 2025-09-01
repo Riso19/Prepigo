@@ -1,6 +1,15 @@
 import JSZip from 'jszip';
 import initSqlJs from 'sql.js';
-import { DeckData, FlashcardData, BasicFlashcard, ClozeFlashcard, SrsData, Sm2State, ImageOcclusionFlashcard, Occlusion } from '@/data/decks';
+import {
+  DeckData,
+  FlashcardData,
+  BasicFlashcard,
+  ClozeFlashcard,
+  SrsData,
+  Sm2State,
+  ImageOcclusionFlashcard,
+  Occlusion,
+} from '@/data/decks';
 
 const ANKI_FIELD_SEPARATOR = '\x1f';
 
@@ -18,8 +27,12 @@ interface AnkiDeck {
   name: string;
 }
 
-const convertAnkiSchedulingData = (cardRow: unknown[], collectionCreationTimestamp: number): SrsData => {
-  const [ _id, _nid, _did, _ord, _mod, _usn, type, queue, due, ivl, factor, reps, lapses ] = cardRow as number[];
+const convertAnkiSchedulingData = (
+  cardRow: unknown[],
+  collectionCreationTimestamp: number,
+): SrsData => {
+  const [_id, _nid, _did, _ord, _mod, _usn, type, queue, due, ivl, factor, reps, lapses] =
+    cardRow as number[];
   const isSuspended = queue === -1;
   let state: Sm2State['state'];
   let dueDate: Date;
@@ -27,15 +40,28 @@ const convertAnkiSchedulingData = (cardRow: unknown[], collectionCreationTimesta
   let creationDate: Date;
 
   switch (type) {
-    case 0: state = 'new'; dueDate = now; break;
-    case 1: state = 'learning'; dueDate = new Date(due * 1000); break;
-    case 2: state = 'review';
+    case 0:
+      state = 'new';
+      dueDate = now;
+      break;
+    case 1:
+      state = 'learning';
+      dueDate = new Date(due * 1000);
+      break;
+    case 2:
+      state = 'review';
       creationDate = new Date(collectionCreationTimestamp * 1000);
       creationDate.setDate(creationDate.getDate() + due);
       dueDate = creationDate;
       break;
-    case 3: state = 'relearning'; dueDate = new Date(due * 1000); break;
-    default: state = 'new'; dueDate = now; break;
+    case 3:
+      state = 'relearning';
+      dueDate = new Date(due * 1000);
+      break;
+    default:
+      state = 'new';
+      dueDate = now;
+      break;
   }
 
   return {
@@ -57,7 +83,7 @@ const parseOcclusionsFromSvg = (svg: string): Occlusion[] => {
   const occlusions: Occlusion[] = [];
   const rectRegex = /<rect([^>]+)\/>/g;
   const attrRegex = /([a-zA-Z0-9\-:]+)="([^"]+)"/g;
-  
+
   let match;
   let index = 0;
   while ((match = rectRegex.exec(svg)) !== null) {
@@ -85,7 +111,7 @@ const parseOcclusionsFromSvg = (svg: string): Occlusion[] => {
 export const importAnkiFile = async (
   file: File,
   includeScheduling: boolean,
-  onProgress: (progress: { message: string; value: number }) => void
+  onProgress: (progress: { message: string; value: number }) => void,
 ): Promise<{ decks: DeckData[]; media: Map<string, Blob> }> => {
   const SQL = await initSqlJs({ locateFile: (file: string) => `https://sql.js.org/dist/${file}` });
   let dbBytes: Uint8Array;
@@ -96,52 +122,70 @@ export const importAnkiFile = async (
   onProgress({ message: 'Unzipping package...', value: 5 });
   if (file.name.endsWith('.apkg')) {
     const zip = await JSZip.loadAsync(file);
-    const dbFileEntry = zip.file('collection.anki21b') || zip.file('collection.anki21') || zip.file('collection.anki2');
+    const dbFileEntry =
+      zip.file('collection.anki21b') ||
+      zip.file('collection.anki21') ||
+      zip.file('collection.anki2');
     if (!dbFileEntry) throw new Error('Database file not found in .apkg.');
     dbBytes = await dbFileEntry.async('uint8array');
 
     const mediaFile = zip.file('media');
     if (mediaFile) {
-        onProgress({ message: 'Reading media map...', value: 10 });
-        const mediaBytes = await mediaFile.async('uint8array');
-        const decoder = new TextDecoder("utf-8", { fatal: false });
-        let mediaString = decoder.decode(mediaBytes);
+      onProgress({ message: 'Reading media map...', value: 10 });
+      const mediaBytes = await mediaFile.async('uint8array');
+      const decoder = new TextDecoder('utf-8', { fatal: false });
+      let mediaString = decoder.decode(mediaBytes);
 
-        mediaString = mediaString.trim().replace(/^\uFEFF/, '');
-        // Replace control characters (0x00-0x08, 0x0B, 0x0C, 0x0E-0x1F) with empty string
-        mediaString = mediaString.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
-
-        let mediaJSON: { [key: string]: string } = {};
-        try {
-            mediaJSON = JSON.parse(mediaString);
-        } catch (e) {
-            console.warn("Could not parse media JSON file. Attempting to recover mappings with regex.", e);
-            const regex = /"(\d+)":\s*"([^"]+)"/g;
-            let match;
-            while ((match = regex.exec(mediaString)) !== null) {
-                mediaJSON[match[1]] = match[2];
-            }
+      mediaString = mediaString.trim().replace(/^\uFEFF/, '');
+      // Sanitize: remove control characters (0x00-0x1F) except TAB(0x09), LF(0x0A), CR(0x0D)
+      const sanitizeControls = (s: string) => {
+        let out = '';
+        for (let i = 0; i < s.length; i++) {
+          const code = s.charCodeAt(i);
+          const isControl = code < 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d;
+          if (!isControl) out += s[i];
         }
+        return out;
+      };
+      mediaString = sanitizeControls(mediaString);
 
-        const mediaFiles = Object.keys(mediaJSON);
-        if (mediaFiles.length > 0) {
-            onProgress({ message: 'Extracting media...', value: 15 });
-            for (let i = 0; i < mediaFiles.length; i++) {
-                const key = mediaFiles[i];
-                const originalFileName = mediaJSON[key];
-                const newFileName = `${importPrefix}-${originalFileName}`;
-                fileNameMap.set(originalFileName, newFileName);
-
-                const fileEntry = zip.file(key);
-                if (fileEntry) {
-                    const blob = await fileEntry.async('blob');
-                    mediaToStore.set(newFileName, blob);
-                }
-                if (i % 20 === 0 || i === mediaFiles.length - 1) {
-                    onProgress({ message: `Extracting media... (${i + 1}/${mediaFiles.length})`, value: 15 + (i / mediaFiles.length) * 15 });
-                }
-            }
+      let mediaJSON: { [key: string]: string } = {};
+      try {
+        mediaJSON = JSON.parse(mediaString);
+      } catch (e) {
+        console.warn(
+          'Could not parse media JSON file. Attempting to recover mappings with regex.',
+          e,
+        );
+        const regex = /"(\d+)":\s*"([^"]+)"/g;
+        let match;
+        while ((match = regex.exec(mediaString)) !== null) {
+          mediaJSON[match[1]] = match[2];
         }
+      }
+
+      const mediaFiles = Object.keys(mediaJSON);
+      if (mediaFiles.length > 0) {
+        onProgress({ message: 'Extracting media...', value: 15 });
+        for (let i = 0; i < mediaFiles.length; i++) {
+          const key = mediaFiles[i];
+          const originalFileName = mediaJSON[key];
+          const newFileName = `${importPrefix}-${originalFileName}`;
+          fileNameMap.set(originalFileName, newFileName);
+
+          const fileEntry = zip.file(key);
+          if (fileEntry) {
+            const blob = await fileEntry.async('blob');
+            mediaToStore.set(newFileName, blob);
+          }
+          if (i % 20 === 0 || i === mediaFiles.length - 1) {
+            onProgress({
+              message: `Extracting media... (${i + 1}/${mediaFiles.length})`,
+              value: 15 + (i / mediaFiles.length) * 15,
+            });
+          }
+        }
+      }
     }
   } else {
     dbBytes = new Uint8Array(await file.arrayBuffer());
@@ -151,24 +195,36 @@ export const importAnkiFile = async (
   const db = new SQL.Database(dbBytes);
 
   onProgress({ message: 'Reading tables...', value: 40 });
-  const colResult = db.exec("SELECT models, decks, crt FROM col")[0].values[0] as [string, string, number];
+  const colResult = db.exec('SELECT models, decks, crt FROM col')[0].values[0] as [
+    string,
+    string,
+    number,
+  ];
   const [modelsJSON, decksJSON, crt] = colResult;
   const models: { [id: string]: AnkiModel } = JSON.parse(modelsJSON);
   const ankiDecks: { [id: string]: AnkiDeck } = JSON.parse(decksJSON);
-  const notesData = db.exec("SELECT id, mid, flds, tags FROM notes")[0]?.values ?? [];
-  const cardsData = db.exec("SELECT id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses FROM cards")[0]?.values ?? [];
+  const notesData = db.exec('SELECT id, mid, flds, tags FROM notes')[0]?.values ?? [];
+  const cardsData =
+    db.exec(
+      'SELECT id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses FROM cards',
+    )[0]?.values ?? [];
 
   const replaceMediaSrc = (html: string): string => {
     if (!html) return '';
     return html.replace(/src="([^"]+)"/g, (_match, originalFileName) => {
-        const newFileName = fileNameMap.get(originalFileName);
-        return `src="media://${newFileName || originalFileName}"`;
+      const newFileName = fileNameMap.get(originalFileName);
+      return `src="media://${newFileName || originalFileName}"`;
     });
   };
 
   const deckDataMap: Map<string, DeckData> = new Map();
-  Object.values(ankiDecks).forEach(d => {
-    deckDataMap.set(d.id.toString(), { id: `anki-${d.id}`, name: d.name, flashcards: [], subDecks: [] });
+  Object.values(ankiDecks).forEach((d) => {
+    deckDataMap.set(d.id.toString(), {
+      id: `anki-${d.id}`,
+      name: d.name,
+      flashcards: [],
+      subDecks: [],
+    });
   });
 
   onProgress({ message: 'Processing cards...', value: 50 });
@@ -189,7 +245,9 @@ export const importAnkiFile = async (
 
     let flashcard: FlashcardData | null = null;
     const fieldMap: { [key: string]: string } = {};
-    model.flds.forEach(fld => { fieldMap[fld.name] = fields[fld.ord] ?? ''; });
+    model.flds.forEach((fld) => {
+      fieldMap[fld.name] = fields[fld.ord] ?? '';
+    });
 
     // --- Improved IOE Detection ---
     let isIOE = false;
@@ -197,156 +255,207 @@ export const importAnkiFile = async (
     const templateFormat = template.qfmt + template.afmt;
 
     if (modelNameLower.includes('image occlusion')) {
-        isIOE = true;
+      isIOE = true;
     }
     if (!isIOE && templateFormat.includes('{{#Image}}') && templateFormat.includes('{{/Image}}')) {
-        isIOE = true;
+      isIOE = true;
     }
-    if (!isIOE && model.type === 1) { // is cloze type model
-        for (const fieldName in fieldMap) {
-            if (fieldMap[fieldName].includes('image-occlusion:rect')) {
-                isIOE = true;
-                break;
-            }
+    if (!isIOE && model.type === 1) {
+      // is cloze type model
+      for (const fieldName in fieldMap) {
+        if (fieldMap[fieldName].includes('image-occlusion:rect')) {
+          isIOE = true;
+          break;
         }
+      }
     }
-    
+
     let parsedAsIOE = false;
 
     if (isIOE) {
-        const descriptionFieldNames = ['Header', 'Footer', 'Remarks', 'Sources', 'Extra 1', 'Extra 2', 'Extra'];
-        const descriptionParts: string[] = [];
-        model.flds.sort((a, b) => a.ord - b.ord).forEach(fld => {
-            if (descriptionFieldNames.some(name => fld.name.toLowerCase() === name.toLowerCase())) {
-                const content = fieldMap[fld.name];
-                if (content) descriptionParts.push(content);
-            }
+      const descriptionFieldNames = [
+        'Header',
+        'Footer',
+        'Remarks',
+        'Sources',
+        'Extra 1',
+        'Extra 2',
+        'Extra',
+      ];
+      const descriptionParts: string[] = [];
+      model.flds
+        .sort((a, b) => a.ord - b.ord)
+        .forEach((fld) => {
+          if (descriptionFieldNames.some((name) => fld.name.toLowerCase() === name.toLowerCase())) {
+            const content = fieldMap[fld.name];
+            if (content) descriptionParts.push(content);
+          }
         });
-        const combinedDescription = descriptionParts.join('<hr>');
+      const combinedDescription = descriptionParts.join('<hr>');
 
-        let imageFieldName: string | null = null;
-        let masksFieldName: string | null = null;
-        
-        const imageField = model.flds.find(f => f.name.toLowerCase() === 'image');
-        if (imageField) imageFieldName = imageField.name;
-        const masksField = model.flds.find(f => f.name.toLowerCase() === 'masks');
-        if (masksField) masksFieldName = masksField.name;
+      let imageFieldName: string | null = null;
+      let masksFieldName: string | null = null;
 
-        if (!imageFieldName || !masksFieldName) {
-            for (const fld of model.flds) {
-                const fieldContent = fieldMap[fld.name];
-                if (!imageFieldName && fieldContent && fieldContent.includes('<img')) imageFieldName = fld.name;
-                if (!masksFieldName && fieldContent && fieldContent.includes('<svg') && fieldContent.includes('<rect')) masksFieldName = fld.name;
+      const imageField = model.flds.find((f) => f.name.toLowerCase() === 'image');
+      if (imageField) imageFieldName = imageField.name;
+      const masksField = model.flds.find((f) => f.name.toLowerCase() === 'masks');
+      if (masksField) masksFieldName = masksField.name;
+
+      if (!imageFieldName || !masksFieldName) {
+        for (const fld of model.flds) {
+          const fieldContent = fieldMap[fld.name];
+          if (!imageFieldName && fieldContent && fieldContent.includes('<img'))
+            imageFieldName = fld.name;
+          if (
+            !masksFieldName &&
+            fieldContent &&
+            fieldContent.includes('<svg') &&
+            fieldContent.includes('<rect')
+          )
+            masksFieldName = fld.name;
+        }
+      }
+
+      if (imageFieldName && masksFieldName) {
+        const imageFieldContent = fieldMap[imageFieldName] || '';
+        const masksFieldContent = fieldMap[masksFieldName] || '';
+
+        const imageUrlMatch = imageFieldContent.match(/src="([^"]+)"/);
+        const rawImageUrl = imageUrlMatch ? imageUrlMatch[1] : null;
+        const occlusions = parseOcclusionsFromSvg(masksFieldContent);
+
+        if (rawImageUrl && occlusions.length > 0) {
+          const questionOcclusion = occlusions.find((o) => o.id === ord + 1);
+          if (questionOcclusion) {
+            flashcard = {
+              id: `anki-c-${_id}`,
+              noteId: `anki-n-${noteId}`,
+              type: 'imageOcclusion',
+              imageUrl: `media://${fileNameMap.get(rawImageUrl) || rawImageUrl}`,
+              occlusions: occlusions,
+              questionOcclusionId: questionOcclusion.id,
+              description: replaceMediaSrc(combinedDescription),
+            } as ImageOcclusionFlashcard;
+            parsedAsIOE = true;
+          }
+        }
+      }
+
+      if (!parsedAsIOE) {
+        let clozeTextFieldName: string | null = null;
+        if (!imageFieldName) {
+          for (const fld of model.flds) {
+            if (fieldMap[fld.name] && fieldMap[fld.name].includes('<img')) {
+              imageFieldName = fld.name;
+              break;
             }
+          }
+        }
+        for (const fld of model.flds) {
+          if (
+            fieldMap[fld.name] &&
+            fieldMap[fld.name].includes('{{c') &&
+            fieldMap[fld.name].includes('image-occlusion:rect')
+          ) {
+            clozeTextFieldName = fld.name;
+            break;
+          }
         }
 
-        if (imageFieldName && masksFieldName) {
-            const imageFieldContent = fieldMap[imageFieldName] || '';
-            const masksFieldContent = fieldMap[masksFieldName] || '';
-            
-            const imageUrlMatch = imageFieldContent.match(/src="([^"]+)"/);
-            const rawImageUrl = imageUrlMatch ? imageUrlMatch[1] : null;
-            const occlusions = parseOcclusionsFromSvg(masksFieldContent);
+        if (imageFieldName && clozeTextFieldName) {
+          const imageFieldContent = fieldMap[imageFieldName];
+          const clozeTextFieldContent = fieldMap[clozeTextFieldName];
+          const imageUrlMatch = imageFieldContent.match(/src="([^"]+)"/);
+          const rawImageUrl = imageUrlMatch ? imageUrlMatch[1] : null;
 
-            if (rawImageUrl && occlusions.length > 0) {
-                const questionOcclusion = occlusions.find(o => o.id === ord + 1);
-                if (questionOcclusion) {
-                    flashcard = {
-                        id: `anki-c-${_id}`, noteId: `anki-n-${noteId}`, type: 'imageOcclusion',
-                        imageUrl: `media://${fileNameMap.get(rawImageUrl) || rawImageUrl}`, occlusions: occlusions,
-                        questionOcclusionId: questionOcclusion.id, description: replaceMediaSrc(combinedDescription),
-                    } as ImageOcclusionFlashcard;
-                    parsedAsIOE = true;
-                }
+          const clozeRegex = /{{c(\d+)::([^}]+)}}/g;
+          let match;
+          const parsedOcclusions: Occlusion[] = [];
+          const clozeMap = new Map<number, Occlusion>();
+
+          while ((match = clozeRegex.exec(clozeTextFieldContent)) !== null) {
+            const clozeIndex = parseInt(match[1], 10);
+            const content = match[2];
+
+            if (content.startsWith('image-occlusion:rect')) {
+              const params = content.split(':');
+              const coords: Record<string, number> = {};
+              params.forEach((p) => {
+                const [key, value] = p.split('=');
+                if (['left', 'top', 'width', 'height'].includes(key))
+                  coords[key] = parseFloat(value);
+              });
+
+              if (
+                coords.left !== undefined &&
+                coords.top !== undefined &&
+                coords.width !== undefined &&
+                coords.height !== undefined
+              ) {
+                const newOcclusion: Occlusion = {
+                  id: clozeIndex,
+                  x: coords.left,
+                  y: coords.top,
+                  width: coords.width,
+                  height: coords.height,
+                };
+                parsedOcclusions.push(newOcclusion);
+                clozeMap.set(clozeIndex, newOcclusion);
+              }
             }
+          }
+
+          if (rawImageUrl && parsedOcclusions.length > 0) {
+            const targetClozeIndex = ord + 1;
+            const questionOcclusion = clozeMap.get(targetClozeIndex);
+
+            if (questionOcclusion) {
+              flashcard = {
+                id: `anki-c-${_id}`,
+                noteId: `anki-n-${noteId}`,
+                type: 'imageOcclusion',
+                imageUrl: `media://${fileNameMap.get(rawImageUrl) || rawImageUrl}`,
+                occlusions: parsedOcclusions,
+                questionOcclusionId: questionOcclusion.id,
+                description: replaceMediaSrc(combinedDescription),
+              } as ImageOcclusionFlashcard;
+              parsedAsIOE = true;
+            }
+          }
         }
-
-        if (!parsedAsIOE) {
-            let clozeTextFieldName: string | null = null;
-            if (!imageFieldName) {
-                for (const fld of model.flds) {
-                    if (fieldMap[fld.name] && fieldMap[fld.name].includes('<img')) { imageFieldName = fld.name; break; }
-                }
-            }
-            for (const fld of model.flds) {
-                if (fieldMap[fld.name] && fieldMap[fld.name].includes('{{c') && fieldMap[fld.name].includes('image-occlusion:rect')) {
-                    clozeTextFieldName = fld.name; break;
-                }
-            }
-
-            if (imageFieldName && clozeTextFieldName) {
-                const imageFieldContent = fieldMap[imageFieldName];
-                const clozeTextFieldContent = fieldMap[clozeTextFieldName];
-                const imageUrlMatch = imageFieldContent.match(/src="([^"]+)"/);
-                const rawImageUrl = imageUrlMatch ? imageUrlMatch[1] : null;
-
-                const clozeRegex = /{{c(\d+)::([^}]+)}}/g;
-                let match;
-                const parsedOcclusions: Occlusion[] = [];
-                const clozeMap = new Map<number, Occlusion>();
-
-                while ((match = clozeRegex.exec(clozeTextFieldContent)) !== null) {
-                    const clozeIndex = parseInt(match[1], 10);
-                    const content = match[2];
-
-                    if (content.startsWith('image-occlusion:rect')) {
-                        const params = content.split(':');
-                        const coords: Record<string, number> = {};
-                        params.forEach(p => {
-                            const [key, value] = p.split('=');
-                            if (['left', 'top', 'width', 'height'].includes(key)) coords[key] = parseFloat(value);
-                        });
-
-                        if (coords.left !== undefined && coords.top !== undefined && coords.width !== undefined && coords.height !== undefined) {
-                            const newOcclusion: Occlusion = { id: clozeIndex, x: coords.left, y: coords.top, width: coords.width, height: coords.height };
-                            parsedOcclusions.push(newOcclusion);
-                            clozeMap.set(clozeIndex, newOcclusion);
-                        }
-                    }
-                }
-
-                if (rawImageUrl && parsedOcclusions.length > 0) {
-                    const targetClozeIndex = ord + 1;
-                    const questionOcclusion = clozeMap.get(targetClozeIndex);
-
-                    if (questionOcclusion) {
-                        flashcard = {
-                            id: `anki-c-${_id}`, noteId: `anki-n-${noteId}`, type: 'imageOcclusion',
-                            imageUrl: `media://${fileNameMap.get(rawImageUrl) || rawImageUrl}`, occlusions: parsedOcclusions,
-                            questionOcclusionId: questionOcclusion.id, description: replaceMediaSrc(combinedDescription),
-                        } as ImageOcclusionFlashcard;
-                        parsedAsIOE = true;
-                    }
-                }
-            }
-        }
+      }
     }
-    
+
     if (!parsedAsIOE) {
-        if (model.type === 1 || template.qfmt.includes('{{cloze:')) {
-            flashcard = {
-                id: `anki-c-${_id}`, noteId: `anki-n-${noteId}`, type: 'cloze',
-                text: replaceMediaSrc(fieldMap[model.flds[0].name] ?? ''),
-                description: replaceMediaSrc(fieldMap[model.flds[1]?.name] ?? ''),
-            } as ClozeFlashcard;
-        } else {
-            let question = template.qfmt;
-            let answer = template.afmt;
+      if (model.type === 1 || template.qfmt.includes('{{cloze:')) {
+        flashcard = {
+          id: `anki-c-${_id}`,
+          noteId: `anki-n-${noteId}`,
+          type: 'cloze',
+          text: replaceMediaSrc(fieldMap[model.flds[0].name] ?? ''),
+          description: replaceMediaSrc(fieldMap[model.flds[1]?.name] ?? ''),
+        } as ClozeFlashcard;
+      } else {
+        let question = template.qfmt;
+        let answer = template.afmt;
 
-            answer = answer.replace(/{{FrontSide}}/g, '');
-            answer = answer.replace(/<hr id=answer>/g, '');
+        answer = answer.replace(/{{FrontSide}}/g, '');
+        answer = answer.replace(/<hr id=answer>/g, '');
 
-            for (const key in fieldMap) {
-                const fieldContent = fieldMap[key] || '';
-                question = question.replace(new RegExp(`{{${key}}}`, 'g'), fieldContent);
-                answer = answer.replace(new RegExp(`{{${key}}}`, 'g'), fieldContent);
-            }
-            
-            flashcard = {
-                id: `anki-c-${_id}`, noteId: `anki-n-${noteId}`, type: 'basic',
-                question: replaceMediaSrc(question), answer: replaceMediaSrc(answer.trim()),
-            } as BasicFlashcard;
+        for (const key in fieldMap) {
+          const fieldContent = fieldMap[key] || '';
+          question = question.replace(new RegExp(`{{${key}}}`, 'g'), fieldContent);
+          answer = answer.replace(new RegExp(`{{${key}}}`, 'g'), fieldContent);
         }
+
+        flashcard = {
+          id: `anki-c-${_id}`,
+          noteId: `anki-n-${noteId}`,
+          type: 'basic',
+          question: replaceMediaSrc(question),
+          answer: replaceMediaSrc(answer.trim()),
+        } as BasicFlashcard;
+      }
     }
 
     if (flashcard) {
@@ -355,7 +464,10 @@ export const importAnkiFile = async (
       deck.flashcards.push(flashcard);
     }
     if (i % 100 === 0) {
-        onProgress({ message: `Processing cards... (${i}/${cardsData.length})`, value: 50 + (i / cardsData.length) * 40 });
+      onProgress({
+        message: `Processing cards... (${i}/${cardsData.length})`,
+        value: 50 + (i / cardsData.length) * 40,
+      });
     }
   }
 
@@ -365,9 +477,9 @@ export const importAnkiFile = async (
 
   // Create a map from full deck name to deck object for efficient lookup
   const nameToDeckMap = new Map<string, DeckData>();
-  allDecks.forEach(d => nameToDeckMap.set(d.name, d));
+  allDecks.forEach((d) => nameToDeckMap.set(d.name, d));
 
-  allDecks.forEach(deck => {
+  allDecks.forEach((deck) => {
     const parts = deck.name.split('::');
     if (parts.length > 1) {
       const parentName = parts.slice(0, -1).join('::');
@@ -384,13 +496,13 @@ export const importAnkiFile = async (
 
   // Now shorten the names of all sub-decks recursively
   const shortenDeckNames = (decks: DeckData[]) => {
-      decks.forEach(deck => {
-          const parts = deck.name.split('::');
-          deck.name = parts[parts.length - 1];
-          if (deck.subDecks) {
-              shortenDeckNames(deck.subDecks);
-          }
-      });
+    decks.forEach((deck) => {
+      const parts = deck.name.split('::');
+      deck.name = parts[parts.length - 1];
+      if (deck.subDecks) {
+        shortenDeckNames(deck.subDecks);
+      }
+    });
   };
   shortenDeckNames(rootDecks);
 
