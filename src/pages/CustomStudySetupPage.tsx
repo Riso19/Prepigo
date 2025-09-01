@@ -1,14 +1,28 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useDecks } from '@/contexts/DecksContext';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { DeckTreeSelector } from '@/components/DeckTreeSelector';
 import { TagEditor } from '@/components/TagEditor';
@@ -22,13 +36,12 @@ import { Loader2 } from 'lucide-react';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useExams } from '@/contexts/ExamsContext';
 import { format } from 'date-fns';
-import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
 
 const customStudySchema = z.object({
-  cardLimit: z.coerce.number().int().min(1, "Must be at least 1 card."),
+  cardLimit: z.coerce.number().int().min(1, 'Must be at least 1 card.'),
   srsEnabled: z.boolean(),
-  selectedDeckIds: z.set(z.string()).min(1, "Please select at least one deck."),
+  selectedDeckIds: z.set(z.string()).min(1, 'Please select at least one deck.'),
   filterType: z.enum(['all', 'new', 'due', 'failed', 'difficulty']),
   failedDays: z.coerce.number().int().min(1).optional(),
   tags: z.array(z.string()),
@@ -49,159 +62,238 @@ const CustomStudySetupPage = () => {
   const [availableCardCount, setAvailableCardCount] = useState<number | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [selectedExamId, setSelectedExamId] = useState<string>('');
-  const [difficultyRange, setDifficultyRange] = useState([5, 10]);
 
   const form = useForm<CustomStudyFormValues>({
     resolver: zodResolver(customStudySchema),
     defaultValues: {
       cardLimit: 20,
       srsEnabled: true,
-      selectedDeckIds: new Set(),
+      selectedDeckIds: new Set<string>(),
       filterType: 'all',
-      failedDays: 7,
       tags: [],
       tagFilterType: 'any',
       order: 'random',
-      filterDifficultyMin: 5,
+      failedDays: 7,
+      filterDifficultyMin: 1,
       filterDifficultyMax: 10,
     },
   });
 
-  const watchedValues = form.watch();
+  const selectedDeckIds = form.watch('selectedDeckIds') as Set<string>;
+  const filterType = form.watch('filterType') as 'all' | 'new' | 'due' | 'failed' | 'difficulty';
+  const tags = form.watch('tags') as string[];
+  const tagFilterType = form.watch('tagFilterType') as 'any' | 'all';
+  const failedDays = form.watch('failedDays') as number | undefined;
+  const filterDifficultyMin = form.watch('filterDifficultyMin') as number | undefined;
+  const filterDifficultyMax = form.watch('filterDifficultyMax') as number | undefined;
 
   useEffect(() => {
     if (selectedExamId) {
-        const selectedExam = exams.find(e => e.id === selectedExamId);
-        if (selectedExam) {
-            form.setValue('selectedDeckIds', new Set(selectedExam.deckIds));
-            form.setValue('tags', selectedExam.tags);
-            form.setValue('tagFilterType', selectedExam.tagFilterType);
-            form.setValue('filterType', selectedExam.filterMode);
-            
-            if (selectedExam.filterMode === 'difficulty') {
-                const min = selectedExam.filterDifficultyMin || 5;
-                const max = selectedExam.filterDifficultyMax || 10;
-                form.setValue('filterDifficultyMin', min);
-                form.setValue('filterDifficultyMax', max);
-                setDifficultyRange([min, max]);
-            }
+      const selectedExam = exams.find((e) => e.id === selectedExamId);
+      if (selectedExam) {
+        form.setValue('selectedDeckIds', new Set(selectedExam.deckIds));
+        form.setValue('tags', selectedExam.tags);
+        form.setValue('tagFilterType', selectedExam.tagFilterType);
+        form.setValue('filterType', selectedExam.filterMode);
+
+        if (selectedExam.filterMode === 'difficulty') {
+          const min = selectedExam.filterDifficultyMin || 1;
+          const max = selectedExam.filterDifficultyMax || 10;
+          form.setValue('filterDifficultyMin', min);
+          form.setValue('filterDifficultyMax', max);
         }
+      }
     }
   }, [selectedExamId, exams, form]);
 
-  useEffect(() => {
-    const calculateCount = async () => {
-      setIsCalculating(true);
-      const now = new Date();
-      const allCards: FlashcardData[] = []; // Initialize with all cards from decks
-      decks.forEach((deck: DeckData) => {
-        allCards.push(...deck.flashcards);
-      });
-      
-      let cardsToFilter: FlashcardData[] = allCards;
+  const getAllDecksFlat = useCallback((deckList: DeckData[]): DeckData[] => {
+    return deckList.flatMap((deck) => [
+      deck,
+      ...(deck.subDecks ? getAllDecksFlat(deck.subDecks) : []),
+    ]);
+  }, []);
 
-      if (watchedValues.tags.length > 0) {
-        cardsToFilter = cardsToFilter.filter((card: FlashcardData) => {
+  const getCardsFromDecks = useCallback(
+    (deckIds: Set<string>): FlashcardData[] => {
+      const selectedDecks = getAllDecksFlat(
+        Array.from(deckIds)
+          .map((id: string) => decks.find((d: DeckData) => d.id === id))
+          .filter(Boolean) as DeckData[],
+      );
+
+      return selectedDecks.flatMap(
+        (deck: DeckData) =>
+          deck.flashcards?.map((f: FlashcardData) => ({
+            ...f,
+            deckId: deck.id,
+            deckName: deck.name,
+            srs: f.srs || {},
+          })) || [],
+      );
+    },
+    [decks, getAllDecksFlat],
+  );
+
+  const filterCards = useCallback(
+    async (
+      cards: FlashcardData[],
+      filters: {
+        tags: string[];
+        tagFilterType: 'any' | 'all';
+        filterType: string;
+        failedDays?: number;
+        filterDifficultyMin?: number;
+        filterDifficultyMax?: number;
+      },
+    ): Promise<FlashcardData[]> => {
+      const now = new Date();
+      let result = [...cards];
+
+      if (filters.tags?.length > 0) {
+        result = result.filter((card) => {
           if (!card.tags || card.tags.length === 0) return false;
-          if (watchedValues.tagFilterType === 'any') {
-            return watchedValues.tags.some((tag: string) => card.tags!.includes(tag));
+          if (filters.tagFilterType === 'any') {
+            return filters.tags.some((tag) => card.tags!.includes(tag));
           } else {
-            return watchedValues.tags.every((tag: string) => card.tags!.includes(tag));
+            return filters.tags.every((tag) => card.tags!.includes(tag));
           }
         });
       }
 
-      // Variable declarations for switch cases
-      let failedDays: number;
-      let cutoffDate: Date;
-      let allLogs: Array<{ review: string; rating: Rating; cardId: string }>;
-      let recentFailedCardIds: Set<string>;
-      let min: number;
-      let max: number;
-      // srsData and difficulty are now scoped within their usage blocks
-
-      switch (watchedValues.filterType) {
+      switch (filters.filterType) {
         case 'new':
-          cardsToFilter = cardsToFilter.filter((c: FlashcardData) => {
+          result = result.filter((card) => {
             if (settings.scheduler === 'sm2') {
-              return !c.srs?.sm2 || c.srs.sm2.state === 'new' || !c.srs.sm2.state;
+              return !card.srs?.sm2 || card.srs.sm2.state === 'new' || !card.srs.sm2.state;
             }
-            const srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
+            const srsData = settings.scheduler === 'fsrs6' ? card.srs?.fsrs6 : card.srs?.fsrs;
             return !srsData || srsData.state === State.New;
           });
           break;
+
         case 'due':
-          cardsToFilter = cardsToFilter.filter((c: FlashcardData) => {
+          result = result.filter((card) => {
             if (settings.scheduler === 'sm2') {
-              return !!c.srs?.sm2 && new Date(c.srs.sm2.due) <= now;
+              return !!card.srs?.sm2 && new Date(card.srs.sm2.due) <= now;
             }
-            const srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
+            const srsData = settings.scheduler === 'fsrs6' ? card.srs?.fsrs6 : card.srs?.fsrs;
             return !!srsData && new Date(srsData.due) <= now;
           });
           break;
-        case 'failed':
-          failedDays = watchedValues.failedDays || 7;
-          cutoffDate = new Date();
-          cutoffDate.setDate(now.getDate() - failedDays);
-          allLogs = await getAllReviewLogsFromDB() as Array<{ review: string; rating: Rating; cardId: string }>; // typed for TS
-          recentFailedCardIds = new Set<string>();
-          allLogs.forEach(log => {
-            if (new Date(log.review) >= cutoffDate && (log.rating === Rating.Again || log.rating === Rating.Hard)) {
-              recentFailedCardIds.add(log.cardId);
-            }
-          });
-          cardsToFilter = cardsToFilter.filter((c: FlashcardData) => recentFailedCardIds.has(c.id));
+
+        case 'failed': {
+          const daysToCheck = filters.failedDays || 7;
+          const cutoff = new Date();
+          cutoff.setDate(now.getDate() - daysToCheck);
+          const logs = (await getAllReviewLogsFromDB()) as Array<{
+            review: string;
+            rating: Rating;
+            cardId: string;
+          }>;
+          const failedCardIds = new Set<string>(
+            logs
+              .filter(
+                (log) =>
+                  new Date(log.review) >= cutoff &&
+                  (log.rating === Rating.Again || log.rating === Rating.Hard),
+              )
+              .map((log) => log.cardId),
+          );
+          result = result.filter((card) => failedCardIds.has(card.id));
           break;
-        case 'difficulty':
-            min = watchedValues.filterDifficultyMin || 1;
-            max = watchedValues.filterDifficultyMax || 10;
-            cardsToFilter = cardsToFilter.filter((c: FlashcardData) => {
-                const srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
-                if (!srsData || srsData.state === State.New) return false;
-                const difficulty = 'difficulty' in srsData ? srsData.difficulty : 0;
-                return difficulty >= min && difficulty <= max;
-            });
-            break;
+        }
+
+        case 'difficulty': {
+          const minDiff = filters.filterDifficultyMin || 1;
+          const maxDiff = filters.filterDifficultyMax || 10;
+          result = result.filter((card) => {
+            const srs = settings.scheduler === 'fsrs6' ? card.srs?.fsrs6 : card.srs?.fsrs;
+            if (!srs || srs.state === State.New) return false;
+            const diff = 'difficulty' in srs ? srs.difficulty : 0;
+            return diff >= minDiff && diff <= maxDiff;
+          });
+          break;
+        }
       }
 
-      setAvailableCardCount(cardsToFilter.length);
-      setIsCalculating(false);
-    };
+      return result;
+    },
+    [settings.scheduler],
+  );
 
+  const calculateCount = useCallback(async (): Promise<void> => {
+    if (!selectedDeckIds?.size) {
+      setAvailableCardCount(0);
+      return;
+    }
+
+    try {
+      setIsCalculating(true);
+      const cards = getCardsFromDecks(selectedDeckIds);
+      const filteredCards = await filterCards(cards, {
+        tags,
+        tagFilterType,
+        filterType,
+        failedDays,
+        filterDifficultyMin,
+        filterDifficultyMax,
+      });
+
+      setAvailableCardCount(filteredCards.length);
+    } catch (error) {
+      console.error('Error calculating card count:', error);
+      setAvailableCardCount(0);
+    } finally {
+      setIsCalculating(false);
+    }
+  }, [
+    selectedDeckIds,
+    filterType,
+    tags,
+    tagFilterType,
+    failedDays,
+    filterDifficultyMin,
+    filterDifficultyMax,
+    getCardsFromDecks,
+    filterCards,
+  ]);
+
+  useEffect(() => {
     const handler = setTimeout(() => {
-      calculateCount();
+      calculateCount().catch(console.error);
     }, 300);
 
     return () => clearTimeout(handler);
-  }, [watchedValues, decks, settings]);
+  }, [calculateCount]);
 
   const onSubmit = async (values: CustomStudyFormValues) => {
-    if (availableCardCount === 0) {
-        toast.error("No cards found matching your criteria.");
-        return;
+    if (availableCardCount === null || availableCardCount === 0) {
+      toast.error('No cards found matching your criteria.');
+      return;
     }
-    
-    const loadingToast = toast.loading("Building custom study session...");
-    
-    const getAllDecksFlat = (d: DeckData[]): DeckData[] => d.flatMap(deck => [deck, ...(deck.subDecks ? getAllDecksFlat(deck.subDecks) : [])]);
+
+    const loadingToast = toast.loading('Building custom study session...');
+
+    const getAllDecksFlat = (d: DeckData[]): DeckData[] =>
+      d.flatMap((deck) => [deck, ...(deck.subDecks ? getAllDecksFlat(deck.subDecks) : [])]);
     const allDecks = getAllDecksFlat(decks);
     const cardSet = new Set<FlashcardData>();
-    values.selectedDeckIds.forEach(id => {
-        const deck = allDecks.find(d => d.id === id);
-        if (deck) deck.flashcards.forEach(card => cardSet.add(card));
+    values.selectedDeckIds.forEach((id) => {
+      const deck = allDecks.find((d) => d.id === id);
+      if (deck) deck.flashcards.forEach((card) => cardSet.add(card));
     });
     let filteredCards = Array.from(cardSet);
 
     if (values.tags.length > 0) {
-        filteredCards = filteredCards.filter(card => {
-            if (!card.tags || card.tags.length === 0) return false;
-            if (values.tagFilterType === 'any') return values.tags.some(tag => card.tags!.includes(tag));
-            else return values.tags.every(tag => card.tags!.includes(tag));
-        });
+      filteredCards = filteredCards.filter((card) => {
+        if (!card.tags || card.tags.length === 0) return false;
+        if (values.tagFilterType === 'any')
+          return values.tags.some((tag) => card.tags!.includes(tag));
+        else return values.tags.every((tag) => card.tags!.includes(tag));
+      });
     }
 
     const now = new Date();
-    // Variable declarations for switch cases
     let failedDays: number;
     let cutoffDate: Date;
     let allLogs: Array<{ review: string; rating: Rating; cardId: string }>;
@@ -212,65 +304,73 @@ const CustomStudySetupPage = () => {
     let difficulty: number;
 
     switch (values.filterType) {
-        case 'new':
-            filteredCards = filteredCards.filter(c => {
-                if (settings.scheduler === 'sm2') {
-                    return !c.srs?.sm2 || c.srs.sm2.state === 'new' || !c.srs.sm2.state;
-                }
-                srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
-                return !srsData || srsData.state === State.New;
-            });
-            break;
-        case 'due':
-            filteredCards = filteredCards.filter(c => {
-                if (settings.scheduler === 'sm2') {
-                    return !!c.srs?.sm2 && new Date(c.srs.sm2.due) <= now;
-                }
-                srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
-                return !!srsData && new Date(srsData.due) <= now;
-            });
-            break;
-        case 'failed':
-            failedDays = values.failedDays || 7;
-            cutoffDate = new Date();
-            cutoffDate.setDate(now.getDate() - failedDays);
-            allLogs = await getAllReviewLogsFromDB() as Array<{ review: string; rating: Rating; cardId: string }>; // typed for TS
-            recentFailedCardIds = new Set<string>(
-                allLogs
-                    .filter(log => new Date(log.review) >= cutoffDate && (log.rating === Rating.Again || log.rating === Rating.Hard))
-                    .map(log => log.cardId)
-            );
-            filteredCards = filteredCards.filter(c => recentFailedCardIds.has(c.id));
-            break;
-        case 'difficulty':
-            min = values.filterDifficultyMin || 1;
-            max = values.filterDifficultyMax || 10;
-            filteredCards = filteredCards.filter(c => {
-                srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
-                if (!srsData || srsData.state === State.New) return false;
-                difficulty = srsData.difficulty;
-                return difficulty >= min && difficulty <= max;
-            });
-            break;
+      case 'new':
+        filteredCards = filteredCards.filter((c) => {
+          if (settings.scheduler === 'sm2') {
+            return !c.srs?.sm2 || c.srs.sm2.state === 'new' || !c.srs.sm2.state;
+          }
+          srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
+          return !srsData || srsData.state === State.New;
+        });
+        break;
+      case 'due':
+        filteredCards = filteredCards.filter((c) => {
+          if (settings.scheduler === 'sm2') {
+            return !!c.srs?.sm2 && new Date(c.srs.sm2.due) <= now;
+          }
+          srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
+          return !!srsData && new Date(srsData.due) <= now;
+        });
+        break;
+      case 'failed':
+        failedDays = values.failedDays || 7;
+        cutoffDate = new Date();
+        cutoffDate.setDate(now.getDate() - failedDays);
+        allLogs = (await getAllReviewLogsFromDB()) as Array<{
+          review: string;
+          rating: Rating;
+          cardId: string;
+        }>; // typed for TS
+        recentFailedCardIds = new Set<string>(
+          allLogs
+            .filter(
+              (log) =>
+                new Date(log.review) >= cutoffDate &&
+                (log.rating === Rating.Again || log.rating === Rating.Hard),
+            )
+            .map((log) => log.cardId),
+        );
+        filteredCards = filteredCards.filter((c) => recentFailedCardIds.has(c.id));
+        break;
+      case 'difficulty':
+        min = values.filterDifficultyMin || 1;
+        max = values.filterDifficultyMax || 10;
+        filteredCards = filteredCards.filter((c) => {
+          srsData = settings.scheduler === 'fsrs6' ? c.srs?.fsrs6 : c.srs?.fsrs;
+          if (!srsData || srsData.state === State.New) return false;
+          difficulty = srsData.difficulty;
+          return difficulty >= min && difficulty <= max;
+        });
+        break;
     }
 
     switch (values.order) {
-        case 'random':
-            filteredCards.sort(() => Math.random() - 0.5);
-            break;
-        case 'sequentialNewest':
-            filteredCards.sort((a, b) => (b.srs?.newCardOrder || 0) - (a.srs?.newCardOrder || 0));
-            break;
-        case 'sequentialOldest':
-            filteredCards.sort((a, b) => (a.srs?.newCardOrder || 0) - (b.srs?.newCardOrder || 0));
-            break;
+      case 'random':
+        filteredCards.sort(() => Math.random() - 0.5);
+        break;
+      case 'sequentialNewest':
+        filteredCards.sort((a, b) => (b.srs?.newCardOrder || 0) - (a.srs?.newCardOrder || 0));
+        break;
+      case 'sequentialOldest':
+        filteredCards.sort((a, b) => (a.srs?.newCardOrder || 0) - (b.srs?.newCardOrder || 0));
+        break;
     }
 
     const finalQueue = filteredCards.slice(0, values.cardLimit);
     toast.success(`Starting session with ${finalQueue.length} cards.`, { id: loadingToast });
 
     navigate('/study/custom', {
-        state: { queue: finalQueue, srsEnabled: values.srsEnabled, title: 'Custom Study Session' }
+      state: { queue: finalQueue, srsEnabled: values.srsEnabled, title: 'Custom Study Session' },
     });
   };
 
@@ -286,28 +386,27 @@ const CustomStudySetupPage = () => {
           <CardContent>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-                
                 {exams.length > 0 && (
-                    <div className="space-y-2">
-                        <FormLabel>Load from Exam Schedule</FormLabel>
-                        <Select onValueChange={setSelectedExamId} value={selectedExamId}>
-                            <FormControl>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select an exam to load its settings..." />
-                                </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                                {exams.map(exam => (
-                                    <SelectItem key={exam.id} value={exam.id}>
-                                        {exam.name} ({format(new Date(exam.date), 'PPP')})
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <FormDescription>
-                            This will populate the filters below based on the selected exam.
-                        </FormDescription>
-                    </div>
+                  <div className="space-y-2">
+                    <FormLabel>Load from Exam Schedule</FormLabel>
+                    <Select onValueChange={setSelectedExamId} value={selectedExamId}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select an exam to load its settings..." />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {exams.map((exam) => (
+                          <SelectItem key={exam.id} value={exam.id}>
+                            {exam.name} ({format(new Date(exam.date), 'PPP')})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      This will populate the filters below based on the selected exam.
+                    </FormDescription>
+                  </div>
                 )}
 
                 <FormField
@@ -316,7 +415,7 @@ const CustomStudySetupPage = () => {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Decks to include</FormLabel>
-                      <div className={cn(selectedExamId && "opacity-50 pointer-events-none")}>
+                      <div className={cn(selectedExamId && 'opacity-50 pointer-events-none')}>
                         <FormControl>
                           <DeckTreeSelector
                             decks={decks}
@@ -336,121 +435,190 @@ const CustomStudySetupPage = () => {
                 />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormField control={form.control} name="filterType" render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Filter by card state</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                                <SelectContent>
-                                    <SelectItem value="all">All cards</SelectItem>
-                                    <SelectItem value="new">New cards only</SelectItem>
-                                    <SelectItem value="due">Due cards only</SelectItem>
-                                    <SelectItem value="failed">Review failed in last X days</SelectItem>
-                                    <SelectItem value="difficulty">Filter by difficulty (FSRS only)</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <FormMessage />
-                        </FormItem>
-                    )} />
-                    {watchedValues.filterType === 'failed' && (
-                        <FormField control={form.control} name="failedDays" render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Number of days</FormLabel>
-                                <FormControl><Input type="number" {...field} /></FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )} />
+                  <FormField
+                    control={form.control}
+                    name="filterType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Filter by card state</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="all">All cards</SelectItem>
+                            <SelectItem value="new">New cards only</SelectItem>
+                            <SelectItem value="due">Due cards only</SelectItem>
+                            <SelectItem value="failed">Review failed in last X days</SelectItem>
+                            <SelectItem value="difficulty">
+                              Filter by difficulty (FSRS only)
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {field.value === 'failed' && (
+                          <FormField
+                            control={form.control}
+                            name="failedDays"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Failed in the last {field.value} days</FormLabel>
+                                <FormControl>
+                                  <Input type="number" min={1} max={30} {...field} />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                        )}
+                        {field.value === 'difficulty' && (
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium">Difficulty Range</span>
+                              <span className="text-sm text-muted-foreground">
+                                {form.watch('filterDifficultyMin') || 1} -{' '}
+                                {form.watch('filterDifficultyMax') || 10}
+                              </span>
+                            </div>
+                            <FormField
+                              control={form.control}
+                              name="filterDifficultyMin"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormControl>
+                                    <Input type="number" min={1} max={10} {...field} />
+                                  </FormControl>
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="filterDifficultyMax"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormControl>
+                                    <Input type="number" min={1} max={10} {...field} />
+                                  </FormControl>
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                        )}
+                        <FormMessage />
+                      </FormItem>
                     )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="cardLimit"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-2">
+                          <span>Number of cards</span>
+                          <span className="text-muted-foreground font-normal">
+                            {isCalculating ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              `(${availableCardCount ?? 0} available)`
+                            )}
+                          </span>
+                        </FormLabel>
+                        <FormControl>
+                          <Input type="number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
 
-                {watchedValues.filterType === 'difficulty' && (
-                    <div className="p-4 border rounded-md space-y-4">
-                        <div className="flex justify-between">
-                            <FormLabel>Difficulty Range</FormLabel>
-                            <span className="text-sm font-medium">{difficultyRange[0]} - {difficultyRange[1]}</span>
-                        </div>
-                        <Slider
-                            value={difficultyRange}
-                            min={1} max={10} step={1}
-                            onValueChange={(value) => {
-                                setDifficultyRange(value);
-                                form.setValue('filterDifficultyMin', value[0]);
-                                form.setValue('filterDifficultyMax', value[1]);
-                            }}
-                        />
-                        <FormDescription>1 is easiest, 10 is hardest. This only includes cards that have been reviewed at least once.</FormDescription>
-                    </div>
-                )}
-
                 <div className="space-y-4">
-                    <FormLabel>Filter by tags</FormLabel>
-                    <FormField control={form.control} name="tags" render={({ field }) => (
-                        <FormItem>
-                            <FormControl>
-                                <TagEditor tags={field.value} onTagsChange={field.onChange} allTags={allTags} />
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )} />
-                    <FormField control={form.control} name="tagFilterType" render={({ field }) => (
-                        <FormItem>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                                <FormControl><SelectTrigger className="w-[280px]"><SelectValue /></SelectTrigger></FormControl>
-                                <SelectContent>
-                                    <SelectItem value="any">Match any of the selected tags</SelectItem>
-                                    <SelectItem value="all">Match all of the selected tags</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <FormMessage />
-                        </FormItem>
-                    )} />
+                  <FormLabel>Filter by tags</FormLabel>
+                  <FormField
+                    control={form.control}
+                    name="tags"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <TagEditor
+                            tags={field.value}
+                            onTagsChange={field.onChange}
+                            allTags={allTags}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="tagFilterType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger className="w-[280px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="any">Match any of the selected tags</SelectItem>
+                            <SelectItem value="all">Match all of the selected tags</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormField control={form.control} name="order" render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Order</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                                <SelectContent>
-                                    <SelectItem value="random">Random</SelectItem>
-                                    <SelectItem value="sequentialOldest">Oldest first</SelectItem>
-                                    <SelectItem value="sequentialNewest">Newest first</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <FormMessage />
-                        </FormItem>
-                    )} />
-                    <FormField control={form.control} name="cardLimit" render={({ field }) => (
-                        <FormItem>
-                            <FormLabel className="flex items-center gap-2">
-                                <span>Number of cards</span>
-                                <span className="text-muted-foreground font-normal">
-                                    {isCalculating ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                        `(${availableCardCount ?? 0} available)`
-                                    )}
-                                </span>
-                            </FormLabel>
-                            <FormControl><Input type="number" {...field} /></FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )} />
+                  <FormField
+                    control={form.control}
+                    name="order"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Order</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="random">Random</SelectItem>
+                            <SelectItem value="sequentialOldest">Oldest first</SelectItem>
+                            <SelectItem value="sequentialNewest">Newest first</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
 
-                <FormField control={form.control} name="srsEnabled" render={({ field }) => (
+                <FormField
+                  control={form.control}
+                  name="srsEnabled"
+                  render={({ field }) => (
                     <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                        <div className="space-y-0.5">
-                            <FormLabel>Enable Spaced Repetition</FormLabel>
-                            <FormDescription>If disabled, your answers won't be graded or affect scheduling.</FormDescription>
-                        </div>
-                        <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                      <div className="space-y-0.5">
+                        <FormLabel>Enable Spaced Repetition</FormLabel>
+                        <FormDescription>
+                          If disabled, your answers won't be graded or affect scheduling.
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
                     </FormItem>
-                )} />
+                  )}
+                />
 
                 <div className="flex justify-end">
-                    <Button type="submit" size="lg">Start Custom Study</Button>
+                  <Button type="submit" size="lg">
+                    Start Custom Study
+                  </Button>
                 </div>
               </form>
             </Form>

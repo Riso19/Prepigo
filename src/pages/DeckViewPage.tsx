@@ -1,11 +1,23 @@
 import { useState, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useDecks } from '@/contexts/DecksContext';
-import { findDeckById, deleteFlashcard, findDeckPathById, getEffectiveSrsSettings } from '@/lib/deck-utils';
+import {
+  findDeckById,
+  deleteFlashcard,
+  findDeckPathById,
+  getEffectiveSrsSettings,
+} from '@/lib/deck-utils';
 import { getAllFlashcardsWithDeckPath, FlashcardWithContext } from '@/lib/card-utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,13 +36,19 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { MediaAwareImage } from '@/components/MediaAwareImage';
 import { HtmlRenderer } from '@/components/HtmlRenderer';
 import { Badge } from '@/components/ui/badge';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 import { DeckSettingsForm } from '@/components/DeckSettingsForm';
 import { useSettings } from '@/contexts/SettingsContext';
 import { FlashcardStatus } from '@/components/FlashcardStatus';
 import { State } from 'ts-fsrs';
 import { DynamicDueDate } from '@/components/DynamicDueDate';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import ConflictCenter from '@/components/ConflictCenter';
 
 const DeckViewPage = () => {
   const { deckId } = useParams<{ deckId: string }>();
@@ -42,10 +60,19 @@ const DeckViewPage = () => {
   const { settings: globalSettings } = useSettings();
 
   const deck = useMemo(() => (deckId ? findDeckById(decks, deckId) : null), [decks, deckId]);
-  const deckPath = useMemo(() => (deckId ? findDeckPathById(decks, deckId)?.join(' / ') : null), [decks, deckId]);
-  
-  const flashcardsWithContext = useMemo(() => (deck ? getAllFlashcardsWithDeckPath(deck) : []), [deck]);
-  const visibleFlashcardsWithContext = useMemo(() => flashcardsWithContext.slice(0, visibleCount), [flashcardsWithContext, visibleCount]);
+  const deckPath = useMemo(
+    () => (deckId ? findDeckPathById(decks, deckId)?.join(' / ') : null),
+    [decks, deckId],
+  );
+
+  const flashcardsWithContext = useMemo(
+    () => (deck ? getAllFlashcardsWithDeckPath(deck) : []),
+    [deck],
+  );
+  const visibleFlashcardsWithContext = useMemo(
+    () => flashcardsWithContext.slice(0, visibleCount),
+    [flashcardsWithContext, visibleCount],
+  );
 
   const effectiveSettings = useMemo(() => {
     if (deck) {
@@ -55,13 +82,13 @@ const DeckViewPage = () => {
   }, [deck, decks, globalSettings]);
 
   const handleLoadMore = () => {
-    setVisibleCount(prev => prev + 100);
+    setVisibleCount((prev) => prev + 100);
   };
 
   const handleDeleteConfirm = () => {
     if (cardToDelete) {
-      setDecks(prevDecks => deleteFlashcard(prevDecks, cardToDelete.id));
-      showSuccess("Flashcard deleted successfully.");
+      setDecks((prevDecks) => deleteFlashcard(prevDecks, cardToDelete.id));
+      showSuccess('Flashcard deleted successfully.');
       setCardToDelete(null);
     }
   };
@@ -71,7 +98,9 @@ const DeckViewPage = () => {
       <div className="min-h-screen flex flex-col items-center justify-center text-center p-4">
         <h2 className="text-2xl font-bold mb-4">Deck not found</h2>
         <Button asChild>
-          <Link to="/"><Home className="mr-2 h-4 w-4" /> Go back to My Decks</Link>
+          <Link to="/">
+            <Home className="mr-2 h-4 w-4" /> Go back to My Decks
+          </Link>
         </Button>
       </div>
     );
@@ -79,9 +108,9 @@ const DeckViewPage = () => {
 
   const renderDesktopView = (cards: FlashcardWithContext[]) => {
     return (
-      <ScrollArea className="w-full whitespace-nowrap rounded-md border">
+      <ScrollArea className="w-full rounded-md border overflow-x-auto">
         <Table>
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-10 bg-background">
             <TableRow>
               <TableHead className="w-[100px]">Type</TableHead>
               <TableHead>Front / Question</TableHead>
@@ -95,31 +124,50 @@ const DeckViewPage = () => {
           </TableHeader>
           <TableBody>
             {cards.map(({ flashcard: card, deckPath }) => (
-              <TableRow key={card.id} className="text-xs sm:text-sm">
-                <TableCell className="capitalize font-medium">{card.type === 'imageOcclusion' ? 'Image' : card.type}</TableCell>
-                <TableCell className="max-w-[250px]">
+              <TableRow key={card.id} className="text-xs sm:text-sm md:text-base hover:bg-muted/40">
+                <TableCell className="capitalize font-medium align-top">
+                  {card.type === 'imageOcclusion' ? 'Image' : card.type}
+                </TableCell>
+                <TableCell className="align-top break-words">
                   {card.type === 'imageOcclusion' ? (
-                    <MediaAwareImage src={card.imageUrl} alt="Occlusion preview" className="h-16 w-auto rounded-md object-contain bg-muted" />
+                    <MediaAwareImage
+                      src={card.imageUrl}
+                      alt="Occlusion preview"
+                      className="h-20 md:h-24 w-auto rounded-md object-contain bg-muted"
+                    />
                   ) : (
-                    <HtmlRenderer html={card.type === 'basic' ? card.question : card.text} className="prose dark:prose-invert max-w-none" />
+                    <HtmlRenderer
+                      html={card.type === 'basic' ? card.question : card.text}
+                      className="prose prose-sm md:prose dark:prose-invert max-w-none break-words"
+                    />
                   )}
                 </TableCell>
-                <TableCell className="max-w-[250px]">
+                <TableCell className="align-top break-words">
                   {card.type === 'basic' ? (
-                    <HtmlRenderer html={card.answer} className="prose dark:prose-invert max-w-none" />
+                    <HtmlRenderer
+                      html={card.answer}
+                      className="prose prose-sm md:prose dark:prose-invert max-w-none break-words"
+                    />
                   ) : (
-                    <HtmlRenderer html={card.description || ''} className="prose dark:prose-invert max-w-none" />
+                    <HtmlRenderer
+                      html={card.description || ''}
+                      className="prose prose-sm md:prose dark:prose-invert max-w-none break-words"
+                    />
                   )}
                 </TableCell>
-                <TableCell className="text-muted-foreground text-xs truncate max-w-[150px]">
+                <TableCell className="text-muted-foreground text-xs truncate max-w-[300px] align-top">
                   {deckPath.join(' / ')}
                 </TableCell>
-                <TableCell className="hidden xl:table-cell">
-                  <div className="flex flex-wrap gap-1 max-w-[200px]">
-                    {card.tags?.map(tag => <Badge key={tag} variant="outline" className="font-normal">{tag}</Badge>)}
+                <TableCell className="hidden xl:table-cell align-top">
+                  <div className="flex flex-wrap gap-1 max-w-[300px]">
+                    {card.tags?.map((tag) => (
+                      <Badge key={tag} variant="outline" className="font-normal">
+                        {tag}
+                      </Badge>
+                    ))}
                   </div>
                 </TableCell>
-                <TableCell className="hidden lg:table-cell">
+                <TableCell className="hidden lg:table-cell align-top">
                   <FlashcardStatus card={card} scheduler={effectiveSettings.scheduler} />
                 </TableCell>
                 <TableCell>
@@ -161,7 +209,12 @@ const DeckViewPage = () => {
                     </Tooltip>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={() => setCardToDelete(card)} className="text-destructive hover:text-destructive focus:text-destructive focus:bg-destructive/10">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setCardToDelete(card)}
+                          className="text-destructive hover:text-destructive focus:text-destructive focus:bg-destructive/10"
+                        >
                           <Trash2 className="h-4 w-4" />
                           <span className="sr-only">Delete</span>
                         </Button>
@@ -188,7 +241,9 @@ const DeckViewPage = () => {
               <div className="flex justify-between items-start gap-4">
                 <div>
                   <p className="text-sm text-muted-foreground">Type</p>
-                  <p className="font-semibold capitalize">{card.type === 'imageOcclusion' ? 'Image' : card.type}</p>
+                  <p className="font-semibold capitalize">
+                    {card.type === 'imageOcclusion' ? 'Image' : card.type}
+                  </p>
                 </div>
                 <div className="flex items-center justify-end gap-2 flex-shrink-0">
                   <Tooltip>
@@ -204,7 +259,12 @@ const DeckViewPage = () => {
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" onClick={() => setCardToDelete(card)} className="text-destructive hover:text-destructive focus:text-destructive focus:bg-destructive/10">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setCardToDelete(card)}
+                        className="text-destructive hover:text-destructive focus:text-destructive focus:bg-destructive/10"
+                      >
                         <Trash2 className="h-4 w-4" />
                         <span className="sr-only">Delete</span>
                       </Button>
@@ -216,9 +276,16 @@ const DeckViewPage = () => {
               <div className="space-y-1">
                 <p className="text-sm font-medium text-muted-foreground">Front / Question</p>
                 {card.type === 'imageOcclusion' ? (
-                  <MediaAwareImage src={card.imageUrl} alt="Occlusion preview" className="w-full h-auto rounded-md object-contain bg-muted" />
+                  <MediaAwareImage
+                    src={card.imageUrl}
+                    alt="Occlusion preview"
+                    className="w-full h-auto rounded-md object-contain bg-muted"
+                  />
                 ) : (
-                  <HtmlRenderer html={card.type === 'basic' ? card.question : card.text} className="prose dark:prose-invert max-w-none" />
+                  <HtmlRenderer
+                    html={card.type === 'basic' ? card.question : card.text}
+                    className="prose dark:prose-invert max-w-none"
+                  />
                 )}
               </div>
               <div className="space-y-1">
@@ -226,7 +293,10 @@ const DeckViewPage = () => {
                 {card.type === 'basic' ? (
                   <HtmlRenderer html={card.answer} className="prose dark:prose-invert max-w-none" />
                 ) : (
-                  <HtmlRenderer html={card.description || ''} className="prose dark:prose-invert max-w-none" />
+                  <HtmlRenderer
+                    html={card.description || ''}
+                    className="prose dark:prose-invert max-w-none"
+                  />
                 )}
               </div>
               <div className="space-y-1">
@@ -236,7 +306,11 @@ const DeckViewPage = () => {
               <div className="space-y-1">
                 <p className="text-sm font-medium text-muted-foreground">Tags</p>
                 <div className="flex flex-wrap gap-1">
-                  {card.tags?.map(tag => <Badge key={tag} variant="outline" className="font-normal">{tag}</Badge>)}
+                  {card.tags?.map((tag) => (
+                    <Badge key={tag} variant="outline" className="font-normal">
+                      {tag}
+                    </Badge>
+                  ))}
                 </div>
               </div>
               <div className="space-y-1">
@@ -301,28 +375,32 @@ const DeckViewPage = () => {
         <Card>
           <CardHeader>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div>
-                    <CardTitle className="text-2xl">Manage: {deck.name}</CardTitle>
-                    <CardDescription>
-                        Path: {deckPath || deck.name}
-                        <br />
-                        {flashcardsWithContext.length} card(s) in this deck and its sub-decks.
-                    </CardDescription>
-                </div>
-                <Button asChild>
-                    <Link to={`/deck/${deck.id}/add`}>
-                        <PlusCircle className="mr-2 h-4 w-4" /> Add New Flashcard
-                    </Link>
-                </Button>
+              <div>
+                <CardTitle className="text-2xl">Manage: {deck.name}</CardTitle>
+                <CardDescription>
+                  Path: {deckPath || deck.name}
+                  <br />
+                  {flashcardsWithContext.length} card(s) in this deck and its sub-decks.
+                </CardDescription>
+              </div>
+              <Button asChild>
+                <Link to={`/deck/${deck.id}/add`}>
+                  <PlusCircle className="mr-2 h-4 w-4" /> Add New Flashcard
+                </Link>
+              </Button>
             </div>
           </CardHeader>
           <CardContent>
             {flashcardsWithContext.length > 0 ? (
               <>
-                {isMobile ? renderMobileView(visibleFlashcardsWithContext) : renderDesktopView(visibleFlashcardsWithContext)}
+                {isMobile
+                  ? renderMobileView(visibleFlashcardsWithContext)
+                  : renderDesktopView(visibleFlashcardsWithContext)}
                 {visibleCount < flashcardsWithContext.length && (
                   <div className="mt-6 flex justify-center">
-                    <Button onClick={handleLoadMore}>Load More ({flashcardsWithContext.length - visibleCount} remaining)</Button>
+                    <Button onClick={handleLoadMore}>
+                      Load More ({flashcardsWithContext.length - visibleCount} remaining)
+                    </Button>
                   </div>
                 )}
               </>
@@ -334,6 +412,10 @@ const DeckViewPage = () => {
             )}
           </CardContent>
         </Card>
+
+        <div className="fixed bottom-4 right-4">
+          <ConflictCenter />
+        </div>
       </div>
 
       <AlertDialog open={!!cardToDelete} onOpenChange={() => setCardToDelete(null)}>
