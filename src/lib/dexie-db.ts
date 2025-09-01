@@ -6,18 +6,18 @@ import type { QuestionBankData } from '@/data/questionBanks';
 import type { ExamData } from '@/data/exams';
 
 // Store names (must match src/lib/idb.ts)
-const DECKS_STORE = 'decks';
-const REVIEW_LOGS_STORE = 'review_logs';
-const MEDIA_STORE = 'media';
-const SESSION_STATE_STORE = 'session_state';
-const QUESTION_BANKS_STORE = 'question_banks';
-const MCQ_REVIEW_LOGS_STORE = 'mcq_review_logs';
-const EXAMS_STORE = 'exams';
-const EXAM_LOGS_STORE = 'exam_logs';
-const SYNC_QUEUE_STORE = 'syncQueue';
-const META_STORE = 'meta';
-const RESOURCES_STORE = 'resources';
-const RESOURCE_HIGHLIGHTS_STORE = 'resource_highlights';
+export const DECKS_STORE = 'decks';
+export const REVIEW_LOGS_STORE = 'review_logs';
+export const MEDIA_STORE = 'media';
+export const SESSION_STATE_STORE = 'session_state';
+export const QUESTION_BANKS_STORE = 'question_banks';
+export const MCQ_REVIEW_LOGS_STORE = 'mcq_review_logs';
+export const EXAMS_STORE = 'exams';
+export const EXAM_LOGS_STORE = 'exam_logs';
+export const SYNC_QUEUE_STORE = 'syncQueue';
+export const META_STORE = 'meta';
+export const RESOURCES_STORE = 'resources';
+export const RESOURCE_HIGHLIGHTS_STORE = 'resource_highlights';
 
 interface DbInstance {
   table: (name: string) => {
@@ -53,6 +53,7 @@ let _db: DbInstance | null = null;
 
 const DB_NAME = 'PrepigoDB';
 // Schema version history:
+// - v11: Introduced resources store
 // - v12: Introduced resource_highlights store (non-destructive)
 const DB_VERSION = 12;
 
@@ -148,7 +149,7 @@ const SCHEMA_VERSIONS = {
   },
   12: {
     resource_highlights: '++id, resourceId',
-    resources: 'id',
+    resources: 'id, createdAt',
     meta: 'key',
     syncQueue: '++id, resource, opType, createdAt',
     exam_logs: '++id, examId',
@@ -161,7 +162,6 @@ const SCHEMA_VERSIONS = {
     decks: 'id',
   },
 } as const;
-
 
 // Public types
 export type McqReviewLog = {
@@ -179,15 +179,29 @@ export type McqReviewLog = {
 };
 
 async function getDb() {
-  if (_db) return _db;
+  if (_db) {
+    console.log('Returning cached database instance');
+    return _db;
+  }
+
+  console.log('Initializing Dexie database...');
   const { Dexie } = await import('dexie');
+
   const buildDb = () => {
+    console.log(`Building database schema up to version ${DB_VERSION}`);
     const db = new Dexie(DB_NAME);
+
     // Apply schema versions
     for (let i = 1; i <= DB_VERSION; i++) {
       const schema = SCHEMA_VERSIONS[i as keyof typeof SCHEMA_VERSIONS];
+      console.log(`  Version ${i}:`, schema ? 'Applying schema' : 'No schema changes');
       if (schema) {
-        db.version(i).stores(schema);
+        try {
+          db.version(i).stores(schema);
+        } catch (schemaError) {
+          console.error(`Error applying schema version ${i}:`, schemaError);
+          throw schemaError;
+        }
       }
     }
     return db;
@@ -195,22 +209,37 @@ async function getDb() {
 
   let db = buildDb();
   try {
+    console.log('Opening database...');
     await db.open();
+    console.log('Database opened successfully');
+
+    // Verify stores
+    const stores = await db.table('meta').get('__db_stores');
+    console.log('Available stores:', stores);
   } catch (e) {
     const msg = (e as Error)?.message || String(e);
+    console.error('Database open error:', e);
+
     // Handle legacy IndexedDBs where primary key changed historically
-    if (msg.includes('Not yet support for changing primary key')) {
-      console.warn('[Dexie] Detected primary key mismatch from an older schema. Performing one-time rebuild of local database to recover.');
+    if (
+      msg.includes('Not yet support for changing primary key') ||
+      msg.includes('No such table') ||
+      msg.includes('not found')
+    ) {
+      console.warn('[Dexie] Schema mismatch detected. Attempting to rebuild database...');
       try {
+        console.log('Deleting existing database...');
         await Dexie.delete(DB_NAME);
+        console.log('Rebuilding database...');
         db = buildDb();
         await db.open();
+        console.log('Database rebuilt successfully');
       } catch (re) {
         console.error('[Dexie] Rebuild failed:', re);
-        throw re;
+        throw new Error(`Failed to rebuild database: ${re}`);
       }
     } else {
-      throw e;
+      throw new Error(`Database error: ${msg}`);
     }
   }
 
@@ -226,10 +255,12 @@ export type ResourceProgress = {
   updatedAt: number;
 };
 
-export async function getResourceProgress(resourceId: string): Promise<ResourceProgress | undefined> {
+export async function getResourceProgress(
+  resourceId: string,
+): Promise<ResourceProgress | undefined> {
   const t = await table(META_STORE);
   const key = `resourceProgress:${resourceId}`;
-  const rec = await t.get(key) as { value: ResourceProgress } | undefined;
+  const rec = (await t.get(key)) as { value: ResourceProgress } | undefined;
   return rec?.value;
 }
 
@@ -239,7 +270,7 @@ export async function setResourceProgress(resourceId: string, page: number, page
   await t.put({ key, value: { resourceId, page, pageCount, updatedAt: Date.now() } });
 }
 
-async function table(name: string) {
+export async function table(name: string) {
   const db = await getDb();
   return db.table(name);
 }
@@ -304,22 +335,41 @@ export async function clearMcqReviewLogsDB() {
 }
 
 // --- Media ---
+interface MediaRecord {
+  id: string;
+  blob: ArrayBuffer;
+  type: string;
+}
+
 export async function saveSingleMediaToDB(id: string, blob: Blob) {
   const t = await table(MEDIA_STORE);
-  await t.put({ id, blob });
+  // Convert blob to ArrayBuffer for better storage in IndexedDB
+  const arrayBuffer = await blob.arrayBuffer();
+  await t.put({ id, blob: arrayBuffer, type: blob.type } as MediaRecord);
 }
 
 export async function saveMediaToDB(media: Map<string, Blob>) {
   const t = await table(MEDIA_STORE);
-  const values: { id: string; blob: Blob }[] = [];
-  for (const [id, blob] of media.entries()) values.push({ id, blob });
+  const values: MediaRecord[] = [];
+
+  for (const [id, blob] of media.entries()) {
+    const arrayBuffer = await blob.arrayBuffer();
+    values.push({
+      id,
+      blob: arrayBuffer,
+      type: blob.type,
+    });
+  }
+
   await t.bulkPut(values);
 }
 
 export async function getMediaFromDB(id: string) {
   const t = await table(MEDIA_STORE);
-  const res = await t.get(id) as { blob: Blob } | undefined;
-  return res?.blob;
+  const result = (await t.get(id)) as MediaRecord | undefined;
+  if (!result) return undefined;
+  // Convert ArrayBuffer back to Blob
+  return new Blob([result.blob], { type: result.type || 'application/octet-stream' });
 }
 
 export async function clearMediaDB() {
@@ -448,7 +498,11 @@ export async function markOpsAsSynced(ids: number[]) {
 export async function incrementRetry(ids: number[]) {
   if (!ids?.length) return;
   const t = await table(SYNC_QUEUE_STORE);
-  await (t.where('id').anyOf(ids) as unknown as { modify: (fn: (rec: { retryCount?: number }) => void) => Promise<void> }).modify((rec) => {
+  await (
+    t.where('id').anyOf(ids) as unknown as {
+      modify: (fn: (rec: { retryCount?: number }) => void) => Promise<void>;
+    }
+  ).modify((rec) => {
     rec.retryCount = (rec.retryCount || 0) + 1;
   });
 }
@@ -466,7 +520,7 @@ export async function setMeta(key: string, value: unknown) {
 // List meta keys by prefix (utility for conflict discovery)
 export async function listMetaKeys(prefix: string) {
   const t = await table(META_STORE);
-  const all = await t.toArray() as { key: string }[];
+  const all = (await t.toArray()) as { key: string }[];
   return all.map((r) => r.key).filter((k) => typeof k === 'string' && k.startsWith(prefix));
 }
 
@@ -494,8 +548,50 @@ export async function saveResource(resource: ResourceItem) {
 }
 
 export async function getAllResourcesFromDB(): Promise<ResourceItem[]> {
-  const t = await table(RESOURCES_STORE);
-  return t.orderBy('createdAt').reverse().toArray() as Promise<ResourceItem[]>;
+  try {
+    console.log('Getting all resources from DB...');
+    const t = await table(RESOURCES_STORE);
+    console.log('Table access successful, querying resources...');
+
+    try {
+      // Try with the indexed query first
+      const resources = (await t.orderBy('createdAt').reverse().toArray()) as ResourceItem[];
+      console.log(`Successfully retrieved ${resources.length} resources`);
+      return resources;
+    } catch (queryError) {
+      console.warn(
+        'Error querying with createdAt index, falling back to client-side sort:',
+        queryError,
+      );
+      // Fallback to client-side sort if the index isn't available yet
+      const allResources = (await t.toArray()) as ResourceItem[];
+      return allResources.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    }
+  } catch (error) {
+    console.error('Error in getAllResourcesFromDB:', error);
+
+    // If we get an error about the store not existing, we might need to recreate the database
+    if (
+      error instanceof Error &&
+      (error.message.includes('not found') ||
+        error.message.includes('no such table') ||
+        error.message.includes('does not exist'))
+    ) {
+      console.warn('Resources store not found, attempting to recreate database...');
+      try {
+        const { Dexie } = await import('dexie');
+        await Dexie.delete(DB_NAME);
+        // Clear the cached database instance to force a fresh initialization
+        _db = null;
+        // Try again with a fresh database
+        return getAllResourcesFromDB();
+      } catch (recreateError) {
+        console.error('Failed to recreate database:', recreateError);
+      }
+    }
+
+    throw error;
+  }
 }
 
 export async function deleteResource(id: string) {
@@ -543,14 +639,22 @@ export async function deleteResourceHighlight(id: string) {
 
 export async function linkHighlightToCard(id: string, cardId: string) {
   const t = await table(RESOURCE_HIGHLIGHTS_STORE);
-  await (t.where('id').equals(id) as unknown as { modify: (fn: (rec: ResourceHighlight) => void) => Promise<void> }).modify((rec) => {
+  await (
+    t.where('id').equals(id) as unknown as {
+      modify: (fn: (rec: ResourceHighlight) => void) => Promise<void>;
+    }
+  ).modify((rec) => {
     rec.linkedCardId = cardId;
   });
 }
 
 export async function updateResourceHighlight(id: string, patch: Partial<ResourceHighlight>) {
   const t = await table(RESOURCE_HIGHLIGHTS_STORE);
-  await (t.where('id').equals(id) as unknown as { modify: (fn: (rec: ResourceHighlight) => void) => Promise<void> }).modify((rec) => {
+  await (
+    t.where('id').equals(id) as unknown as {
+      modify: (fn: (rec: ResourceHighlight) => void) => Promise<void>;
+    }
+  ).modify((rec) => {
     Object.assign(rec, patch);
   });
 }

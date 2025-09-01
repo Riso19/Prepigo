@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import {
   ResourceItem,
   getAllResourcesFromDB,
@@ -6,7 +6,9 @@ import {
   deleteResource as deleteResourceFromDB,
   saveSingleMediaToDB,
   getResourceBlob,
-} from "@/lib/dexie-db";
+  MEDIA_STORE,
+  table,
+} from '@/lib/dexie-db';
 
 export type CreateResourceInput = {
   file: File; // must be PDF
@@ -46,26 +48,70 @@ export const ResourcesProvider = ({ children }: { children: React.ReactNode }) =
   }, []);
 
   const create = async (input: CreateResourceInput) => {
-    if (input.file.type !== "application/pdf") {
-      throw new Error("Only PDF files are supported");
+    try {
+      // Validate file
+      if (!input.file) {
+        throw new Error('No file provided');
+      }
+
+      // Check file type
+      const fileName = input.file.name.toLowerCase();
+      const isPDF =
+        input.file.type === 'application/pdf' ||
+        fileName.endsWith('.pdf') ||
+        (input.file.type === '' && input.file instanceof Blob);
+
+      if (!isPDF) {
+        throw new Error('Only PDF files are supported');
+      }
+
+      // Generate unique IDs
+      const id = crypto.randomUUID();
+      const mediaId = `res-${id}`;
+
+      // Save the file content to media store
+      try {
+        await saveSingleMediaToDB(mediaId, input.file);
+      } catch (mediaError) {
+        console.error('Error saving media:', mediaError);
+        throw new Error('Failed to save PDF content. The file might be corrupted or too large.');
+      }
+
+      // Create resource metadata
+      const now = Date.now();
+      const resource: ResourceItem = {
+        id,
+        mediaId,
+        title: input.title?.trim() || input.file.name.replace(/\.pdf$/i, '').replace(/[-_]/g, ' '),
+        description: input.description?.trim(),
+        tags: input.tags?.map((tag) => tag.trim()).filter(Boolean) || [],
+        size: input.file.size,
+        type: 'application/pdf',
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      // Save resource metadata
+      try {
+        await saveResource(resource);
+      } catch (saveError) {
+        console.error('Error saving resource:', saveError);
+        // Clean up the media if metadata save fails
+        try {
+          const t = await table(MEDIA_STORE);
+          await t.delete(mediaId);
+        } catch (cleanupError) {
+          console.error('Error cleaning up after failed save:', cleanupError);
+        }
+        throw new Error('Failed to save resource metadata. Please try again.');
+      }
+
+      // Refresh the resources list
+      await refresh();
+    } catch (error) {
+      console.error('Error in create resource:', error);
+      throw error; // Re-throw to be handled by the UI
     }
-    const id = crypto.randomUUID();
-    const mediaId = `res-${id}`;
-    await saveSingleMediaToDB(mediaId, input.file);
-    const now = Date.now();
-    const resource: ResourceItem = {
-      id,
-      mediaId,
-      title: input.title || input.file.name.replace(/\.pdf$/i, ""),
-      description: input.description,
-      tags: input.tags || [],
-      size: input.file.size,
-      type: "application/pdf",
-      createdAt: now,
-      updatedAt: now,
-    };
-    await saveResource(resource);
-    await refresh();
   };
 
   const remove = async (id: string) => {
@@ -85,7 +131,7 @@ export const ResourcesProvider = ({ children }: { children: React.ReactNode }) =
 
   const value: ResourcesContextType = useMemo(
     () => ({ items, create, remove, getBlobUrl, refresh, isLoading }),
-    [items, isLoading]
+    [items, isLoading],
   );
 
   return <ResourcesContext.Provider value={value}>{children}</ResourcesContext.Provider>;
@@ -93,6 +139,6 @@ export const ResourcesProvider = ({ children }: { children: React.ReactNode }) =
 
 export const useResources = () => {
   const ctx = useContext(ResourcesContext);
-  if (!ctx) throw new Error("useResources must be used within ResourcesProvider");
+  if (!ctx) throw new Error('useResources must be used within ResourcesProvider');
   return ctx;
 };
