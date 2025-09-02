@@ -3,7 +3,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useResources } from '@/contexts/ResourcesContext';
-import { Eye, Trash2, FileText, AlertCircle } from 'lucide-react';
+import { Eye, Trash2, FileText, AlertCircle, Loader2 } from 'lucide-react';
 import { ResourceItem } from '@/lib/dexie-db';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -40,6 +40,7 @@ export default function ResourceCard({ item }: { item: ResourceItem }) {
   };
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const sizeText = item.size ? `${(item.size / 1024 / 1024).toFixed(2)} MB` : undefined;
   const dateText = new Date(item.createdAt).toLocaleDateString();
 
@@ -47,9 +48,14 @@ export default function ResourceCard({ item }: { item: ResourceItem }) {
     setShowDeleteDialog(true);
   };
 
-  const confirmDelete = () => {
-    remove(item.id);
-    setShowDeleteDialog(false);
+  const confirmDelete = async () => {
+    try {
+      setIsDeleting(true);
+      await remove(item.id);
+      setShowDeleteDialog(false);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -106,11 +112,19 @@ export default function ResourceCard({ item }: { item: ResourceItem }) {
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+              <Button variant="outline" onClick={() => setShowDeleteDialog(false)} disabled={isDeleting}>
                 Cancel
               </Button>
-              <Button variant="destructive" onClick={confirmDelete}>
-                <Trash2 className="mr-2 h-4 w-4" /> Delete
+              <Button variant="destructive" onClick={confirmDelete} disabled={isDeleting}>
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="mr-2 h-4 w-4" /> Delete
+                  </>
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>

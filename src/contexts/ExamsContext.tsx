@@ -10,7 +10,7 @@ interface ExamsContextType {
   isLoading: boolean;
   addExam: (exam: ExamData) => void;
   updateExam: (exam: ExamData) => void;
-  deleteExam: (examId: string) => void;
+  deleteExam: (examId: string) => Promise<void>;
 }
 
 const ExamsContext = createContext<ExamsContextType | undefined>(undefined);
@@ -85,13 +85,21 @@ export const ExamsProvider = ({ children }: { children: ReactNode }) => {
       .catch(() => { /* noop */ });
   };
 
-  const deleteExam = (examId: string) => {
-    setExams(prev => prev.filter(exam => exam.id !== examId));
-    // Enqueue delete (critical)
-    void enqueueCriticalSyncOp({ resource: 'exams', opType: 'delete', payload: { id: examId } })
-      .then(() => scheduleSyncNow())
-      .then(() => postMessage({ type: 'storage-write', resource: 'exams' }))
-      .catch(() => { /* noop */ });
+  const deleteExam = async (examId: string) => {
+    const prev = exams;
+    const updated = prev.filter(exam => exam.id !== examId);
+    // Optimistic
+    setExamsState(updated);
+    try {
+      await saveExamsToDB(updated);
+      await enqueueCriticalSyncOp({ resource: 'exams', opType: 'delete', payload: { id: examId } });
+      await scheduleSyncNow();
+      postMessage({ type: 'storage-write', resource: 'exams' });
+    } catch (e) {
+      // rollback
+      setExamsState(prev);
+      throw e;
+    }
   };
 
   return (

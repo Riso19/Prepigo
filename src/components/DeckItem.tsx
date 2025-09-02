@@ -7,11 +7,11 @@ import { ChevronRight, Folder, MoreVertical, Plus, BookOpen, Settings, GripVerti
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AddSubDeckDialog } from "./AddSubDeckDialog";
-import { deleteDeck, getDeckDueCounts } from "@/lib/deck-utils";
+import { getDeckDueCounts } from "@/lib/deck-utils";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useDecks } from "@/contexts/DecksContext";
 import { useSettings } from "@/contexts/SettingsContext";
-import { showSuccess } from "@/utils/toast";
+import { showSuccess, showError } from "@/utils/toast";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,7 +31,8 @@ const DeckItem = ({ deck, allLogs }: { deck: DeckData; allLogs: ReviewLog[] }) =
   const [isAddSubDeckOpen, setIsAddSubDeckOpen] = useState(false);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
   const [isEditDeckOpen, setIsEditDeckOpen] = useState(false);
-  const { decks, setDecks } = useDecks();
+  const { decks, deleteDeckById } = useDecks();
+  const [isDeleting, setIsDeleting] = useState(false);
   const { settings } = useSettings();
 
   const { attributes, listeners, setNodeRef: setDraggableRef, isDragging } = useDraggable({
@@ -62,10 +63,19 @@ const DeckItem = ({ deck, allLogs }: { deck: DeckData; allLogs: ReviewLog[] }) =
 
   const totalDue = dueCounts.newCount + dueCounts.learnCount + dueCounts.dueCount;
 
-  const handleDelete = () => {
-    setDecks(prevDecks => deleteDeck(prevDecks, deck.id));
-    showSuccess(`Deck "${deck.name}" and all its contents deleted.`);
-    setIsDeleteAlertOpen(false);
+  const handleDelete = async () => {
+    if (isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await deleteDeckById(deck.id);
+      showSuccess(`Deck "${deck.name}" and all its contents deleted.`);
+      setIsDeleteAlertOpen(false);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Failed to delete deck: ${msg}`);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const containerStyle = {
@@ -98,7 +108,7 @@ const DeckItem = ({ deck, allLogs }: { deck: DeckData; allLogs: ReviewLog[] }) =
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Button variant="ghost" size="icon" className="h-8 w-8" disabled={isDeleting}>
                   <MoreVertical className="h-4 w-4" />
                   <span className="sr-only">Deck options</span>
                 </Button>
@@ -128,7 +138,7 @@ const DeckItem = ({ deck, allLogs }: { deck: DeckData; allLogs: ReviewLog[] }) =
                     Add Flashcard
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setIsAddSubDeckOpen(true)}>
+                <DropdownMenuItem onClick={() => setIsAddSubDeckOpen(true)} disabled={isDeleting}>
                   <Folder className="mr-2 h-4 w-4" />
                   Add Sub-deck
                 </DropdownMenuItem>
@@ -156,7 +166,7 @@ const DeckItem = ({ deck, allLogs }: { deck: DeckData; allLogs: ReviewLog[] }) =
       </Collapsible>
       <AddSubDeckDialog isOpen={isAddSubDeckOpen} onOpenChange={setIsAddSubDeckOpen} parentDeckId={deck.id} />
       <EditDeckDialog isOpen={isEditDeckOpen} onOpenChange={setIsEditDeckOpen} deck={deck} />
-      <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
+      <AlertDialog open={isDeleteAlertOpen} onOpenChange={(open) => { if (!isDeleting) setIsDeleteAlertOpen(open); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
@@ -165,9 +175,9 @@ const DeckItem = ({ deck, allLogs }: { deck: DeckData; allLogs: ReviewLog[] }) =
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Yes, delete deck
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={async () => { await handleDelete(); }} disabled={isDeleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {isDeleting ? 'Deleting…' : 'Yes, delete deck'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -11,6 +11,7 @@ import { Calendar, Tag, MoreVertical, Trash2, Pencil, FileText, HelpCircle } fro
 import { format, differenceInDays, isPast } from 'date-fns';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { useExams } from '@/contexts/ExamsContext';
+import { showError, showSuccess } from '@/utils/toast';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +38,7 @@ export const ExamItem = ({ exam }: ExamItemProps) => {
   const { settings } = useSettings();
   const { deleteExam } = useExams();
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const cardsInScope = useMemo(() => getCardsForExam(exam, decks, settings), [exam, decks, settings]);
   const mcqsInScope = useMemo(() => getMcqsForExam(exam, questionBanks, settings), [exam, questionBanks, settings]);
@@ -88,7 +90,7 @@ export const ExamItem = ({ exam }: ExamItemProps) => {
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button>
+                <Button variant="ghost" size="icon" disabled={isDeleting}><MoreVertical className="h-4 w-4" /></Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem asChild><Link to={`/exams/${exam.id}/edit`}><Pencil className="mr-2 h-4 w-4" />Edit Exam</Link></DropdownMenuItem>
@@ -165,7 +167,7 @@ export const ExamItem = ({ exam }: ExamItemProps) => {
           </div>
         </CardContent>
       </Card>
-      <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
+      <AlertDialog open={isDeleteAlertOpen} onOpenChange={(open) => { if (!isDeleting) setIsDeleteAlertOpen(open); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
@@ -174,9 +176,26 @@ export const ExamItem = ({ exam }: ExamItemProps) => {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleteExam(exam.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Yes, delete exam
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (isDeleting) return;
+                setIsDeleting(true);
+                try {
+                  await deleteExam(exam.id);
+                  showSuccess(`Exam "${exam.name}" deleted.`);
+                  setIsDeleteAlertOpen(false);
+                } catch (e) {
+                  const msg = e instanceof Error ? e.message : String(e);
+                  showError(`Failed to delete exam: ${msg}`);
+                } finally {
+                  setIsDeleting(false);
+                }
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? 'Deleting…' : 'Yes, delete exam'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

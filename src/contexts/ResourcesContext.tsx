@@ -122,8 +122,42 @@ export const ResourcesProvider = ({ children }: { children: React.ReactNode }) =
   };
 
   const remove = async (id: string) => {
-    await deleteResourceAndMedia(id);
-    await refresh();
+    // Optimistic UI: remove immediately, rollback on error
+    const prevItems = items;
+    const prevTotal = total;
+    setItems((curr) => curr.filter((r) => r.id !== id));
+    setTotal((t) => Math.max(0, t - 1));
+
+    try {
+      // Revoke any cached blob URL for this resource to free memory
+      const cached = blobUrlCache.get(id);
+      if (cached) {
+        try {
+          URL.revokeObjectURL(cached);
+        } catch {
+          /* noop */
+        }
+        blobUrlCache.delete(id);
+      }
+
+      await deleteResourceAndMedia(id);
+      toast({
+        title: 'Resource deleted',
+        description: 'File and related highlights were removed locally.',
+      });
+      // Ensure pagination consistency (e.g., when deleting last item on page)
+      void refresh();
+    } catch (e) {
+      // Rollback on failure
+      setItems(prevItems);
+      setTotal(prevTotal);
+      toast({
+        title: 'Failed to delete resource',
+        description: e instanceof Error ? e.message : String(e),
+        variant: 'destructive',
+      });
+      throw e;
+    }
   };
 
   const getBlobUrl = async (res: ResourceItem) => {

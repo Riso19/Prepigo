@@ -376,6 +376,13 @@ export default function FlashcardFromPdfDialog({
     setFront(selection?.text ?? "");
   }, [selection?.text]);
 
+  // If decks load asynchronously, ensure we pick a default deck so the Create button isn't stuck disabled
+  useEffect(() => {
+    if (!deckId && decks.length > 0) {
+      setDeckId(decks[0].id);
+    }
+  }, [decks, deckId]);
+
   // Reset masks when dialog opens or seed changes
   useEffect(() => {
     if (open) {

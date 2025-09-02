@@ -7,10 +7,10 @@ import { ChevronRight, Folder, MoreVertical, Plus, Settings, GripVertical, Trash
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AddSubQuestionBankDialog } from "./AddSubQuestionBankDialog";
-import { deleteQuestionBank, getMcqDueCounts, getAllMcqsFromBank } from "@/lib/question-bank-utils";
+import { getMcqDueCounts, getAllMcqsFromBank } from "@/lib/question-bank-utils";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useQuestionBanks } from "@/contexts/QuestionBankContext";
-import { showSuccess } from "@/utils/toast";
+import { showSuccess, showError } from "@/utils/toast";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,7 +31,8 @@ const QuestionBankItem = ({ bank, allLogs }: { bank: QuestionBankData; allLogs: 
   const [isAddSubBankOpen, setIsAddSubBankOpen] = useState(false);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
   const [isEditBankOpen, setIsEditBankOpen] = useState(false);
-  const { questionBanks, setQuestionBanks } = useQuestionBanks();
+  const [isDeleting, setIsDeleting] = useState(false);
+  const { questionBanks, deleteQuestionBankById } = useQuestionBanks();
   const { settings } = useSettings();
 
   const { attributes, listeners, setNodeRef: setDraggableRef, isDragging } = useDraggable({
@@ -62,10 +63,19 @@ const QuestionBankItem = ({ bank, allLogs }: { bank: QuestionBankData; allLogs: 
 
   const totalDue = dueCounts.newCount + dueCounts.learnCount + dueCounts.dueCount;
 
-  const handleDelete = () => {
-    setQuestionBanks(prevBanks => deleteQuestionBank(prevBanks, bank.id));
-    showSuccess(`Question Bank "${bank.name}" and all its contents deleted.`);
-    setIsDeleteAlertOpen(false);
+  const handleDelete = async () => {
+    if (isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await deleteQuestionBankById(bank.id);
+      showSuccess(`Question Bank "${bank.name}" and all its contents deleted.`);
+      setIsDeleteAlertOpen(false);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Failed to delete question bank: ${msg}`);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const containerStyle = {
@@ -98,7 +108,7 @@ const QuestionBankItem = ({ bank, allLogs }: { bank: QuestionBankData; allLogs: 
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Button variant="ghost" size="icon" className="h-8 w-8" disabled={isDeleting}>
                   <MoreVertical className="h-4 w-4" />
                   <span className="sr-only">Bank options</span>
                 </Button>
@@ -134,7 +144,7 @@ const QuestionBankItem = ({ bank, allLogs }: { bank: QuestionBankData; allLogs: 
                     Add MCQ
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setIsAddSubBankOpen(true)}>
+                <DropdownMenuItem onClick={() => setIsAddSubBankOpen(true)} disabled={isDeleting}>
                   <Folder className="mr-2 h-4 w-4" />
                   Add Sub-Bank
                 </DropdownMenuItem>
@@ -162,7 +172,7 @@ const QuestionBankItem = ({ bank, allLogs }: { bank: QuestionBankData; allLogs: 
       </Collapsible>
       <AddSubQuestionBankDialog isOpen={isAddSubBankOpen} onOpenChange={setIsAddSubBankOpen} parentBankId={bank.id} />
       <EditQuestionBankDialog isOpen={isEditBankOpen} onOpenChange={setIsEditBankOpen} bank={bank} />
-      <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
+      <AlertDialog open={isDeleteAlertOpen} onOpenChange={(open) => { if (!isDeleting) setIsDeleteAlertOpen(open); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
@@ -171,9 +181,9 @@ const QuestionBankItem = ({ bank, allLogs }: { bank: QuestionBankData; allLogs: 
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Yes, delete bank
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={async () => { await handleDelete(); }} disabled={isDeleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {isDeleting ? 'Deleting…' : 'Yes, delete bank'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

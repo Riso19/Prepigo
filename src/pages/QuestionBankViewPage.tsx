@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuestionBanks } from '@/contexts/QuestionBankContext';
-import { findQuestionBankById, getAllMcqsFromBank, deleteMcq, findQuestionBankPathById, findParentBankOfMcq } from '@/lib/question-bank-utils';
+import { findQuestionBankById, getAllMcqsFromBank, findQuestionBankPathById, findParentBankOfMcq } from '@/lib/question-bank-utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
@@ -25,7 +25,7 @@ import { MoveMcqDialog } from '@/components/MoveMcqDialog';
 
 const QuestionBankViewPage = () => {
   const { bankId } = useParams<{ bankId: string }>();
-  const { questionBanks, setQuestionBanks } = useQuestionBanks();
+  const { questionBanks, deleteMcqById } = useQuestionBanks();
   const navigate = useNavigate();
   const [mcqToDelete, setMcqToDelete] = useState<McqData | null>(null);
   const { settings } = useSettings();
@@ -33,6 +33,7 @@ const QuestionBankViewPage = () => {
   const [sourceBankId, setSourceBankId] = useState<string | null>(null);
   const [isMoveDialogOpen, setIsMoveDialogOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(100);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const bank = useMemo(() => (bankId ? findQuestionBankById(questionBanks, bankId) : null), [questionBanks, bankId]);
   const bankPath = useMemo(() => (bankId ? findQuestionBankPathById(questionBanks, bankId)?.join(' / ') : null), [questionBanks, bankId]);
@@ -43,11 +44,18 @@ const QuestionBankViewPage = () => {
     setVisibleCount(prev => prev + 100);
   };
 
-  const handleDeleteConfirm = () => {
-    if (mcqToDelete) {
-      setQuestionBanks(prevBanks => deleteMcq(prevBanks, mcqToDelete.id));
-      showSuccess("MCQ deleted successfully.");
+  const handleDeleteConfirm = async () => {
+    if (!mcqToDelete || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await deleteMcqById(mcqToDelete.id);
+      showSuccess('MCQ deleted successfully.');
       setMcqToDelete(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Failed to delete MCQ: ${msg}`);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -143,7 +151,7 @@ const QuestionBankViewPage = () => {
         </Card>
       </div>
 
-      <AlertDialog open={!!mcqToDelete} onOpenChange={() => setMcqToDelete(null)}>
+      <AlertDialog open={!!mcqToDelete} onOpenChange={(open) => { if (!isDeleting) setMcqToDelete(open ? mcqToDelete : null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
@@ -152,8 +160,10 @@ const QuestionBankViewPage = () => {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteConfirm}>Continue</AlertDialogAction>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction disabled={isDeleting} onClick={handleDeleteConfirm}>
+              {isDeleting ? 'Deleting…' : 'Continue'}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

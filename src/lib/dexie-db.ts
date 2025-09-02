@@ -25,6 +25,7 @@ async function withTransaction<T>(
   if (typeof dexieDb.transaction !== 'function') {
     throw new Error('Database transaction method is unavailable (DB not initialized)');
   }
+
   // IMPORTANT: call as a method to preserve `this` binding inside Dexie
   return dexieDb.transaction(mode, storeNames, operation);
 }
@@ -93,6 +94,54 @@ declare global {
       ): Promise<T>;
     };
   }
+}
+
+// Safe variant that can recover when a highlight ID cannot be found in v2.
+// Strategy:
+// 1) Try v2 by id
+// 2) If not found, fall back to v1 by resourceId and link the most recent highlight
+export async function linkHighlightToCardSafe(
+  resourceId: string,
+  id: string,
+  cardId: string,
+): Promise<void> {
+  // Try v2 first
+  try {
+    const t2 = await table<ResourceHighlight>(RESOURCE_HIGHLIGHTS_V2_STORE);
+    const h2 = await t2.get(id);
+    if (h2) {
+      const updated: ResourceHighlight = { ...h2, linkedCardId: cardId, updatedAt: Date.now() };
+      await t2.put(updated, id);
+      broadcastStorageWrite({ resource: RESOURCE_HIGHLIGHTS_V2_STORE });
+      return;
+    }
+  } catch {
+    // ignore and try v1
+  }
+
+  // Fallback to v1: choose the most recent highlight for this resource and link it
+  try {
+    const t1 = await table<ResourceHighlight>(RESOURCE_HIGHLIGHTS_STORE);
+    const list = await t1.where('resourceId').equals(resourceId).toArray();
+    if (list && list.length) {
+      const latest = [...list].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0];
+      // Use update to avoid strict typing on key differences between v1/v2
+      await (t1 as any).update((latest as any).id, {
+        linkedCardId: cardId,
+        updatedAt: Date.now(),
+      });
+      broadcastStorageWrite({ resource: RESOURCE_HIGHLIGHTS_STORE });
+      return;
+    }
+  } catch (e) {
+    const error = e instanceof Error ? e : new Error(String(e));
+    await notifyDbError('linkHighlightToCardSafe', error);
+    throw error;
+  }
+
+  const err = new Error(`No highlight found to link for resource ${resourceId}`);
+  await notifyDbError('linkHighlightToCardSafe', err);
+  throw err;
 }
 
 // Optional cooperative lock to serialize critical sections across tabs (best-effort)
@@ -171,6 +220,17 @@ export async function table<T = unknown>(name: string): Promise<Table<T>> {
 async function setMeta<T = unknown>(key: string, value: T): Promise<void> {
   const t = await table<{ key: string; value: T }>(META_STORE);
   await t.put({ key, value }, key);
+}
+
+// Public meta helpers for app logic (e.g., one-time seeds)
+export async function getMetaValue<T = unknown>(key: string): Promise<T | undefined> {
+  const t = await table<{ key: string; value?: T }>(META_STORE);
+  const rec = await t.get(key);
+  return rec?.value as T | undefined;
+}
+
+export async function setMetaValue<T = unknown>(key: string, value: T): Promise<void> {
+  await setMeta<T>(key, value);
 }
 
 // Validators (Zod)
@@ -1083,8 +1143,18 @@ export async function getAllDecksFromDB(): Promise<DeckData[]> {
 }
 
 export async function saveDecksToDB(decks: DeckData[]): Promise<void> {
-  const t = await table<DeckData>(DECKS_STORE);
-  await t.bulkPut(decks);
+  await withTransaction([DECKS_STORE], 'rw', async (tx) => {
+    const t = tx.table<DeckData>(DECKS_STORE);
+    const existing = await t.toArray();
+    const newIds = new Set(decks.map((d) => d.id));
+    const toDelete = existing.map((d) => d.id).filter((id) => !newIds.has(id));
+    if (toDelete.length) {
+      await t.bulkDelete(toDelete);
+    }
+    if (decks.length) {
+      await t.bulkPut(decks);
+    }
+  });
   broadcastStorageWrite({ resource: 'decks' });
 }
 
@@ -1109,20 +1179,28 @@ export async function getAllQuestionBanksFromDB(): Promise<QuestionBankData[]> {
 }
 
 export async function saveQuestionBanksToDB(banks: QuestionBankData[]): Promise<void> {
-  const t = await table<QuestionBankData>(QUESTION_BANKS_STORE);
-  await t.bulkPut(banks);
+  await withTransaction([QUESTION_BANKS_STORE], 'rw', async (tx) => {
+    const t = tx.table<QuestionBankData>(QUESTION_BANKS_STORE);
+    const existing = await t.toArray();
+    const newIds = new Set(banks.map((b) => b.id));
+    const toDelete = existing.map((b) => b.id).filter((id) => !newIds.has(id));
+    if (toDelete.length) {
+      await t.bulkDelete(toDelete);
+    }
+    if (banks.length) {
+      await t.bulkPut(banks);
+    }
+  });
   broadcastStorageWrite({ resource: 'question-banks' });
 }
 
 // Introduction tracking
 interface IntroductionsData {
-  id: string;
   cardIds: string[];
   date: string;
 }
 
 interface McqIntroductionsData {
-  id: string;
   ids: string[];
   mcqIds: string[]; // For backward compatibility
   date: string;
@@ -1130,8 +1208,11 @@ interface McqIntroductionsData {
 
 export async function getIntroductionsFromDB(): Promise<{ cardIds: string[]; date: string }> {
   const today = new Date().toISOString().split('T')[0];
-  const t = await table<IntroductionsData>(META_STORE);
-  const data = (await t.get('introductions')) as IntroductionsData | undefined;
+  const t = await table<{ key: string; value: IntroductionsData }>(META_STORE);
+  const rec = (await t.get('introductions')) as
+    | { key: string; value: IntroductionsData }
+    | undefined;
+  const data = rec?.value;
   return data?.date === today
     ? { cardIds: data.cardIds, date: data.date }
     : { cardIds: [], date: today };
@@ -1151,18 +1232,22 @@ export async function saveIntroductionsToDB(
     date = params.date || new Date().toISOString().split('T')[0];
   }
 
-  const t = await table<IntroductionsData>(META_STORE);
-  await t.put({ id: 'introductions', cardIds, date });
+  const t = await table<{ key: string; value: IntroductionsData }>(META_STORE);
+  await t.put({ key: 'introductions', value: { cardIds, date } }, 'introductions');
   broadcastStorageWrite({ resource: 'introductions' });
 }
 
 export async function getMcqIntroductionsFromDB(): Promise<{ ids: string[]; date: string }> {
   const today = new Date().toISOString().split('T')[0];
-  const t = await table<McqIntroductionsData>(META_STORE);
-  const data = (await t.get('mcq-introductions')) as McqIntroductionsData | undefined;
-  return data?.date === today
-    ? { ids: data.ids || data.mcqIds || [], date: data.date }
-    : { ids: [], date: today };
+  const t = await table<{ key: string; value: McqIntroductionsData }>(META_STORE);
+  const rec = (await t.get('mcq-introductions')) as
+    | { key: string; value: McqIntroductionsData }
+    | undefined;
+  const data = rec?.value;
+  if (data?.date === today) {
+    return { ids: data.ids || data.mcqIds || [], date: data.date };
+  }
+  return { ids: [], date: today };
 }
 
 export async function saveMcqIntroductionsToDB(
@@ -1179,13 +1264,11 @@ export async function saveMcqIntroductionsToDB(
     date = params.date || new Date().toISOString().split('T')[0];
   }
 
-  const t = await table<McqIntroductionsData>(META_STORE);
-  await t.put({
-    id: 'mcq-introductions',
-    ids,
-    date,
-    mcqIds: ids,
-  });
+  const t = await table<{ key: string; value: McqIntroductionsData }>(META_STORE);
+  await t.put(
+    { key: 'mcq-introductions', value: { ids, date, mcqIds: ids } },
+    'mcq-introductions',
+  );
 
   broadcastStorageWrite({ resource: 'mcq-introductions' });
   broadcastStorageWrite({ resource: 'decks', clear: true });

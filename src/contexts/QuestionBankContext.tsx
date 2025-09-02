@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { QuestionBankData, questionBanks as initialQuestionBanks } from "@/data/questionBanks";
-import { getAllQuestionBanksFromDB, saveQuestionBanksToDB, getMcqIntroductionsFromDB, saveMcqIntroductionsToDB, enqueueSyncOp } from "@/lib/idb";
+import { getAllQuestionBanksFromDB, saveQuestionBanksToDB, getMcqIntroductionsFromDB, saveMcqIntroductionsToDB, enqueueSyncOp, enqueueCriticalSyncOp, getMetaValue, setMetaValue } from "@/lib/idb";
+import { deleteQuestionBank as deleteQuestionBankImmutable, deleteMcq as deleteMcqImmutable } from '@/lib/question-bank-utils';
 import { Loader2 } from "lucide-react";
 import { scheduleSyncNow } from "@/lib/sync";
 import { postMessage } from "@/lib/broadcast";
@@ -11,6 +12,8 @@ interface QuestionBankContextType {
   isLoading: boolean;
   mcqIntroductionsToday: Set<string>;
   addIntroducedMcq: (mcqId: string) => void;
+  deleteQuestionBankById: (bankId: string) => Promise<void>;
+  deleteMcqById: (mcqId: string) => Promise<void>;
 }
 
 const QuestionBankContext = createContext<QuestionBankContextType | undefined>(undefined);
@@ -26,8 +29,13 @@ export const QuestionBankProvider = ({ children }: { children: ReactNode }) => {
         // Load question banks
         let dbBanks = await getAllQuestionBanksFromDB();
         if (dbBanks.length === 0) {
-          await saveQuestionBanksToDB(initialQuestionBanks);
-          dbBanks = initialQuestionBanks;
+          const seeded = await getMetaValue<boolean>('seed:question-banks');
+          if (!seeded) {
+            await saveQuestionBanksToDB(initialQuestionBanks);
+            await setMetaValue('seed:question-banks', true);
+            dbBanks = initialQuestionBanks;
+          }
+          // else: user has no banks; don't reseed
         }
         setQuestionBanksState(dbBanks);
 
@@ -85,8 +93,42 @@ export const QuestionBankProvider = ({ children }: { children: ReactNode }) => {
     });
   };
 
+  const deleteQuestionBankById = async (bankId: string) => {
+    const prev = questionBanks;
+    const updated = deleteQuestionBankImmutable(prev, bankId);
+    // Optimistic update
+    setQuestionBanksState(updated);
+    try {
+      await saveQuestionBanksToDB(updated);
+      await enqueueCriticalSyncOp({ resource: 'questionBanks', opType: 'delete', payload: { id: bankId, cascade: true } });
+      await enqueueSyncOp({ resource: 'questionBanks', opType: 'bulk-upsert', payload: updated });
+      await scheduleSyncNow();
+      postMessage({ type: 'storage-write', resource: 'questionBanks' });
+    } catch (e) {
+      setQuestionBanksState(prev);
+      throw e;
+    }
+  };
+
+  const deleteMcqById = async (mcqId: string) => {
+    const prev = questionBanks;
+    const updated = deleteMcqImmutable(prev, mcqId);
+    // Optimistic update
+    setQuestionBanksState(updated);
+    try {
+      await saveQuestionBanksToDB(updated);
+      // Rely on bulk-upsert snapshot to propagate MCQ deletions
+      await enqueueSyncOp({ resource: 'questionBanks', opType: 'bulk-upsert', payload: updated });
+      await scheduleSyncNow();
+      postMessage({ type: 'storage-write', resource: 'questionBanks' });
+    } catch (e) {
+      setQuestionBanksState(prev);
+      throw e;
+    }
+  };
+
   return (
-    <QuestionBankContext.Provider value={{ questionBanks, setQuestionBanks, isLoading, mcqIntroductionsToday, addIntroducedMcq }}>
+    <QuestionBankContext.Provider value={{ questionBanks, setQuestionBanks, isLoading, mcqIntroductionsToday, addIntroducedMcq, deleteQuestionBankById, deleteMcqById }}>
       {isLoading ? (
         <div className="min-h-screen w-full flex flex-col items-center justify-center text-center p-4">
             <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />

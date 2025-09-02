@@ -18,6 +18,7 @@ import {
   getHighlightsForResource,
   saveResourceHighlight,
   linkHighlightToCard,
+  linkHighlightToCardSafe,
   updateResourceHighlight,
   deleteResourceHighlight,
   type ResourceHighlight,
@@ -69,6 +70,8 @@ export default function ResourceViewerPage() {
   const [pageCount, setPageCount] = useState<number>(1);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasWrapRef = useRef<HTMLDivElement | null>(null);
+  // Track current PDF.js render task to avoid concurrent renders on same canvas
+  const renderTaskRef = useRef<{ cancel: () => void; promise: Promise<unknown> } | null>(null);
   const [rendering, setRendering] = useState<boolean>(false);
   const [scale, setScale] = useState<number>(1.5);
   const [textItems, setTextItems] = useState<
@@ -176,11 +179,21 @@ export default function ResourceViewerPage() {
 
   // Render current page
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       if (!pdf) return;
+      // Cancel any in-flight render to avoid using the same canvas concurrently
+      if (renderTaskRef.current) {
+        try {
+          renderTaskRef.current.cancel();
+        } catch {}
+        renderTaskRef.current = null;
+      }
+
       setRendering(true);
       try {
         const page: PDFPageProxy = await pdf.getPage(pageNum);
+        if (cancelled) return;
         const viewport = page.getViewport({ scale });
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -198,13 +211,28 @@ export default function ResourceViewerPage() {
 
         const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined;
 
-        await page.render({
+        const task = page.render({
           canvasContext: ctx,
           viewport,
           canvas,
           ...(transform && { transform }),
-        }).promise;
+        });
+        renderTaskRef.current = task as unknown as { cancel: () => void; promise: Promise<unknown> };
 
+        try {
+          await task.promise;
+        } catch (err: unknown) {
+          // Swallow cancellation errors; rethrow unexpected errors
+          const name = (err as { name?: string })?.name;
+          if (name && name !== 'RenderingCancelledException') throw err;
+          return;
+        } finally {
+          if (renderTaskRef.current === (task as unknown)) {
+            renderTaskRef.current = null;
+          }
+        }
+
+        if (cancelled) return;
         // Load text content and compute simple bounding boxes
         const textContent = await page.getTextContent();
         type PdfTextItem = { str: string; transform: number[]; width: number };
@@ -219,15 +247,25 @@ export default function ResourceViewerPage() {
           const y = yTop - h; // convert top to bottom origin
           if (w > 0 && h > 0 && str) items.push({ str, x, y, w, h });
         }
-        setTextItems(items);
+        if (!cancelled) setTextItems(items);
         // Save progress
-        if (resource) {
+        if (!cancelled && resource) {
           await setResourceProgress(resource.id, pageNum, pageCount);
         }
       } finally {
-        setRendering(false);
+        if (!cancelled) setRendering(false);
       }
     })();
+
+    return () => {
+      cancelled = true;
+      if (renderTaskRef.current) {
+        try {
+          renderTaskRef.current.cancel();
+        } catch {}
+        renderTaskRef.current = null;
+      }
+    };
   }, [pdf, pageNum, scale]);
 
   // Mouse handling for rectangular selection overlay
@@ -484,7 +522,11 @@ export default function ResourceViewerPage() {
 
     setDecks((prev) => addToDeck(prev));
     if (payload.linkHighlight && currentHighlightId) {
-      await linkHighlightToCard(currentHighlightId, newCard.id);
+      // Prefer safe linking that tolerates v1/v2 mismatch
+      await linkHighlightToCardSafe(resource.id, currentHighlightId, newCard.id).catch(async () => {
+        // Fallback to strict method if safe path fails for any reason
+        await linkHighlightToCard(currentHighlightId, newCard.id);
+      });
       setHighlights((prev) =>
         prev.map((h) => (h.id === currentHighlightId ? { ...h, linkedCardId: newCard.id } : h)),
       );

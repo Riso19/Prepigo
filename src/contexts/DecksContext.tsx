@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { DeckData, decks as initialDecks } from "@/data/decks";
-import { getAllDecksFromDB, saveDecksToDB, getIntroductionsFromDB, saveIntroductionsToDB, enqueueSyncOp } from "@/lib/idb";
+import { getAllDecksFromDB, saveDecksToDB, getIntroductionsFromDB, saveIntroductionsToDB, enqueueSyncOp, enqueueCriticalSyncOp, getMetaValue, setMetaValue } from "@/lib/idb";
+import { deleteDeck as deleteDeckImmutable } from '@/lib/deck-utils';
 import { Loader2 } from "lucide-react";
 import { scheduleSyncNow } from "@/lib/sync";
 import { postMessage } from "@/lib/broadcast";
@@ -11,6 +12,7 @@ interface DecksContextType {
   isLoading: boolean;
   introductionsToday: Set<string>;
   addIntroducedCard: (cardId: string) => void;
+  deleteDeckById: (deckId: string) => Promise<void>;
 }
 
 const DecksContext = createContext<DecksContextType | undefined>(undefined);
@@ -26,8 +28,13 @@ export const DecksProvider = ({ children }: { children: ReactNode }) => {
         // Load decks
         let dbDecks = await getAllDecksFromDB();
         if (dbDecks.length === 0) {
-          await saveDecksToDB(initialDecks);
-          dbDecks = initialDecks;
+          const seeded = await getMetaValue<boolean>('seed:decks');
+          if (!seeded) {
+            await saveDecksToDB(initialDecks);
+            await setMetaValue('seed:decks', true);
+            dbDecks = initialDecks;
+          }
+          // else: user has no decks; don't reseed
         }
         setDecksState(dbDecks);
 
@@ -70,6 +77,26 @@ await saveIntroductionsToDB({ date: todayStr, cardIds: [] });
     });
   };
 
+  const deleteDeckById = async (deckId: string) => {
+    // Optimistic remove + rollback on failure
+    const prev = decks;
+    const updated = deleteDeckImmutable(prev, deckId);
+
+    setDecksState(updated);
+    try {
+      await saveDecksToDB(updated);
+      // Enqueue a delete op for server-side cascade; keep bulk snapshot too for safety
+      await enqueueCriticalSyncOp({ resource: 'decks', opType: 'delete', payload: { id: deckId, cascade: true } });
+      await enqueueSyncOp({ resource: 'decks', opType: 'bulk-upsert', payload: updated });
+      await scheduleSyncNow();
+      postMessage({ type: 'storage-write', resource: 'decks' });
+    } catch (e) {
+      console.error('Failed to delete deck; rolling back', e);
+      setDecksState(prev);
+      throw e;
+    }
+  };
+
   const addIntroducedCard = (cardId: string) => {
     const todayStr = new Date().toISOString().split('T')[0];
     setIntroductionsToday(prev => {
@@ -87,7 +114,7 @@ await saveIntroductionsToDB({ date: todayStr, cardIds: [] });
   };
 
   return (
-    <DecksContext.Provider value={{ decks, setDecks, isLoading, introductionsToday, addIntroducedCard }}>
+    <DecksContext.Provider value={{ decks, setDecks, isLoading, introductionsToday, addIntroducedCard, deleteDeckById }}>
       {isLoading ? (
         <div className="min-h-screen w-full flex flex-col items-center justify-center text-center p-4">
             <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
