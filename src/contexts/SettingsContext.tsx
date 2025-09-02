@@ -1,6 +1,6 @@
-import { createContext, useContext, useState, ReactNode, useEffect } from "react";
+import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { generatorParameters } from "ts-fsrs";
+import { generatorParameters } from 'ts-fsrs';
 import * as z from 'zod';
 
 const DB_NAME = 'PrepigoSettingsDB';
@@ -8,15 +8,21 @@ const DB_VERSION = 1;
 const SETTINGS_STORE = 'settings';
 
 const fsrsParametersSchema = z.object({
-    request_retention: z.coerce.number().min(0.7, "Must be at least 0.7").max(0.99, "Must be less than 1.0"),
-    maximum_interval: z.coerce.number().int().min(1, "Must be at least 1 day"),
-    w: z.array(z.number()),
+  request_retention: z.coerce
+    .number()
+    .min(0.7, 'Must be at least 0.7')
+    .max(0.99, 'Must be less than 1.0'),
+  maximum_interval: z.coerce.number().int().min(1, 'Must be at least 1 day'),
+  w: z.array(z.number()),
 });
 
 const fsrs6ParametersSchema = z.object({
-    request_retention: z.coerce.number().min(0.7, "Must be at least 0.7").max(0.99, "Must be less than 1.0"),
-    maximum_interval: z.coerce.number().int().min(1, "Must be at least 1 day"),
-    w: z.array(z.number()).length(21),
+  request_retention: z.coerce
+    .number()
+    .min(0.7, 'Must be at least 0.7')
+    .max(0.99, 'Must be less than 1.0'),
+  maximum_interval: z.coerce.number().int().min(1, 'Must be at least 1 day'),
+  w: z.array(z.number()).length(21),
 });
 
 export const srsSettingsSchema = z.object({
@@ -26,25 +32,38 @@ export const srsSettingsSchema = z.object({
   fsrs6Parameters: fsrs6ParametersSchema,
   mcqFsrs6Parameters: fsrs6ParametersSchema,
   // Configurable maturity threshold (days) used for Young/Mature classification across schedulers
-  maturityThresholdDays: z.coerce.number().int().min(1, "Must be at least 1 day").default(21),
-  sm2StartingEase: z.coerce.number().min(1.3, "Must be at least 1.3"),
-  sm2MinEasinessFactor: z.coerce.number().min(1.3, "Must be at least 1.3"),
-  sm2EasyBonus: z.coerce.number().min(1, "Must be at least 1.0"),
-  sm2IntervalModifier: z.coerce.number().min(0.1, "Must be at least 0.1"),
-  sm2HardIntervalMultiplier: z.coerce.number().min(1.0, "Must be at least 1.0"),
-  sm2LapsedIntervalMultiplier: z.coerce.number().min(0, "Must be at least 0").max(1, "Must be 1.0 or less"),
-  sm2MaximumInterval: z.coerce.number().int().min(1, "Must be at least 1 day"),
-  sm2GraduatingInterval: z.coerce.number().int().min(1, "Must be at least 1 day"),
-  sm2EasyInterval: z.coerce.number().int().min(1, "Must be at least 1 day"),
-  sm2MinimumInterval: z.coerce.number().int().min(1, "Must be at least 1 day"),
-  learningSteps: z.string().regex(/^(\d+[smhd]?\s*)*\d+[smhd]?$/, "Must be space-separated numbers with optional s,m,h,d units."),
-  relearningSteps: z.string().regex(/^(\d+[smhd]?\s*)*\d+[smhd]?$/, "Must be space-separated numbers with optional s,m,h,d units."),
-  leechThreshold: z.coerce.number().int().min(1, "Must be at least 1"),
+  maturityThresholdDays: z.coerce.number().int().min(1, 'Must be at least 1 day').default(21),
+  sm2StartingEase: z.coerce.number().min(1.3, 'Must be at least 1.3'),
+  sm2MinEasinessFactor: z.coerce.number().min(1.3, 'Must be at least 1.3'),
+  sm2EasyBonus: z.coerce.number().min(1, 'Must be at least 1.0'),
+  sm2IntervalModifier: z.coerce.number().min(0.1, 'Must be at least 0.1'),
+  sm2HardIntervalMultiplier: z.coerce.number().min(1.0, 'Must be at least 1.0'),
+  sm2LapsedIntervalMultiplier: z.coerce
+    .number()
+    .min(0, 'Must be at least 0')
+    .max(1, 'Must be 1.0 or less'),
+  sm2MaximumInterval: z.coerce.number().int().min(1, 'Must be at least 1 day'),
+  sm2GraduatingInterval: z.coerce.number().int().min(1, 'Must be at least 1 day'),
+  sm2EasyInterval: z.coerce.number().int().min(1, 'Must be at least 1 day'),
+  sm2MinimumInterval: z.coerce.number().int().min(1, 'Must be at least 1 day'),
+  learningSteps: z
+    .string()
+    .regex(
+      /^(\d+[smhd]?\s*)*\d+[smhd]?$/,
+      'Must be space-separated numbers with optional s,m,h,d units.',
+    ),
+  relearningSteps: z
+    .string()
+    .regex(
+      /^(\d+[smhd]?\s*)*\d+[smhd]?$/,
+      'Must be space-separated numbers with optional s,m,h,d units.',
+    ),
+  leechThreshold: z.coerce.number().int().min(1, 'Must be at least 1'),
   leechAction: z.enum(['tag', 'suspend']),
-  newCardsPerDay: z.coerce.number().int().min(0, "Must be 0 or greater"),
-  maxReviewsPerDay: z.coerce.number().int().min(0, "Must be 0 or greater"),
-  mcqNewCardsPerDay: z.coerce.number().int().min(0, "Must be 0 or greater"),
-  mcqMaxReviewsPerDay: z.coerce.number().int().min(0, "Must be 0 or greater"),
+  newCardsPerDay: z.coerce.number().int().min(0, 'Must be 0 or greater'),
+  maxReviewsPerDay: z.coerce.number().int().min(0, 'Must be 0 or greater'),
+  mcqNewCardsPerDay: z.coerce.number().int().min(0, 'Must be 0 or greater'),
+  mcqMaxReviewsPerDay: z.coerce.number().int().min(0, 'Must be 0 or greater'),
   // MCQ-specific display/review behavior (new)
   mcqDisplayOrder: z.enum(['sequential', 'random', 'byTag', 'byDifficulty']).default('sequential'),
   mcqNewVsReviewOrder: z.enum(['mix', 'newFirst', 'reviewFirst']).default('mix'),
@@ -54,7 +73,13 @@ export const srsSettingsSchema = z.object({
   mcqShuffleOptions: z.boolean().default(true),
   newCardInsertionOrder: z.enum(['sequential', 'random']),
   newCardGatherOrder: z.enum(['deck', 'ascending', 'descending', 'randomNotes', 'randomCards']),
-  newCardSortOrder: z.enum(['gathered', 'typeThenGathered', 'typeThenRandom', 'randomNote', 'random']),
+  newCardSortOrder: z.enum([
+    'gathered',
+    'typeThenGathered',
+    'typeThenRandom',
+    'randomNote',
+    'random',
+  ]),
   newReviewOrder: z.enum(['mix', 'after', 'before']),
   interdayLearningReviewOrder: z.enum(['mix', 'after', 'before']),
   reviewSortOrder: z.enum(['dueDateRandom', 'dueDateDeck', 'overdue']),
@@ -64,6 +89,8 @@ export const srsSettingsSchema = z.object({
   newCardsIgnoreReviewLimit: z.boolean(),
   limitsStartFromTop: z.boolean(),
   disableFlipAnimation: z.boolean(),
+  // AI Settings
+  geminiApiKey: z.string().optional(),
 });
 
 export type SrsSettings = z.infer<typeof srsSettingsSchema>;
@@ -77,9 +104,8 @@ interface SettingsDB extends DBSchema {
 
 const defaultFsrsParams = generatorParameters();
 const defaultFsrs6Weights: number[] = [
-    0.212, 1.2931, 2.3065, 8.2956, 6.4133, 0.8334, 3.0194, 0.001, 
-    1.8722, 0.1666, 0.796, 1.4835, 0.0614, 0.2629, 1.6483, 0.6014, 
-    1.8729, 0.5425, 0.0912, 0.0658, 0.1542
+  0.212, 1.2931, 2.3065, 8.2956, 6.4133, 0.8334, 3.0194, 0.001, 1.8722, 0.1666, 0.796, 1.4835,
+  0.0614, 0.2629, 1.6483, 0.6014, 1.8729, 0.5425, 0.0912, 0.0658, 0.1542,
 ];
 
 const defaultSettings: SrsSettings = {
@@ -114,8 +140,8 @@ const defaultSettings: SrsSettings = {
   sm2GraduatingInterval: 1,
   sm2EasyInterval: 4,
   sm2MinimumInterval: 1,
-  learningSteps: "1 10", // in minutes, space-separated
-  relearningSteps: "10", // in minutes, space-separated
+  learningSteps: '1 10', // in minutes, space-separated
+  relearningSteps: '10', // in minutes, space-separated
   leechThreshold: 8,
   leechAction: 'tag',
   newCardsPerDay: 20,
@@ -140,6 +166,8 @@ const defaultSettings: SrsSettings = {
   newCardsIgnoreReviewLimit: false,
   limitsStartFromTop: false,
   disableFlipAnimation: false,
+  // AI Settings
+  geminiApiKey: undefined,
 };
 
 // --- Database Functions ---
@@ -169,10 +197,9 @@ const saveSettingsToDB = async (settings: SrsSettings): Promise<void> => {
 };
 
 export const clearSettingsDB = async (): Promise<void> => {
-    const db = await getSettingsDb();
-    await db.clear(SETTINGS_STORE);
+  const db = await getSettingsDb();
+  await db.clear(SETTINGS_STORE);
 };
-
 
 // --- React Context ---
 interface SettingsContextType {
@@ -197,7 +224,7 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
         }
         setSettingsState(dbSettings);
       } catch (error) {
-        console.error("Failed to load settings, falling back to defaults.", error);
+        console.error('Failed to load settings, falling back to defaults.', error);
         setSettingsState(defaultSettings);
       } finally {
         setIsLoading(false);
@@ -208,8 +235,8 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
 
   const setSettings = (newSettings: SrsSettings) => {
     setSettingsState(newSettings);
-    saveSettingsToDB(newSettings).catch(error => {
-      console.error("Failed to save settings", error);
+    saveSettingsToDB(newSettings).catch((error) => {
+      console.error('Failed to save settings', error);
     });
   };
 
@@ -223,7 +250,7 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
 export const useSettings = () => {
   const context = useContext(SettingsContext);
   if (context === undefined) {
-    throw new Error("useSettings must be used within a SettingsProvider");
+    throw new Error('useSettings must be used within a SettingsProvider');
   }
   return context;
 };

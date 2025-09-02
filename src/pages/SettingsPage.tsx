@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft, HelpCircle } from 'lucide-react';
+import { ArrowLeft, HelpCircle, Brain, Lightbulb } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -1461,6 +1461,65 @@ const SettingsPage = () => {
                         </FormItem>
                       )}
                     />
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Brain className="h-5 w-5 text-primary" />
+                      AI Settings
+                    </CardTitle>
+                    <CardDescription>
+                      Configure AI features to get personalized study insights and recommendations.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="geminiApiKey"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Gemini API Key</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="password"
+                              placeholder="Enter your Gemini API key"
+                              {...field}
+                              value={field.value || ''}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Your API key is stored locally and never shared. Get your free API key
+                            from{' '}
+                            <a
+                              href="https://makersuite.google.com/app/apikey"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              Google AI Studio
+                            </a>
+                            .
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <div className="rounded-lg border p-3 bg-muted/50">
+                      <div className="flex items-start gap-2">
+                        <Lightbulb className="h-4 w-4 text-amber-600 mt-0.5" />
+                        <div className="text-sm">
+                          <p className="font-medium">AI Features Include:</p>
+                          <ul className="mt-1 space-y-1 text-muted-foreground">
+                            <li>• Personalized study recommendations</li>
+                            <li>• Performance insights and trends</li>
+                            <li>• Optimization tips for better retention</li>
+                            <li>• Weekly goal tracking and suggestions</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
 

@@ -1,16 +1,16 @@
-import { NavLink } from "react-router-dom";
-import { Home, BookOpen, ListChecks, Calendar, BarChart3 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { NavLink } from 'react-router-dom';
+import { Brain, BookOpen, ListChecks, Calendar, BarChart3 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 // Fixed height for the bottom nav; keep in sync with spacer/padding in App
 const NAV_HEIGHT = 64; // px
 
 const items = [
-  { to: "/", label: "Home", icon: Home },
-  { to: "/resources", label: "Resources", icon: BookOpen },
-  { to: "/question-bank", label: "MCQs", icon: ListChecks },
-  { to: "/exams", label: "Exams", icon: Calendar },
-  { to: "/statistics", label: "Stats", icon: BarChart3 },
+  { to: '/home', label: 'Home', icon: Brain },
+  { to: '/resources', label: 'Resources', icon: BookOpen },
+  { to: '/question-bank', label: 'MCQs', icon: ListChecks },
+  { to: '/exams', label: 'Exams', icon: Calendar },
+  { to: '/statistics', label: 'Stats', icon: BarChart3 },
 ];
 
 export default function MobileBottomNav() {
@@ -26,12 +26,12 @@ export default function MobileBottomNav() {
           <li key={to} className="contents">
             <NavLink
               to={to}
-              end={to === "/"}
+              end={to === '/'}
               className={({ isActive }) =>
                 cn(
-                  "flex flex-col items-center justify-center gap-1 text-xs select-none",
-                  "text-muted-foreground hover:text-foreground",
-                  isActive && "text-foreground"
+                  'flex flex-col items-center justify-center gap-1 text-xs select-none',
+                  'text-muted-foreground hover:text-foreground',
+                  isActive && 'text-foreground',
                 )
               }
             >

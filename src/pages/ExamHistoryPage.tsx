@@ -5,7 +5,14 @@ import { ExamLog } from '@/data/examLogs';
 import Header from '@/components/Header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { format } from 'date-fns';
 import { History } from 'lucide-react';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
@@ -17,9 +24,17 @@ const ExamHistoryPage = () => {
   useEffect(() => {
     getAllExamLogsFromDB().then((logs: unknown) => {
       const examLogs = logs as ExamLog[];
-      const sortedLogs = examLogs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      const parseTs = (val: unknown): number => {
+        if (typeof val === 'string' || typeof val === 'number' || val instanceof Date) {
+          const d = new Date(val);
+          const t = d.getTime();
+          if (!Number.isNaN(t)) return t;
+        }
+        return 0;
+      };
+      const sortedLogs = examLogs.sort((a, b) => parseTs(b.date) - parseTs(a.date));
       setExamLogs(sortedLogs);
-      setHasMistakes(sortedLogs.some(log => log.results.incorrectCount > 0));
+      setHasMistakes(sortedLogs.some((log) => log.results.incorrectCount > 0));
     });
   }, []);
 
@@ -57,19 +72,26 @@ const ExamHistoryPage = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {examLogs.map(log => {
-                      const totalMarks = log.settings.totalQuestions * log.settings.marksPerCorrect;
-                      const percentage = totalMarks > 0 ? (log.results.score / totalMarks) * 100 : 0;
+                    {examLogs.map((log) => {
+                      const resultsSafe = log.results;
+                      const settingsSafe = log.settings;
+                      const totalMarks = settingsSafe.totalQuestions * settingsSafe.marksPerCorrect;
+                      const percentage =
+                        totalMarks > 0 ? (resultsSafe.score / totalMarks) * 100 : 0;
+                      const dateObj = new Date(log.date);
+                      const dateStr = !Number.isNaN(dateObj.getTime())
+                        ? format(dateObj, 'PPP p')
+                        : String(log.date ?? '—');
                       return (
                         <TableRow key={log.id} className="text-xs sm:text-sm">
                           <TableCell className="font-medium">{log.name}</TableCell>
-                          <TableCell>{format(new Date(log.date), 'PPP p')}</TableCell>
-                          <TableCell>{log.results.score.toFixed(2)} / {totalMarks} ({percentage.toFixed(1)}%)</TableCell>
+                          <TableCell>{dateStr}</TableCell>
+                          <TableCell>
+                            {resultsSafe.score.toFixed(2)} / {totalMarks} ({percentage.toFixed(1)}%)
+                          </TableCell>
                           <TableCell className="text-right">
                             <Button asChild variant="ghost" size="sm">
-                              <Link to={`/exam/results/${log.id}`}>
-                                View Results
-                              </Link>
+                              <Link to={`/exam/results/${log.id}`}>View Results</Link>
                             </Button>
                           </TableCell>
                         </TableRow>

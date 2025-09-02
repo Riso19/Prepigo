@@ -610,7 +610,7 @@ const StatisticsPage = () => {
                         Flashcards
                       </span>
                       <span
-                        className={`font-bold ${(stabilityStats?.flashcards.velocity ?? 0 < 0) ? 'text-red-500' : 'text-green-500'}`}
+                        className={`font-bold ${(stabilityStats?.flashcards.velocity ?? 0) < 0 ? 'text-red-500' : 'text-green-500'}`}
                       >
                         {stabilityStats?.flashcards.velocity.toFixed(2)} d/d
                       </span>
@@ -621,7 +621,7 @@ const StatisticsPage = () => {
                         MCQs
                       </span>
                       <span
-                        className={`font-bold ${(stabilityStats?.mcqs.velocity ?? 0 < 0) ? 'text-red-500' : 'text-green-500'}`}
+                        className={`font-bold ${(stabilityStats?.mcqs.velocity ?? 0) < 0 ? 'text-red-500' : 'text-green-500'}`}
                       >
                         {stabilityStats?.mcqs.velocity.toFixed(2)} d/d
                       </span>

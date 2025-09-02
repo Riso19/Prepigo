@@ -6,6 +6,7 @@ import { postMessage } from '@/lib/broadcast';
 import type { DeckData } from '@/data/decks';
 import type { ExamData } from '@/data/exams';
 import type { QuestionBankData } from '@/data/questionBanks';
+import type { ExamLogEntry as UiExamLogEntry } from '@/data/examLogs';
 
 // Type for the transaction function to avoid using 'any'
 type TransactionFunction = <T>(
@@ -121,15 +122,19 @@ export async function linkHighlightToCardSafe(
 
   // Fallback to v1: choose the most recent highlight for this resource and link it
   try {
-    const t1 = await table<ResourceHighlight>(RESOURCE_HIGHLIGHTS_STORE);
+    const t1 = asTable<ResourceHighlight>(await table(RESOURCE_HIGHLIGHTS_STORE));
     const list = await t1.where('resourceId').equals(resourceId).toArray();
     if (list && list.length) {
       const latest = [...list].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0];
-      // Use update to avoid strict typing on key differences between v1/v2
-      await (t1 as any).update((latest as any).id, {
+      // Use optional update to avoid strict typing on key differences between v1/v2
+      const key = ((): string | number => {
+        const k = (latest as unknown as { id?: unknown }).id;
+        return typeof k === 'string' || typeof k === 'number' ? k : String(k);
+      })();
+      await t1.update?.(key, {
         linkedCardId: cardId,
         updatedAt: Date.now(),
-      });
+      } as Partial<ResourceHighlight>);
       broadcastStorageWrite({ resource: RESOURCE_HIGHLIGHTS_STORE });
       return;
     }
@@ -171,6 +176,8 @@ type DexieTable<T> = {
   clear: () => Promise<unknown>;
   bulkPut: (values: T[]) => Promise<unknown>;
   bulkDelete: (keys: (number | string)[]) => Promise<unknown>;
+  // Optional method available on Dexie.Table; included here to avoid using 'any'
+  update?: (key: string | number, changes: Partial<T>) => Promise<unknown>;
   where: (key: keyof T & string) => {
     equals: (value: unknown) => {
       toArray: () => Promise<T[]>;
@@ -396,7 +403,10 @@ const DB_NAME = 'PrepigoDB';
 // - v11: Introduced resources store
 // - v12: Introduced resource_highlights store (non-destructive)
 // - v13: Introduced resource_highlights_v2 with string PK 'id' and createdAt index; migration from v1
-const DB_VERSION = 13;
+// - v14: Introduced ai_explanations store for MCQ AI explanations
+// - v15: Introduced ai_insights store to cache dashboard insights
+// - v16: Introduced exam_ai_analysis store to cache AI analysis per exam log
+const DB_VERSION = 16;
 
 // Schema definitions for each version
 const SCHEMA_VERSIONS = {
@@ -517,6 +527,57 @@ const SCHEMA_VERSIONS = {
     review_logs: '++id, cardId',
     decks: 'id',
   },
+  14: {
+    // Add AI explanations store for MCQ explanations
+    ai_explanations: 'mcqId, createdAt',
+    resource_highlights_v2: 'id, resourceId, createdAt',
+    resources: 'id, createdAt',
+    meta: 'key',
+    syncQueue: '++id, resource, opType, createdAt',
+    exam_logs: '++id, examId',
+    exams: 'id',
+    mcq_review_logs: '++id, mcqId',
+    question_banks: 'id',
+    session_state: '',
+    media: 'id',
+    review_logs: '++id, cardId',
+    decks: 'id',
+  },
+  15: {
+    // Add AI insights cache store
+    ai_insights: 'id, createdAt',
+    ai_explanations: 'mcqId, createdAt',
+    resource_highlights_v2: 'id, resourceId, createdAt',
+    resources: 'id, createdAt',
+    meta: 'key',
+    syncQueue: '++id, resource, opType, createdAt',
+    exam_logs: '++id, examId',
+    exams: 'id',
+    mcq_review_logs: '++id, mcqId',
+    question_banks: 'id',
+    session_state: '',
+    media: 'id',
+    review_logs: '++id, cardId',
+    decks: 'id',
+  },
+  16: {
+    // Add exam AI analysis cache store
+    exam_ai_analysis: 'id, createdAt',
+    ai_insights: 'id, createdAt',
+    ai_explanations: 'mcqId, createdAt',
+    resource_highlights_v2: 'id, resourceId, createdAt',
+    resources: 'id, createdAt',
+    meta: 'key',
+    syncQueue: '++id, resource, opType, createdAt',
+    exam_logs: '++id, examId',
+    exams: 'id',
+    mcq_review_logs: '++id, mcqId',
+    question_banks: 'id',
+    session_state: '',
+    media: 'id',
+    review_logs: '++id, cardId',
+    decks: 'id',
+  },
 } as const;
 
 // Public types
@@ -532,6 +593,25 @@ export interface ExamLog {
   submittedAt?: number;
   createdAt: number;
   updatedAt: number;
+
+  // Optional, backward-compatible fields for rich results rendering (v16+)
+  // These mirror src/data/examLogs.ts but are optional to preserve legacy records.
+  name?: string;
+  date?: string; // ISO string
+  settings?: {
+    timeLimit: number; // minutes
+    totalQuestions: number;
+    marksPerCorrect: number;
+    negativeMarksPerWrong: number;
+  };
+  results?: {
+    score: number;
+    correctCount: number;
+    incorrectCount: number;
+    skippedCount: number;
+    timeTaken: number; // seconds
+  };
+  entries?: UiExamLogEntry[];
 }
 
 export type McqReviewLog = {
@@ -562,7 +642,7 @@ async function getDb(): Promise<DbInstance> {
     const db = new Dexie(DB_NAME);
 
     // Apply schema versions
-    for (let i = 1; i <= Math.min(DB_VERSION, 12); i++) {
+    for (let i = 1; i <= DB_VERSION; i++) {
       const schema = SCHEMA_VERSIONS[i as keyof typeof SCHEMA_VERSIONS];
       if (DEBUG_DB)
         console.log(`  Version ${i}:`, schema ? 'Applying schema' : 'No schema changes');
@@ -777,6 +857,72 @@ export async function getLastDbError(): Promise<LastDbError | undefined> {
   const t = await table<MetaRecord>(META_STORE);
   const rec = await t.get('lastDbError');
   return rec?.value;
+}
+
+// ============ AI Insights Cache (v15+) ============
+export type AIInsightsRecord = {
+  id: string; // e.g., 'latest'
+  data: unknown; // StudyRecommendation shape stored as plain object
+  createdAt: number;
+};
+
+export const AI_INSIGHTS_STORE = 'ai_insights';
+
+export async function saveAIInsights(data: unknown, id = 'latest'): Promise<void> {
+  await runDbOp('saveAIInsights', async () => {
+    const t = await table<AIInsightsRecord>(AI_INSIGHTS_STORE);
+    const rec: AIInsightsRecord = { id, data, createdAt: Date.now() };
+    await t.put(rec, id);
+    broadcastStorageWrite({ resource: AI_INSIGHTS_STORE, id });
+  });
+}
+
+export async function getLatestAIInsights(
+  id = 'latest',
+): Promise<{ data: unknown; createdAt: number } | undefined> {
+  return runDbOp(
+    'getLatestAIInsights',
+    async () => {
+      const t = await table<AIInsightsRecord>(AI_INSIGHTS_STORE);
+      const rec = await t.get(id);
+      if (!rec) return undefined;
+      return { data: rec.data, createdAt: rec.createdAt };
+    },
+    { swallow: true },
+  );
+}
+
+// ============ Exam AI Analysis (v16+) ============
+export type ExamAIAnalysisRecord = {
+  id: string; // exam log id
+  data: unknown; // ExamAIAnalysis shape stored as plain object
+  createdAt: number;
+};
+
+export const EXAM_AI_ANALYSIS_STORE = 'exam_ai_analysis';
+
+export async function saveExamAIAnalysis(examLogId: string, data: unknown): Promise<void> {
+  await runDbOp('saveExamAIAnalysis', async () => {
+    const t = await table<ExamAIAnalysisRecord>(EXAM_AI_ANALYSIS_STORE);
+    const rec: ExamAIAnalysisRecord = { id: examLogId, data, createdAt: Date.now() };
+    await t.put(rec, examLogId);
+    broadcastStorageWrite({ resource: EXAM_AI_ANALYSIS_STORE, id: examLogId });
+  });
+}
+
+export async function getExamAIAnalysis(
+  examLogId: string,
+): Promise<{ data: unknown; createdAt: number } | undefined> {
+  return runDbOp(
+    'getExamAIAnalysis',
+    async () => {
+      const t = await table<ExamAIAnalysisRecord>(EXAM_AI_ANALYSIS_STORE);
+      const rec = await t.get(examLogId);
+      if (!rec) return undefined;
+      return { data: rec.data, createdAt: rec.createdAt };
+    },
+    { swallow: true },
+  );
 }
 
 // Persisted resource reading progress
@@ -1265,10 +1411,7 @@ export async function saveMcqIntroductionsToDB(
   }
 
   const t = await table<{ key: string; value: McqIntroductionsData }>(META_STORE);
-  await t.put(
-    { key: 'mcq-introductions', value: { ids, date, mcqIds: ids } },
-    'mcq-introductions',
-  );
+  await t.put({ key: 'mcq-introductions', value: { ids, date, mcqIds: ids } }, 'mcq-introductions');
 
   broadcastStorageWrite({ resource: 'mcq-introductions' });
   broadcastStorageWrite({ resource: 'decks', clear: true });

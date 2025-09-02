@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 
 // BrowserRouter configuration
 import Index from './pages/Index';
+import HomePage from './pages/HomePage';
 import NotFound from './pages/NotFound';
 import { DecksProvider } from '@/contexts/DecksContext';
 import { SettingsProvider } from '@/contexts/SettingsContext';
@@ -69,6 +70,7 @@ const App = () => (
                   <BrowserRouter>
                     <Routes>
                       <Route path="/" element={<Index />} />
+                      <Route path="/home" element={<HomePage />} />
                       <Route path="/resources" element={<ResourcesPage />} />
                       <Route path="/resources/:id/view" element={<ResourceViewerPage />} />
                       <Route path="/question-bank" element={<QuestionBankPage />} />

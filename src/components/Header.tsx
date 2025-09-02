@@ -1,14 +1,23 @@
-import { Stethoscope, Settings, BookCopy, HelpCircle, CalendarCheck2, BarChart3, FileText } from "lucide-react";
-import { NavLink } from "react-router-dom";
-import { Button } from "./ui/button";
-import { cn } from "@/lib/utils";
-import { ThemeToggle } from "./ThemeToggle";
+import {
+  Stethoscope,
+  Settings,
+  BookCopy,
+  HelpCircle,
+  CalendarCheck2,
+  BarChart3,
+  FileText,
+  Brain,
+} from 'lucide-react';
+import { NavLink } from 'react-router-dom';
+import { Button } from './ui/button';
+import { cn } from '@/lib/utils';
+import { ThemeToggle } from './ThemeToggle';
 
 const Header = () => {
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     cn(
-      "flex items-center gap-2 text-sm md:text-base font-medium text-muted-foreground transition-colors hover:text-primary",
-      isActive && "text-primary font-semibold"
+      'flex items-center gap-2 text-sm md:text-base font-medium text-muted-foreground transition-colors hover:text-primary',
+      isActive && 'text-primary font-semibold',
     );
 
   return (
@@ -27,6 +36,9 @@ const Header = () => {
             <h1 className="text-xl md:text-2xl font-bold text-primary">Prepigo</h1>
           </NavLink>
           <nav className="hidden md:flex items-center gap-6" aria-label="Primary">
+            <NavLink to="/home" className={navLinkClass}>
+              <Brain className="h-4 w-4" /> AI Home
+            </NavLink>
             <NavLink to="/" className={navLinkClass} end>
               <BookCopy className="h-4 w-4" /> Decks
             </NavLink>

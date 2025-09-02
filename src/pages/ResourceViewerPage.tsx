@@ -186,7 +186,9 @@ export default function ResourceViewerPage() {
       if (renderTaskRef.current) {
         try {
           renderTaskRef.current.cancel();
-        } catch {}
+        } catch {
+          /* swallow cancellation errors */
+        }
         renderTaskRef.current = null;
       }
 
@@ -217,7 +219,10 @@ export default function ResourceViewerPage() {
           canvas,
           ...(transform && { transform }),
         });
-        renderTaskRef.current = task as unknown as { cancel: () => void; promise: Promise<unknown> };
+        renderTaskRef.current = task as unknown as {
+          cancel: () => void;
+          promise: Promise<unknown>;
+        };
 
         try {
           await task.promise;
@@ -262,7 +267,9 @@ export default function ResourceViewerPage() {
       if (renderTaskRef.current) {
         try {
           renderTaskRef.current.cancel();
-        } catch {}
+        } catch {
+          /* swallow cancellation errors */
+        }
         renderTaskRef.current = null;
       }
     };

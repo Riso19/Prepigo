@@ -302,6 +302,23 @@ const ExamSessionPage = () => {
         submittedAt: now,
         createdAt: now,
         updatedAt: now,
+        // Enriched fields for results rendering (optional in type; persisted when available)
+        name: examSettings.name ?? undefined,
+        date: new Date(now).toISOString(),
+        settings: {
+          timeLimit: examSettings.timeLimit ?? 0,
+          totalQuestions: queue.length,
+          marksPerCorrect: examSettings.marksPerCorrect ?? 1,
+          negativeMarksPerWrong: examSettings.negativeMarksPerWrong ?? 0,
+        },
+        results: {
+          score,
+          correctCount,
+          incorrectCount,
+          skippedCount,
+          timeTaken,
+        },
+        entries,
       };
 
       await saveExamLogToDB(examLog);
