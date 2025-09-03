@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Brain, BookOpen, ListChecks, Calendar, BarChart3 } from 'lucide-react';
+import { Brain, BookOpen, ListChecks, Calendar, Trophy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // Fixed height for the bottom nav; keep in sync with spacer/padding in App
@@ -10,7 +10,7 @@ const items = [
   { to: '/resources', label: 'Resources', icon: BookOpen },
   { to: '/question-bank', label: 'MCQs', icon: ListChecks },
   { to: '/exams', label: 'Exams', icon: Calendar },
-  { to: '/statistics', label: 'Stats', icon: BarChart3 },
+  { to: '/gamification', label: 'Progress', icon: Trophy },
 ];
 
 export default function MobileBottomNav() {

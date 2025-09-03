@@ -338,6 +338,16 @@ export const RESOURCES_STORE = 'resources';
 export const RESOURCE_HIGHLIGHTS_STORE = 'resource_highlights';
 export const RESOURCE_HIGHLIGHTS_V2_STORE = 'resource_highlights_v2';
 
+// Gamification stores
+export const ACHIEVEMENTS_STORE = 'achievements';
+export const USER_ACHIEVEMENTS_STORE = 'user_achievements';
+export const XP_EVENTS_STORE = 'xp_events';
+export const USER_LEVELS_STORE = 'user_levels';
+export const STREAKS_STORE = 'streaks';
+export const GOALS_STORE = 'goals';
+export const NOTIFICATIONS_STORE = 'notifications';
+export const USER_STATS_STORE = 'user_stats';
+
 // Base table interface with common operations
 type Table<T = unknown> = {
   get: (key: string) => Promise<T | undefined>;
@@ -406,7 +416,8 @@ const DB_NAME = 'PrepigoDB';
 // - v14: Introduced ai_explanations store for MCQ AI explanations
 // - v15: Introduced ai_insights store to cache dashboard insights
 // - v16: Introduced exam_ai_analysis store to cache AI analysis per exam log
-const DB_VERSION = 16;
+// - v17: Introduced gamification stores (achievements, user_achievements, xp_events, user_levels, streaks, goals, notifications, user_stats)
+const DB_VERSION = 17;
 
 // Schema definitions for each version
 const SCHEMA_VERSIONS = {
@@ -562,6 +573,32 @@ const SCHEMA_VERSIONS = {
   },
   16: {
     // Add exam AI analysis cache store
+    exam_ai_analysis: 'id, createdAt',
+    ai_insights: 'id, createdAt',
+    ai_explanations: 'mcqId, createdAt',
+    resource_highlights_v2: 'id, resourceId, createdAt',
+    resources: 'id, createdAt',
+    meta: 'key',
+    syncQueue: '++id, resource, opType, createdAt',
+    exam_logs: '++id, examId',
+    exams: 'id',
+    mcq_review_logs: '++id, mcqId',
+    question_banks: 'id',
+    session_state: '',
+    media: 'id',
+    review_logs: '++id, cardId',
+    decks: 'id',
+  },
+  17: {
+    // Add gamification stores
+    achievements: 'id, type, tier, createdAt',
+    user_achievements: 'id, achievementId, userId, unlockedAt',
+    xp_events: '++id, userId, type, timestamp',
+    user_levels: 'userId',
+    streaks: 'id, userId, type, lastActivityDate',
+    goals: 'id, userId, type, period',
+    notifications: '++id, userId, type, createdAt',
+    user_stats: 'userId, updatedAt',
     exam_ai_analysis: 'id, createdAt',
     ai_insights: 'id, createdAt',
     ai_explanations: 'mcqId, createdAt',
@@ -1312,8 +1349,18 @@ export async function getAllExamsFromDB(): Promise<ExamData[]> {
 }
 
 export async function saveExamsToDB(exams: ExamData[]): Promise<void> {
-  const t = await table<ExamData>(EXAMS_STORE);
-  await t.bulkPut(exams);
+  await withTransaction([EXAMS_STORE], 'rw', async (tx) => {
+    const t = tx.table<ExamData>(EXAMS_STORE);
+    const existing = await t.toArray();
+    const newIds = new Set(exams.map((e) => e.id));
+    const toDelete = existing.map((e) => e.id).filter((id) => !newIds.has(id));
+    if (toDelete.length) {
+      await t.bulkDelete(toDelete);
+    }
+    if (exams.length) {
+      await t.bulkPut(exams);
+    }
+  });
   broadcastStorageWrite({ resource: 'exams' });
 }
 

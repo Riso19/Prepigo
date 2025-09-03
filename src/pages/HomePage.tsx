@@ -21,6 +21,7 @@ import Header from '@/components/Header';
 import { useDecks } from '@/contexts/DecksContext';
 import { useQuestionBanks } from '@/contexts/QuestionBankContext';
 import { useSettings } from '@/contexts/SettingsContext';
+import { GamificationHeader } from '@/components/gamification/GamificationHeader';
 import {
   generateAIInsights,
   generateQuickStats,
@@ -81,7 +82,6 @@ const HomePage = () => {
   useEffect(() => {
     // Load cached insights immediately for faster UX (no auto-refresh; explicit by user)
     loadCachedInsightsFromDexie();
-     
   }, []);
 
   const generatedTimeLabel = useMemo(() => {
@@ -99,6 +99,9 @@ const HomePage = () => {
       <Header />
       <main className="flex-grow container mx-auto p-4 md:p-8 bg-secondary/50 rounded-lg my-4">
         <div className="space-y-6">
+          {/* Gamification Header */}
+          <GamificationHeader />
+
           {/* Header */}
           <div className="flex items-center justify-between">
             <div>

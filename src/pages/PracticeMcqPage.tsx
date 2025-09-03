@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useQuestionBanks } from '@/contexts/QuestionBankContext';
+import { useGamification } from '@/contexts/GamificationContext';
 import {
   findQuestionBankById,
   getAllMcqsFromBank,
@@ -25,6 +26,7 @@ import { useSettings } from '@/contexts/SettingsContext';
 import { scheduleSyncNow } from '@/lib/sync';
 import { postMessage } from '@/lib/broadcast';
 import { outcomeByRating } from '@/lib/fsrs-helpers';
+import { useStudyTimer } from '@/hooks/useStudyTimer';
 
 const shuffle = <T,>(array: T[]): T[] => {
   const newArray = [...array];
@@ -68,6 +70,9 @@ const PracticeMcqPage = () => {
   const { questionBanks, setQuestionBanks } = useQuestionBanks();
   const navigate = useNavigate();
   const { settings: globalSettings } = useSettings();
+  const { addXp, updateStats, userStats, updateStreak } = useGamification();
+  // Start continuous study timer for this page (foreground active time only)
+  useStudyTimer();
 
   const [sessionQueue, setSessionQueue] = useState<McqData[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -256,13 +261,40 @@ const PracticeMcqPage = () => {
       const isCorrect = optionId === correctOption?.id;
       setIsAnswerCorrect(isCorrect);
 
+      // Timer handles study time accumulation; no per-question time added here
+
       if (isCorrect) {
         setSessionStats((prev) => ({ ...prev, correct: prev.correct + 1 }));
       } else {
         setSessionStats((prev) => ({ ...prev, incorrect: prev.incorrect + 1 }));
       }
+
+      // Award XP for answering MCQ (regardless of correctness)
+      addXp('mcq_answered').catch((error) => {
+        console.error('Failed to add XP:', error);
+      });
+
+      // Update gamification stats: reviewed count only
+      updateStats({
+        totalCardsReviewed: userStats.totalCardsReviewed + 1,
+      }).catch((error) => {
+        console.error('Failed to update stats:', error);
+      });
+
+      // Update daily study streak
+      updateStreak('study').catch((error) => {
+        console.error('Failed to update streak:', error);
+      });
     },
-    [isSubmitted, currentQuestion],
+    [
+      isSubmitted,
+      currentQuestion,
+      addXp,
+      updateStats,
+      userStats.totalStudyTimeMinutes,
+      userStats.totalCardsReviewed,
+      updateStreak,
+    ],
   );
 
   useEffect(() => {

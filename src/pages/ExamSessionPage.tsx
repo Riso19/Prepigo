@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { McqData } from '@/data/questionBanks';
+import { useGamification } from '@/contexts/GamificationContext';
 import { ExamLogEntry } from '@/data/examLogs';
 import { addMcqReviewLog, McqReviewLog, enqueueCriticalSyncOp } from '@/lib/idb';
 import { saveExamLogToDB, ExamLog } from '@/lib/dexie-db';
@@ -118,6 +119,7 @@ const ExamSessionPage = () => {
   const { queue, examSettings, srsEnabled } = location.state || {};
   const { questionBanks, setQuestionBanks } = useQuestionBanks();
   const { settings: globalSettings } = useSettings();
+  const { addXp } = useGamification();
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string | null>>({});
@@ -322,6 +324,16 @@ const ExamSessionPage = () => {
       };
 
       await saveExamLogToDB(examLog);
+
+      // Award XP for exam completion
+      addXp('exam_completed').catch(console.error);
+
+      // Award bonus XP for perfect exam
+      const percentage = (correctCount / queue.length) * 100;
+      if (percentage === 100) {
+        addXp('perfect_exam').catch(console.error);
+      }
+
       // Enqueue sync for exam logs (non-blocking) and schedule background sync
       void enqueueCriticalSyncOp({ resource: 'examLogs', opType: 'create', payload: examLog })
         .then(() => scheduleSyncNow())

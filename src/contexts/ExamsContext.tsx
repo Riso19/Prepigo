@@ -1,8 +1,8 @@
-import { createContext, useContext, useState, ReactNode, useEffect } from "react";
-import { ExamData } from "@/data/exams";
-import { getAllExamsFromDB, saveExamsToDB, enqueueSyncOp, enqueueCriticalSyncOp } from "@/lib/idb";
-import { scheduleSyncNow } from "@/lib/sync";
-import { postMessage, subscribe } from "@/lib/broadcast";
+import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { ExamData } from '@/data/exams';
+import { enqueueCriticalSyncOp, getAllExamsFromDB, saveExamsToDB, enqueueSyncOp } from '@/lib/idb';
+import { scheduleSyncNow } from '@/lib/sync';
+import { postMessage, subscribe } from '@/lib/broadcast';
 
 interface ExamsContextType {
   exams: ExamData[];
@@ -25,8 +25,8 @@ export const ExamsProvider = ({ children }: { children: ReactNode }) => {
       try {
         const dbExams = await getAllExamsFromDB();
         setExamsState(dbExams);
-      } catch (error) {
-        console.error("Failed to load exams from IndexedDB.", error);
+      } catch (error: unknown) {
+        console.error('Failed to load exams from IndexedDB.', error);
       } finally {
         setIsLoading(false);
       }
@@ -39,7 +39,7 @@ export const ExamsProvider = ({ children }: { children: ReactNode }) => {
         try {
           const latest = await getAllExamsFromDB();
           setExamsState(latest);
-        } catch (e) {
+        } catch (e: unknown) {
           // noop
         }
       }
@@ -52,42 +52,48 @@ export const ExamsProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const setExams = (newExams: ExamData[] | ((prevExams: ExamData[]) => ExamData[])) => {
-    setExamsState(prevExams => {
+    setExamsState((prevExams) => {
       const updatedExams = typeof newExams === 'function' ? newExams(prevExams) : newExams;
-      saveExamsToDB(updatedExams).catch(error => {
-        console.error("Failed to save exams to IndexedDB", error);
+      saveExamsToDB(updatedExams).catch((error: unknown) => {
+        console.error('Failed to save exams to IndexedDB', error);
       });
 
       // Enqueue bulk upsert for entire exams set (normal priority)
       void enqueueSyncOp({ resource: 'exams', opType: 'bulk-upsert', payload: updatedExams })
         .then(() => scheduleSyncNow())
         .then(() => postMessage({ type: 'storage-write', resource: 'exams' }))
-        .catch(() => { /* noop */ });
+        .catch(() => {
+          /* noop */
+        });
       return updatedExams;
     });
   };
 
   const addExam = (exam: ExamData) => {
-    setExams(prev => [...prev, exam]);
+    setExams((prev) => [...prev, exam]);
     // Enqueue single create (critical)
     void enqueueCriticalSyncOp({ resource: 'exams', opType: 'create', payload: exam })
       .then(() => scheduleSyncNow())
       .then(() => postMessage({ type: 'storage-write', resource: 'exams' }))
-      .catch(() => { /* noop */ });
+      .catch(() => {
+        /* noop */
+      });
   };
 
   const updateExam = (updatedExam: ExamData) => {
-    setExams(prev => prev.map(exam => exam.id === updatedExam.id ? updatedExam : exam));
+    setExams((prev) => prev.map((exam) => (exam.id === updatedExam.id ? updatedExam : exam)));
     // Enqueue single update (critical)
     void enqueueCriticalSyncOp({ resource: 'exams', opType: 'update', payload: updatedExam })
       .then(() => scheduleSyncNow())
       .then(() => postMessage({ type: 'storage-write', resource: 'exams' }))
-      .catch(() => { /* noop */ });
+      .catch(() => {
+        /* noop */
+      });
   };
 
   const deleteExam = async (examId: string) => {
     const prev = exams;
-    const updated = prev.filter(exam => exam.id !== examId);
+    const updated = prev.filter((exam) => exam.id !== examId);
     // Optimistic
     setExamsState(updated);
     try {
@@ -95,7 +101,7 @@ export const ExamsProvider = ({ children }: { children: ReactNode }) => {
       await enqueueCriticalSyncOp({ resource: 'exams', opType: 'delete', payload: { id: examId } });
       await scheduleSyncNow();
       postMessage({ type: 'storage-write', resource: 'exams' });
-    } catch (e) {
+    } catch (e: unknown) {
       // rollback
       setExamsState(prev);
       throw e;
@@ -112,7 +118,7 @@ export const ExamsProvider = ({ children }: { children: ReactNode }) => {
 export const useExams = () => {
   const context = useContext(ExamsContext);
   if (context === undefined) {
-    throw new Error("useExams must be used within an ExamsProvider");
+    throw new Error('useExams must be used within an ExamsProvider');
   }
   return context;
 };

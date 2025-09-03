@@ -34,7 +34,8 @@ const ExamHistoryPage = () => {
       };
       const sortedLogs = examLogs.sort((a, b) => parseTs(b.date) - parseTs(a.date));
       setExamLogs(sortedLogs);
-      setHasMistakes(sortedLogs.some((log) => log.results.incorrectCount > 0));
+      // Be resilient to legacy records without results
+      setHasMistakes(sortedLogs.some((log) => (log?.results?.incorrectCount ?? 0) > 0));
     });
   }, []);
 
@@ -73,21 +74,36 @@ const ExamHistoryPage = () => {
                   </TableHeader>
                   <TableBody>
                     {examLogs.map((log) => {
-                      const resultsSafe = log.results;
-                      const settingsSafe = log.settings;
-                      const totalMarks = settingsSafe.totalQuestions * settingsSafe.marksPerCorrect;
+                      const resultsSafe = log?.results ?? {
+                        score: 0,
+                        correctCount: 0,
+                        incorrectCount: 0,
+                        skippedCount: 0,
+                        timeTaken: 0,
+                      };
+                      const settingsSafe = log?.settings ?? {
+                        timeLimit: 0,
+                        totalQuestions: 0,
+                        marksPerCorrect: 1,
+                        negativeMarksPerWrong: 0,
+                      };
+                      const totalMarks =
+                        (settingsSafe?.totalQuestions ?? 0) * (settingsSafe?.marksPerCorrect ?? 1);
                       const percentage =
-                        totalMarks > 0 ? (resultsSafe.score / totalMarks) * 100 : 0;
-                      const dateObj = new Date(log.date);
+                        totalMarks > 0 ? ((resultsSafe?.score ?? 0) / totalMarks) * 100 : 0;
+                      const dateObj = new Date((log as unknown as { date?: string })?.date ?? '');
                       const dateStr = !Number.isNaN(dateObj.getTime())
                         ? format(dateObj, 'PPP p')
-                        : String(log.date ?? '—');
+                        : String((log as unknown as { date?: string })?.date ?? '—');
                       return (
                         <TableRow key={log.id} className="text-xs sm:text-sm">
-                          <TableCell className="font-medium">{log.name}</TableCell>
+                          <TableCell className="font-medium">
+                            {(log as unknown as { name?: string })?.name ?? '—'}
+                          </TableCell>
                           <TableCell>{dateStr}</TableCell>
                           <TableCell>
-                            {resultsSafe.score.toFixed(2)} / {totalMarks} ({percentage.toFixed(1)}%)
+                            {(resultsSafe?.score ?? 0).toFixed(2)} / {totalMarks} (
+                            {percentage.toFixed(1)}%)
                           </TableCell>
                           <TableCell className="text-right">
                             <Button asChild variant="ghost" size="sm">
