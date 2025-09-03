@@ -17,7 +17,8 @@ export const XpBar = ({ userLevel, showDetails = true, size = 'md' }: XpBarProps
   const xpForNextLevel = calculateXpForLevel(currentLevel + 1);
   const xpInCurrentLevel = totalXp - xpForCurrentLevel;
   const xpNeededForNextLevel = xpForNextLevel - xpForCurrentLevel;
-  const progressPercentage = (xpInCurrentLevel / xpNeededForNextLevel) * 100;
+  const rawPct = (xpInCurrentLevel / Math.max(1, xpNeededForNextLevel)) * 100;
+  const progressPercentage = Math.min(100, Math.max(0, rawPct));
 
   const sizeClasses = {
     sm: 'h-2',

@@ -122,7 +122,8 @@ export const calculateRetentionDistribution = (
     const srsData = scheduler === 'fsrs6' ? item.srs?.fsrs6 : item.srs?.fsrs;
     if (srsData && srsData.state === State.Review && srsData.last_review) {
       reviewedCount++;
-      const elapsed_days = differenceInDays(now, new Date(srsData.last_review));
+      const elapsed_ms = now.getTime() - new Date(srsData.last_review).getTime();
+      const elapsed_days = elapsed_ms / (1000 * 60 * 60 * 24);
       const r = retrievability(elapsed_days, srsData.stability) * 100;
 
       if (r >= 97) bins['97-100%']++;
@@ -202,7 +203,8 @@ export const calculateAverageRetention = (
     const srsData = scheduler === 'fsrs6' ? item.srs?.fsrs6 : item.srs?.fsrs;
     if (srsData && srsData.state === State.Review && srsData.last_review) {
       reviewedCount++;
-      const elapsed_days = differenceInDays(now, new Date(srsData.last_review));
+      const elapsed_ms = now.getTime() - new Date(srsData.last_review).getTime();
+      const elapsed_days = elapsed_ms / (1000 * 60 * 60 * 24);
       totalRetention += retrievability(elapsed_days, srsData.stability);
     }
   });
@@ -229,7 +231,8 @@ export const calculateAtRiskItems = (
   items.forEach((item) => {
     const srsData = scheduler === 'fsrs6' ? item.srs?.fsrs6 : item.srs?.fsrs;
     if (srsData && srsData.state === State.Review && srsData.last_review) {
-      const elapsed_days = differenceInDays(now, new Date(srsData.last_review));
+      const elapsed_ms = now.getTime() - new Date(srsData.last_review).getTime();
+      const elapsed_days = elapsed_ms / (1000 * 60 * 60 * 24);
       const r = retrievability(elapsed_days, srsData.stability);
       if (1 - r > riskThreshold) {
         atRiskCount++;
@@ -607,7 +610,8 @@ export const calculateDifficultyWeightedMastery = (
     const srsData = scheduler === 'fsrs6' ? item.srs?.fsrs6 : item.srs?.fsrs;
     if (srsData && srsData.state !== State.New && srsData.last_review) {
       fsrsItemCount++;
-      const elapsed_days = differenceInDays(now, new Date(srsData.last_review));
+      const elapsed_ms = now.getTime() - new Date(srsData.last_review).getTime();
+      const elapsed_days = elapsed_ms / (1000 * 60 * 60 * 24);
       const r = retrievability(elapsed_days, srsData.stability);
       const d = srsData.difficulty;
       // Normalize difficulty from 1-10 to a penalty from 0-1

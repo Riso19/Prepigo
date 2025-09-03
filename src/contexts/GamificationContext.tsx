@@ -30,6 +30,8 @@ import {
   GOALS_STORE,
   NOTIFICATIONS_STORE,
   USER_STATS_STORE,
+  EXAM_LOGS_STORE,
+  MCQ_REVIEW_LOGS_STORE,
 } from '@/lib/dexie-db';
 import { postMessage, subscribe } from '@/lib/broadcast';
 import { gamificationService } from '@/lib/gamification-service';
@@ -89,6 +91,7 @@ export const GamificationProvider = ({ children }: { children: ReactNode }) => {
   const [userStats, setUserStats] = useState<UserStats>({
     userId: 'default',
     totalCardsReviewed: 0,
+    totalMcqsAnswered: 0,
     totalExamsCompleted: 0,
     totalStudyTimeMinutes: 0,
     perfectExams: 0,
@@ -110,12 +113,19 @@ export const GamificationProvider = ({ children }: { children: ReactNode }) => {
         const achievementsTable = await table<Achievement>(ACHIEVEMENTS_STORE);
         const existingAchievements = await achievementsTable.toArray();
 
+        // Seed or backfill missing achievements without overwriting existing ones
         if (existingAchievements.length === 0) {
-          // Initialize with default achievements
+          // First-time init
           await achievementsTable.bulkPut(DEFAULT_ACHIEVEMENTS);
           setAchievements(DEFAULT_ACHIEVEMENTS);
         } else {
-          setAchievements(existingAchievements);
+          const existingIds = new Set(existingAchievements.map((a) => a.id));
+          const toInsert = DEFAULT_ACHIEVEMENTS.filter((a) => !existingIds.has(a.id));
+          if (toInsert.length > 0) {
+            await achievementsTable.bulkPut(toInsert);
+          }
+          // Merge view: prefer existing records to preserve any edits, then append newly inserted
+          setAchievements([...existingAchievements, ...toInsert]);
         }
 
         // Load user level
@@ -150,12 +160,19 @@ export const GamificationProvider = ({ children }: { children: ReactNode }) => {
         setNotifications(notificationsData.sort((a, b) => b.createdAt - a.createdAt));
 
         if (userStatsData) {
-          console.log('Loaded existing user stats:', userStatsData);
-          setUserStats(userStatsData);
+          // Backward-compat: ensure newly added fields exist with defaults
+          const normalized: UserStats = {
+            ...userStatsData,
+            totalMcqsAnswered:
+              (userStatsData as unknown as { totalMcqsAnswered?: number }).totalMcqsAnswered ?? 0,
+          } as UserStats;
+          console.log('Loaded existing user stats:', normalized);
+          setUserStats(normalized);
         } else {
           const initialStats: UserStats = {
             userId: 'default',
             totalCardsReviewed: 0,
+            totalMcqsAnswered: 0,
             totalExamsCompleted: 0,
             totalStudyTimeMinutes: 0,
             perfectExams: 0,
@@ -297,6 +314,139 @@ export const GamificationProvider = ({ children }: { children: ReactNode }) => {
           (a) => !userAchievements.some((ua) => ua.achievementId === a.id),
         );
 
+        // Prefetch performance logs once for this pass
+        type ExamLogLite = {
+          id?: string;
+          date?: string;
+          submittedAt?: number;
+          results?: { score?: number; timeTaken?: number };
+          createdAt?: number;
+          updatedAt?: number;
+        };
+        type McqLogLite = { review?: string; rating?: number; duration?: number };
+
+        const [examLogsArr, mcqLogsArr] = await Promise.all([
+          table<ExamLogLite>(EXAM_LOGS_STORE)
+            .then((t) => t.toArray())
+            .catch(() => [] as ExamLogLite[]),
+          table<McqLogLite>(MCQ_REVIEW_LOGS_STORE)
+            .then((t) => t.toArray())
+            .catch(() => [] as McqLogLite[]),
+        ]);
+
+        // Helpers
+        const getLatestActivityHour = (): number | undefined => {
+          const examTs = examLogsArr
+            .map(
+              (e) =>
+                e.submittedAt ??
+                (e.date ? Date.parse(e.date) : undefined) ??
+                e.updatedAt ??
+                e.createdAt,
+            )
+            .filter((v): v is number => typeof v === 'number');
+          const mcqTs = mcqLogsArr
+            .map((m) => (m.review ? Date.parse(m.review) : undefined))
+            .filter((v): v is number => typeof v === 'number');
+          const latest = Math.max(...[...examTs, ...mcqTs].filter((n) => !Number.isNaN(n)));
+          if (!Number.isFinite(latest)) return undefined;
+          return new Date(latest).getHours();
+        };
+
+        const countExamsAtOrAbove = (threshold: number): number => {
+          return examLogsArr.reduce((acc, e) => {
+            const score = e.results?.score;
+            return acc + (typeof score === 'number' && score >= threshold ? 1 : 0);
+          }, 0);
+        };
+
+        const anyExamDurationAtLeast = (minutes: number): boolean => {
+          const minSeconds = minutes * 60;
+          return examLogsArr.some((e) => (e.results?.timeTaken ?? 0) >= minSeconds);
+        };
+
+        const countDaysWithMcqAccuracyAtLeast = (thresholdPct: number): number => {
+          // Group MCQ logs by day (YYYY-MM-DD) and compute accuracy based on ratings
+          // Treat ratings >= 3 (Good/Easy) as correct
+          const byDay: Record<string, { total: number; correct: number }> = {};
+          for (const log of mcqLogsArr) {
+            const ts = log.review ? Date.parse(log.review) : undefined;
+            if (!ts || Number.isNaN(ts)) continue;
+            const day = new Date(ts).toISOString().slice(0, 10);
+            const rating = typeof log.rating === 'number' ? log.rating : undefined;
+            const correct = rating !== undefined && rating >= 3 ? 1 : 0;
+            if (!byDay[day]) byDay[day] = { total: 0, correct: 0 };
+            byDay[day].total += 1;
+            byDay[day].correct += correct;
+          }
+          return Object.values(byDay).reduce((acc, { total, correct }) => {
+            if (total === 0) return acc;
+            const pct = Math.round((correct / total) * 100);
+            return acc + (pct >= thresholdPct ? 1 : 0);
+          }, 0);
+        };
+
+        // Additional helpers
+        const countPerfectExams = (): number =>
+          examLogsArr.reduce(
+            (acc, e) =>
+              acc +
+              ((e.results?.score ?? (e as unknown as { score?: number }).score) === 100 ? 1 : 0),
+            0,
+          );
+
+        const mcqSpeedCountAtMost = (seconds: number): number => {
+          const maxMs = seconds * 1000;
+          return mcqLogsArr.reduce(
+            (acc, m) => acc + ((m.duration ?? Infinity) <= maxMs ? 1 : 0),
+            0,
+          );
+        };
+
+        const anyExamAvgSecPerQuestionAtMost = (seconds: number): boolean => {
+          return examLogsArr.some((e) => {
+            const timeTaken = e.results?.timeTaken;
+            const totalQ = (e as unknown as { totalQuestions?: number }).totalQuestions ?? 0;
+            if (!timeTaken || !totalQ) return false;
+            const avg = timeTaken / totalQ;
+            return avg <= seconds;
+          });
+        };
+
+        const hasWeekendWarrior = (): boolean => {
+          // Track Saturday (6) and Sunday (0) activity per ISO week key (YYYY-WW)
+          const daysByWeek: Record<string, Set<number>> = {};
+          const pushTs = (ts: number | undefined) => {
+            if (!ts || Number.isNaN(ts)) return;
+            const d = new Date(ts);
+            const day = d.getDay();
+            const isoWeekKey = (() => {
+              const temp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+              const dayNum = (temp.getUTCDay() + 6) % 7; // 0..6 Mon..Sun
+              temp.setUTCDate(temp.getUTCDate() - dayNum + 3); // Thursday
+              const firstThursday = new Date(Date.UTC(temp.getUTCFullYear(), 0, 4));
+              const firstDayNum = (firstThursday.getUTCDay() + 6) % 7;
+              firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDayNum + 3);
+              const weekNo = 1 + Math.round((+temp - +firstThursday) / (7 * 24 * 3600 * 1000));
+              return `${temp.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+            })();
+            const set = (daysByWeek[isoWeekKey] = daysByWeek[isoWeekKey] ?? new Set<number>());
+            set.add(day);
+          };
+
+          for (const e of examLogsArr) {
+            const ts =
+              e.submittedAt ??
+              (e.date ? Date.parse(e.date) : undefined) ??
+              e.updatedAt ??
+              e.createdAt;
+            pushTs(ts);
+          }
+          for (const m of mcqLogsArr) pushTs(m.review ? Date.parse(m.review) : undefined);
+
+          return Object.values(daysByWeek).some((set) => set.has(6) && set.has(0));
+        };
+
         for (const achievement of lockedAchievements) {
           let isUnlocked = false;
 
@@ -304,7 +454,8 @@ export const GamificationProvider = ({ children }: { children: ReactNode }) => {
           switch (achievement.requirement.type) {
             case 'count': {
               switch (achievement.type) {
-                case 'flashcards_reviewed': {
+                case 'flashcards_reviewed':
+                case 'total_cards_reviewed': {
                   isUnlocked = userStats.totalCardsReviewed >= achievement.requirement.value;
                   break;
                 }
@@ -318,7 +469,11 @@ export const GamificationProvider = ({ children }: { children: ReactNode }) => {
                   isUnlocked = mcqCount >= achievement.requirement.value;
                   break;
                 }
-                // Add other count-based achievements
+                case 'perfect_exam': {
+                  const needed = achievement.requirement.value; // count
+                  isUnlocked = countPerfectExams() >= needed;
+                  break;
+                }
               }
               break;
             }
@@ -326,6 +481,16 @@ export const GamificationProvider = ({ children }: { children: ReactNode }) => {
             case 'time': {
               if (achievement.type === 'study_time') {
                 isUnlocked = userStats.totalStudyTimeMinutes >= achievement.requirement.value;
+              } else if (achievement.type === 'dedication') {
+                // Fallback for legacy dedication with numeric value acting as hour threshold
+                const hour = getLatestActivityHour();
+                if (hour !== undefined) {
+                  const v = achievement.requirement.value;
+                  isUnlocked = v >= 12 ? hour >= v : hour < v;
+                }
+              } else if (achievement.type === 'speed') {
+                // Exam speed: under X seconds per question for any exam
+                isUnlocked = anyExamAvgSecPerQuestionAtMost(achievement.requirement.value);
               }
               break;
             }
@@ -336,24 +501,72 @@ export const GamificationProvider = ({ children }: { children: ReactNode }) => {
               break;
             }
 
+            case 'weekend_streak': {
+              // Activity on both Saturday and Sunday within the same ISO week
+              isUnlocked = hasWeekendWarrior();
+              break;
+            }
+
             case 'percentage': {
-              if (achievement.type === 'exam_performance' || achievement.type === 'mcq_accuracy') {
-                // This would need to check exam/mcq history for scores
-                // For now, we'll assume we have a way to check this
-                const meetsRequirement = false; // Implement actual check
-                isUnlocked = meetsRequirement;
+              if (achievement.type === 'exam_performance' || achievement.type === 'perfect_exam') {
+                const threshold = achievement.requirement.value;
+                const needed = achievement.requirement.count ?? 1;
+                const count = countExamsAtOrAbove(threshold);
+                isUnlocked = count >= needed;
+              }
+              break;
+            }
+
+            case 'accuracy': {
+              if (achievement.type === 'mcq_accuracy') {
+                const threshold = achievement.requirement.value;
+                const needed = achievement.requirement.count ?? 1;
+                const daysMet = countDaysWithMcqAccuracyAtLeast(threshold);
+                isUnlocked = daysMet >= needed;
+              }
+              break;
+            }
+
+            case 'speed': {
+              if (achievement.type === 'speed') {
+                // MCQ speed achievements: at least N MCQs answered in <= X seconds each
+                const thresholdSec = achievement.requirement.value;
+                const needed =
+                  (achievement.requirement as unknown as { count?: number }).count ?? 1;
+                const count = mcqSpeedCountAtMost(thresholdSec);
+                isUnlocked = count >= needed;
               }
               break;
             }
 
             case 'time_of_day':
-              // This would be checked at the time of the activity
-              // For now, we'll assume it's handled elsewhere
+              if (achievement.type === 'special' || achievement.type === 'dedication') {
+                const hour = getLatestActivityHour();
+                if (hour !== undefined) {
+                  const { value, comparison } = achievement.requirement as unknown as {
+                    value: number;
+                    comparison: 'before' | 'after';
+                  };
+                  isUnlocked = comparison === 'before' ? hour < value : hour >= value;
+                }
+              }
               break;
 
             case 'duration':
-              // Check for long study sessions
-              // This would need to be tracked in the user stats or session data
+              if (achievement.type === 'exam_marathon') {
+                isUnlocked = anyExamDurationAtLeast(achievement.requirement.value);
+              } else {
+                // Fallback: approximate via MCQ daily accumulated duration
+                const targetMs = achievement.requirement.value * 60 * 1000;
+                const byDay: Record<string, number> = {};
+                for (const log of mcqLogsArr) {
+                  const ts = log.review ? Date.parse(log.review) : undefined;
+                  if (!ts || Number.isNaN(ts)) continue;
+                  const day = new Date(ts).toISOString().slice(0, 10);
+                  byDay[day] = (byDay[day] ?? 0) + (log.duration ?? 0);
+                }
+                isUnlocked = Object.values(byDay).some((ms) => ms >= targetMs);
+              }
               break;
           }
 

@@ -190,6 +190,8 @@ export const leaderboardEntrySchema = z.object({
 export const userStatsSchema = z.object({
   userId: z.string().default('default'),
   totalCardsReviewed: z.number().default(0),
+  // Total MCQs answered across Practice/Review flows (new; backward-compatible with default)
+  totalMcqsAnswered: z.number().default(0),
   totalExamsCompleted: z.number().default(0),
   totalStudyTimeMinutes: z.number().default(0),
   perfectExams: z.number().default(0),
@@ -250,8 +252,11 @@ export const XP_REWARDS = {
 
 // Level calculation
 export const calculateXpForLevel = (level: number): number => {
-  // Exponential growth: level^2 * 100
-  return Math.floor(Math.pow(level, 2) * 100);
+  // Cumulative XP needed to reach the START of a given level.
+  // Level 1 starts at 0 XP. We model growth with a quadratic curve on (level - 1).
+  // This keeps per-level cost increasing while providing a simple closed form.
+  const n = Math.max(0, level - 1);
+  return Math.floor(Math.pow(n, 2) * 100);
 };
 
 // Level metadata (names and Tailwind color classes) up to level 50
@@ -318,18 +323,14 @@ export const getLevelMeta = (level: number): LevelMeta => {
 };
 
 export const calculateLevelFromXp = (totalXp: number): { level: number; xpToNextLevel: number } => {
+  // Find the highest level such that cumulative XP threshold for next level is greater than totalXp
   let level = 1;
-  let xpRequired = 0;
-
-  while (xpRequired <= totalXp) {
+  while (calculateXpForLevel(level + 1) <= totalXp) {
     level++;
-    xpRequired += calculateXpForLevel(level);
   }
 
-  level--; // Go back to the actual level
-  const currentLevelXp = level === 1 ? 0 : calculateXpForLevel(level);
   const nextLevelXp = calculateXpForLevel(level + 1);
-  const xpToNextLevel = nextLevelXp - (totalXp - currentLevelXp);
+  const xpToNextLevel = Math.max(0, nextLevelXp - totalXp);
 
   return { level, xpToNextLevel };
 };

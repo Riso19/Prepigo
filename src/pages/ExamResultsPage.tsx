@@ -20,6 +20,7 @@ import { PerformanceGraph } from '@/components/PerformanceGraph';
 import { useSettings } from '@/contexts/SettingsContext';
 import { generateExamAIAnalysis, type ExamAIAnalysis } from '@/lib/ai-insights';
 import { getExamAIAnalysis as dbGetExamAIAnalysis, saveExamAIAnalysis } from '@/lib/dexie-db';
+import { Separator } from '@/components/ui/separator';
 
 const formatTime = (seconds: number) => {
   const minutes = Math.floor(seconds / 60);
@@ -219,6 +220,15 @@ const ExamResultsPage = () => {
   const totalMarks = settingsSafe.totalQuestions * settingsSafe.marksPerCorrect;
   const percentage = totalMarks > 0 ? (resultsSafe.score / totalMarks) * 100 : 0;
 
+  const scoreBadgeClass =
+    percentage >= 85
+      ? 'bg-emerald-600 text-white'
+      : percentage >= 70
+        ? 'bg-blue-600 text-white'
+        : percentage >= 50
+          ? 'bg-amber-500 text-black'
+          : 'bg-rose-600 text-white';
+
   const pieData = [
     { name: 'Correct', value: resultsSafe.correctCount, fill: '#22c55e' },
     { name: 'Incorrect', value: resultsSafe.incorrectCount, fill: '#ef4444' },
@@ -239,13 +249,15 @@ const ExamResultsPage = () => {
 
   return (
     <div className="min-h-screen bg-secondary/50 p-4 md:p-8">
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-5xl mx-auto space-y-6">
         <Card>
-          <CardHeader>
-            <div className="flex justify-between items-start">
-              <div>
-                <CardTitle className="text-3xl">Exam Results: {examLog.name}</CardTitle>
-                <CardDescription>
+          <CardHeader className="pb-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <CardTitle className="text-2xl md:text-3xl truncate">
+                  Exam Results: {examLog.name}
+                </CardTitle>
+                <CardDescription className="mt-1">
                   {(() => {
                     const d = new Date(examLog.date);
                     return !Number.isNaN(d.getTime())
@@ -254,57 +266,102 @@ const ExamResultsPage = () => {
                   })()}
                 </CardDescription>
               </div>
-              <Button asChild variant="outline">
-                <Link to="/exam-history">
-                  <Home className="mr-2 h-4 w-4" /> Back to History
-                </Link>
-              </Button>
+              <div className="flex gap-2">
+                <span
+                  className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${scoreBadgeClass}`}
+                >
+                  {percentage.toFixed(1)}% overall
+                </span>
+                <Button asChild variant="outline" size="sm">
+                  <Link to="/exam-history">
+                    <Home className="mr-2 h-4 w-4" /> History
+                  </Link>
+                </Button>
+              </div>
             </div>
           </CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <div className="text-center">
-                <p className="text-5xl font-bold">
-                  {resultsSafe.score.toFixed(2)} / {totalMarks}
-                </p>
-                <p className="text-2xl font-semibold text-primary">{percentage.toFixed(1)}%</p>
+          <CardContent className="space-y-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div className="rounded-lg border bg-card p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Score</p>
+                      <p className="text-3xl md:text-4xl font-bold">
+                        {resultsSafe.score.toFixed(2)} / {totalMarks}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <Progress value={percentage} className="h-3" />
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {percentage.toFixed(1)}% achieved
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-md border bg-muted/40 p-3 text-center">
+                    <p className="text-xs text-muted-foreground">Correct</p>
+                    <p className="mt-1 text-2xl font-semibold text-green-600">
+                      {resultsSafe.correctCount}
+                    </p>
+                  </div>
+                  <div className="rounded-md border bg-muted/40 p-3 text-center">
+                    <p className="text-xs text-muted-foreground">Incorrect</p>
+                    <p className="mt-1 text-2xl font-semibold text-red-600">
+                      {resultsSafe.incorrectCount}
+                    </p>
+                  </div>
+                  <div className="rounded-md border bg-muted/40 p-3 text-center">
+                    <p className="text-xs text-muted-foreground">Skipped</p>
+                    <p className="mt-1 text-2xl font-semibold">{resultsSafe.skippedCount}</p>
+                  </div>
+                </div>
               </div>
-              <Progress value={percentage} />
-              <div className="grid grid-cols-3 text-center text-sm">
-                <div>
-                  <p className="font-bold text-green-600">{resultsSafe.correctCount}</p>
-                  <p className="text-muted-foreground">Correct</p>
-                </div>
-                <div>
-                  <p className="font-bold text-red-600">{resultsSafe.incorrectCount}</p>
-                  <p className="text-muted-foreground">Incorrect</p>
-                </div>
-                <div>
-                  <p className="font-bold">{resultsSafe.skippedCount}</p>
-                  <p className="text-muted-foreground">Skipped</p>
-                </div>
+              <div className="h-56 md:h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={70}
+                      label
+                    >
+                      {pieData.map((entry) => (
+                        <Cell key={`cell-${entry.name}`} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
               </div>
             </div>
-            <div className="h-48">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={60}
-                    label
-                  >
-                    {pieData.map((entry) => (
-                      <Cell key={`cell-${entry.name}`} fill={entry.fill} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
+            <Separator />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+              <div className="rounded-md border bg-background p-3 flex items-center justify-between">
+                <span className="text-muted-foreground flex items-center gap-2">
+                  <Clock className="h-4 w-4" /> Time Taken
+                </span>
+                <span className="font-medium">{formatTime(analysis?.time.totalTaken || 0)}</span>
+              </div>
+              <div className="rounded-md border bg-background p-3 flex items-center justify-between">
+                <span className="text-muted-foreground flex items-center gap-2">
+                  <Clock className="h-4 w-4" /> Time Limit
+                </span>
+                <span className="font-medium">{formatTime(analysis?.time.totalLimit || 0)}</span>
+              </div>
+              <div className="rounded-md border bg-background p-3 flex items-center justify-between">
+                <span className="text-muted-foreground flex items-center gap-2">
+                  <Clock className="h-4 w-4" /> Avg / Q
+                </span>
+                <span className="font-medium">
+                  {(analysis?.time.avgPerQuestion || 0).toFixed(1)}s
+                </span>
+              </div>
             </div>
           </CardContent>
         </Card>

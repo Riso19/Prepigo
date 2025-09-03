@@ -275,9 +275,11 @@ const ReviewMcqPage = () => {
         console.error('Failed to add XP:', error);
       });
 
-      // Update gamification stats: reviewed count only (time handled by useStudyTimer)
+      // Update gamification stats: reviewed count + MCQs answered (time handled by useStudyTimer)
       updateStats({
         totalCardsReviewed: userStats.totalCardsReviewed + 1,
+        totalMcqsAnswered:
+          (userStats as unknown as { totalMcqsAnswered?: number }).totalMcqsAnswered! + 1,
       }).catch((error) => {
         console.error('Failed to update stats:', error);
       });

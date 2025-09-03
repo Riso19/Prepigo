@@ -170,7 +170,7 @@ Ensure reasoning covers why the correct option is right AND why each incorrect o
 
   try {
     const url =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent' +
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent' +
       `?key=${encodeURIComponent(apiKey)}`;
     const resp = await fetch(url, {
       method: 'POST',
